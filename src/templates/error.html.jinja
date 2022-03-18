@@ -1,0 +1,18 @@
+
+{% extends "layout.html.jinja" %}
+
+{% block script %}
+    <script type="module">
+    </script>
+{% endblock %}
+
+{% block page_content %}
+    <div id="error-content">
+        <div id="task">
+            <h2>Error</h2>
+            <div id="error-msg">
+                {{ msg }}
+            </div>
+        </div>
+    </div>
+{% endblock %}

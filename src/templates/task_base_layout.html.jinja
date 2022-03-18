@@ -1,0 +1,45 @@
+{% extends "layout.html.jinja" %}
+
+{% block script %}
+    <script src="https://cdn.socket.io/3.1.1/socket.io.min.js"
+            integrity="sha384-gDaozqUvc4HTgo8iZjwth73C6dDDeOJsAgpxBcMpZYztUfjHXpzrpdrHRdVp8ySO"
+            crossorigin="anonymous"></script>
+    <script type="module">
+     document.getElementById('task-wrapper').scrollTo(0, 0)
+     window.scrollTo(0, 0)
+     import { Task } from '/expert/static/js/task.js'
+
+     let exper = '{{ exper }}'
+     let sid = '{{ sid }}'
+     let task = new Task(
+         exper, sid, {{ 'true' if _debug is defined else 'false' }})
+
+     {# set task_script %}{% block task_script %}{% endblock %}{% endset #}
+     {% if task_script is defined %}
+         {% if task_script.startswith('_') %}
+             {% set exper = 'static' %}
+             {% set task_script = task_script[1:] %}
+         {% endif %}
+         try {
+             let mod = await import(
+                 '/expert/{{ exper }}/js/task_{{ task_script }}.js')
+             task.init(mod.initTask)
+         } catch (error) {
+             console.log('error importing script:', error)
+         }
+     {% else %}
+         task.init(() => task.enableNext())
+     {% endif %}
+    </script>
+{% endblock %}
+
+{% block page_content %}
+    <div id="task-wrapper">
+        {% block task_content %}{% endblock %}
+    </div>
+    <div id="next-btn-wrapper">
+        <button type="button" id="next-btn" disabled>
+            Next <img src="/expert/static/images/right_arrow.svg">
+        </button>
+    </div>
+{% endblock %}

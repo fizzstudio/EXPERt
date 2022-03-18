@@ -1,0 +1,125 @@
+
+{% extends "task_base_layout.html.jinja" %}
+
+{% set task_script = 'instruct_training' %}
+
+{% block task_content %}
+    <div id="task">
+        <h2>Instructions for Part 1 (Practice section)</h2>
+        <p>
+            There are two parts to this experiment. Part 1
+            is a brief practice exercise to prepare you for Part 2.
+            Parts 1 and 2 work in exactly the same way.
+        </p>
+        <p>
+            On each screen, you will listen to a
+            <b>meaningless nonsense word</b>. You will
+            then decide, based on how the word <b>sounds</b>,
+            how natural it would be if it were a word of English,
+            and give it a rating from <b>1 to 5 stars</b>.
+        </p>
+        <p>
+            Some examples are shown below of nonsense words similar
+            to those that you will encounter in the experiment, along
+            with possible star ratings.
+        </p>
+        <table id="rating-examples">
+            <tr>
+                <td> &ldquo;the zherpny&rdquo; </td>
+                <td>
+                    <button type="button" class="play-btn small">
+                        Play <img src="/expert/static/images/play.svg">
+                    </button>
+                </td>
+                <td>
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                </td>
+            </tr>
+            <tr>
+                <td> &ldquo;the kigba&rdquo; </td>
+                <td>
+                    <button type="button" class="play-btn small">
+                        Play <img src="/expert/static/images/play.svg">
+                    </button>
+                </td>
+                <td>
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                </td>
+            </tr>
+            <tr>
+                <td> &ldquo;the crulloo&rdquo; </td>
+                <td>
+                    <button type="button" class="play-btn small">
+                        Play <img src="/expert/static/images/play.svg">
+                    </button>
+                </td>
+                <td>
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                </td>
+            </tr>
+            <tr>
+                <td> &ldquo;the baiska&rdquo; </td>
+                <td>
+                    <button type="button" class="play-btn small">
+                        Play <img src="/expert/static/images/play.svg">
+                    </button>
+                </td>
+                <td>
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                </td>
+            </tr>
+            <tr>
+                <td> &ldquo;the vuchay&rdquo; </td>
+                <td>
+                    <button type="button" class="play-btn small">
+                        Play <img src="/expert/static/images/play.svg">
+                    </button>
+                </td>
+                <td>
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                    <img class="instr-star"
+                         src="/expert/amelio/img/star.svg">
+                </td>
+            </tr>
+        </table>
+        <p>
+            When you assign ratings, don't try and analyze the words;
+            just assign ratings quickly based on your first impression.
+            There are no right or wrong answers!
+        </p>
+        <p>
+            The spelling for each word will also be shown to help clarify
+            the sounds you hear. Some of the spellings may look a bit strange,
+            so keep in mind they are only there as a guide to the sounds
+            you hear.
+            Try and base your judgments only on the sound of the word,
+            not the spelling.
+        </p>
+        <p>
+            Click <b>Next</b> when you're ready to begin Part 1.
+        </p>
+    </div>
+{% endblock %}

@@ -1,0 +1,137 @@
+#task {
+  display: flex;
+  flex-direction: column;
+  border: solid 1px black;
+  padding: 1rem;
+}
+#task #prompt {
+  flex: initial;
+  background: white;
+  border: solid black 1px;
+  border-radius: 2rem;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-size: 1rem;
+  text-align: center;
+}
+@media (min-width: 48em) {
+  #task #prompt {
+    font-size: 1.25rem;
+  }
+}
+#task #play-btn-wrapper {
+  align-self: center;
+  flex: initial;
+  margin-bottom: 1rem;
+}
+#task #play-btn-wrapper #play1-btn {
+  margin-right: 0.5rem;
+}
+#task #play-btn-wrapper #play2-btn {
+  margin-left: 0.5rem;
+}
+#task #radio-set-wrapper {
+  font-size: 1.5rem;
+  background: #767676;
+  color: white;
+  border-radius: 1rem;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+}
+#task #radio-set-wrapper .radio-wrapper {
+  display: flex;
+  align-items: center;
+  color: black;
+  border: solid 2px #F1F1F1;
+  padding: 0.5rem;
+  margin: 0.25rem;
+  border-radius: 1rem;
+  flex: auto;
+}
+#task #radio-set-wrapper .radio-wrapper label {
+  flex: auto;
+  text-align: center;
+}
+#task #radio-set-wrapper .radio-wrapper.selected {
+  background: yellow;
+  border: solid 2px black;
+}
+#task #star-set-wrapper {
+  align-self: center;
+  display: flex;
+  font-size: 1.5rem;
+  background: #767676;
+  color: white;
+  border-radius: 1rem;
+  padding: 0.5rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+#task #star-set-wrapper.enabled {
+  opacity: 1;
+}
+@media (hover: hover) {
+  #task #star-set-wrapper.enabled .star-wrapper:hover {
+    background: #a1a1a1;
+  }
+}
+#task #star-set-wrapper .star-wrapper {
+  color: black;
+  border: solid 2px #F1F1F1;
+  padding: 0.5rem;
+  margin: 0.25rem;
+  border-radius: 1rem;
+  flex: auto;
+}
+#task #star-set-wrapper .star-wrapper img {
+  display: block;
+  height: 1.25rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+@media (min-width: 48em) {
+  #task #star-set-wrapper .star-wrapper img {
+    height: 1.5rem;
+  }
+}
+
+#orth {
+  font-size: 2rem;
+  align-self: center;
+}
+
+#prompt {
+  display: none;
+}
+
+#show-prompt {
+  display: none;
+  align-self: center;
+  margin: 1rem;
+  background: #767676;
+  color: #d1d1d1;
+  padding: 0 0.5rem;
+  border-radius: 1rem;
+  cursor: default;
+}
+#show-prompt:hover {
+  background: #a1a1a1;
+}
+
+#rating-examples {
+  padding-left: 1rem;
+  background: #767676;
+  color: white;
+  border-radius: 1rem;
+  align-self: center;
+  padding: 0.5rem;
+}
+#rating-examples .instr-star {
+  height: 1rem;
+}
+
+#turk-code {
+  font-size: 2rem;
+  margin-left: auto;
+  margin-right: auto;
+}

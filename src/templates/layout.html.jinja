@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+    {#
+    Deferred external scripts execute in the order they appear
+    just before the document's DOMContentLoaded event, after the
+    document has been loaded and parsed, but before other
+    resources (images, CSS, etc.) have necessarily been loaded
+    (use window.onload to detect that). Scripts of type "module"
+    are automatically deferred.
+    #}
+    <head>
+        <meta charset="utf-8">
+        {#
+        Render content using actual viewport width;
+        by default, iOS renders at 980 px, then scales down
+        #}
+        <meta name="viewport" content="width=device-width">
+        <title>{{ window_title }}</title>
+
+        <link rel="stylesheet" href="/expert/static/css/main.css">
+        <link rel="stylesheet" href="{{ expercss }}">
+        {% block script %}{% endblock %}
+    </head>
+
+    <body>
+        <div id="page-content">
+            {% block page_content %}{% endblock %}
+        </div>
+    </body>
+
+</html>

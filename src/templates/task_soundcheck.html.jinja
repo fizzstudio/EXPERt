@@ -1,0 +1,53 @@
+{% extends "task_base_layout.html.jinja" %}
+
+{% set task_script = '_soundcheck' %}
+
+{% block task_content %}
+
+    <div id="soundcheck">
+        <h2>Sound Check</h2>
+        <p>
+            Since this experiment involves listening, we need to make sure
+            that your browser can play audio, and that you can
+            hear it clearly.  Please find a quiet room and/or use
+            headphones to listen.
+        </p>
+        <p>
+            When you are ready to start, please listen to this audio
+            clip, and type the word you hear.
+        </p>
+        <div id="soundcheck-controls">
+            <div id="soundcheck-player-wrapper">
+                <audio id="soundcheck-player" controls preload="auto"
+                       src="/expert/static/audio/_soundcheck.mp3">
+                </audio>
+            </div>
+            <div id="soundcheck-response-wrapper">
+                <div id="soundcheck-input">
+                    <div id="soundcheck-prompt">
+                        What word did you hear?
+                    </div>
+                    <div>
+                        <input id="soundcheck-response" type="text" size="12"
+                               value="" disabled>
+                    </div>
+                </div>
+                <div id="soundcheck-submit-btn-wrapper">
+                    <button id="soundcheck-submit-btn" type="button"
+                            disabled autocomplete="off">
+                        Submit answer
+                    </button>
+                </div>
+                <div id="soundcheck-correct-msg">
+                    Correct! Click <b>Next</b> to continue.
+                </div>
+            </div>
+        </div>
+        <p id="soundcheck-format-error">
+            <b>ERROR:</b> The experiment will not work in
+            this browser, because the browser cannot play audio of
+            type <b>MP3</b>.  Please use a different browser.
+        </p>
+    </div>
+
+{% endblock %}

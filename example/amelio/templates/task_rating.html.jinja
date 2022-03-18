@@ -1,0 +1,45 @@
+
+{% extends "task_base_layout.html.jinja" %}
+
+{% set task_script = 'rating' %}
+
+{% block task_content %}
+    <div id="task">
+        <div id="prompt">
+            Press <b>Play</b> to listen to the word.
+            Then, assign a star rating based on how natural
+            you think the word sounds as a word of English,
+            from one star (<b>completely bizarre</b>) to five stars
+            (<b>completely normal</b>).
+            When you are done,
+            press <b>Next</b> to continue.
+        </div>
+        <div id="show-prompt">
+            Show instructions
+        </div>
+        <div id="play-btn-wrapper">
+            <button type="button" class="play-btn" >
+                Play <img src="/expert/static/images/play.svg">
+            </button>
+        </div>
+        <div id="orth">
+        </div>
+        <div id="star-set-wrapper">
+            <div class="star-wrapper" id="star-wrapper1">
+                <img src="/expert/amelio/img/star_empty.svg">
+            </div>
+            <div class="star-wrapper" id="star-wrapper2">
+                <img src="/expert/amelio/img/star_empty.svg">
+            </div>
+            <div class="star-wrapper" id="star-wrapper3">
+                <img src="/expert/amelio/img/star_empty.svg">
+            </div>
+            <div class="star-wrapper" id="star-wrapper4">
+                <img src="/expert/amelio/img/star_empty.svg">
+            </div>
+            <div class="star-wrapper" id="star-wrapper5">
+                <img src="/expert/amelio/img/star_empty.svg">
+            </div>
+        </div>
+    </div>
+{% endblock %}

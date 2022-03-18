@@ -1,0 +1,23 @@
+[project]
+name = ""
+version = ""
+description = ""
+authors = [
+    {name = "jfnl88", email = "josh@jfnl.org"},
+]
+license-expression = "MIT"
+dependencies = [
+    "flask>=2.0.3",
+    "flask-socketio>=5.1.1",
+    "eventlet>=0.33.0",
+    "strictyaml>=1.6.1",
+]
+requires-python = ">=3.10"
+
+[project.urls]
+Homepage = ""
+[tool.pdm]
+
+[build-system]
+requires = ["pdm-pep517>=0.12.0"]
+build-backend = "pdm.pep517.api"

@@ -1,0 +1,23 @@
+
+{% extends "task_base_layout.html.jinja" %}
+
+{% set task_script = 'thankyou' %}
+
+{% block task_content %}
+    <div id="task">
+        <p>
+            <strong>
+                Thank you for your participation in this experiment!
+            </strong>
+        </p>
+        <p>
+            Please enter the following <strong>experiment completion code
+            </strong>
+            into the Mechanical Turk window to receive credit for your
+            participation:
+        </p>
+        <p id="turk-code">
+            <span>{{ turk_code }}</span>
+        </p>
+    </div>
+{% endblock %}

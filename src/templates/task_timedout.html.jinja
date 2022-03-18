@@ -1,0 +1,10 @@
+
+{% extends "task_base_layout.html.jinja" %}
+
+{% set task_script = '_timedout' %}
+
+{% block task_content %}
+    <div id="task">
+        The time allotted for this experiment has expired.
+    </div>
+{% endblock %}

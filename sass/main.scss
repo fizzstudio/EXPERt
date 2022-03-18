@@ -1,0 +1,220 @@
+
+@use 'globals';
+
+body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    // position: relative;
+    // height: 100vh;
+    background: globals.$wcblue;
+    font-family: arial;
+    font-size: 10pt;
+}
+
+#page-content {
+    //position: fixed;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: globals.$light-gray;
+    padding: 1rem;
+    margin: 1rem;
+    line-height: 1.5;
+    width: calc(100% - 4rem);
+    // left: 0;
+    max-height: calc(100vh - 4rem); // was 85vh
+    @media (min-width: globals.$desktop-break) {
+        width: 40rem;
+        height: auto;
+        max-height: 40rem;
+    }
+    .guide {
+        outline: dashed 4px #00bfbf;
+        outline-offset: 0.25rem;
+    }
+    button {
+        display: inline-flex;
+        align-items: center;
+        background: globals.$light-gray;
+    }
+}
+
+#task-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    flex: auto;
+    background: globals.$very-light-gray;
+    padding: 0rem;
+    //width: 30rem;
+    overflow: scroll;
+}
+
+#next-btn-wrapper {
+    flex: initial;
+    margin: 1rem;
+    #next-btn {
+        font-size: 1.5rem;
+        img {
+            height: 1.5rem;
+            vertical-align: text-bottom;
+        }
+        &:disabled {
+            img { opacity: 0.5; }
+        }
+    }
+}
+
+#task {
+    display: flex;
+    flex-direction: column;
+    border: solid 1px black;
+    padding: 1rem;
+
+    h1 { text-align: center; }
+    h2 { text-align: center; }
+
+    .play-btn {
+        text-align: center;
+        font-size: 2rem;
+        font-weight: bold;
+        img {
+            height: 2rem;
+            //vertical-align: text-bottom;
+        }
+        &.small {
+            font-size: 1rem;
+            img { height: 1rem; }
+        }
+        &.selected { background: yellow; }
+        &:disabled {
+            img { opacity: 0.5; }
+        }
+    }
+}
+
+#soundcheck {
+    @extend #task;
+    align-items: center;
+    //background: white;
+    &-controls {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    &-player {
+        width: 10rem;
+        //margin-bottom: 1rem;
+    }
+    &-response-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: globals.$dark-gray;
+        color: white;
+        padding: 0.5rem;
+        margin-top: 1rem;
+    }
+    &-input {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
+        padding: 0.5rem;
+    }
+    &-prompt {
+        flex: auto;
+        text-align: center;
+        padding: 0 0.5rem;
+    }
+    &-submit-btn-wrapper { padding: 0.5rem; }
+    &-correct-msg {
+        display: none;
+        background: globals.$bright-green;
+        color: black;
+        padding: 0.5rem;
+    }
+    &-format-error {
+        display: none;
+        background: red;
+        color: white;
+        padding: 0.5rem;
+    }
+}
+
+#qnaire {
+    @extend #task;
+    &-header {
+        padding: 0.5rem;
+    }
+    &-items {
+        padding: 0.5rem;
+        .qnaire-item {
+            align-self: flex-start;
+            margin-bottom: 0.5rem;
+            .qnaire-q-num { font-weight: bold; }
+            .qnaire-q-optional {
+                font-weight: bold;
+                font-style: italic;
+            }
+            .qnaire-a { margin-left: 0.5rem; }
+        }
+    }
+}
+
+#consent {
+    @extend #task;
+
+    &-form {
+        #header {
+            .field { font-weight: bold; }
+        }
+    }
+
+    &-agree-box {
+        display: flex;
+        align-self: stretch;
+        background: globals.$light-gray;
+        margin-top: 1rem;
+        margin-bottom: 1rem;
+        font-weight: bold;
+        .agree-radio-wrapper {
+            display: flex;
+            padding: 0.5rem;
+            flex: auto;
+        }
+    }
+}
+
+#error-content {
+    @extend #task-wrapper;
+}
+
+#dboard {
+    overflow: scroll;
+
+    &-subjids {
+        display: grid;
+        grid-template-columns: 1fr 2fr 2fr 2fr 2fr 2fr 2fr 2fr;
+        div {
+            margin: 0 0.25rem;
+        }
+        .dboard-header {
+            font-weight: bold;
+            text-align: center;
+        }
+        .dboard-item {
+            padding: 0 0.25rem;
+            background: white;
+        }
+        .dboard-id, .dboard-clientip, .dboard-profile, .dboard-state, .dboard-started {
+            text-align: center;
+        }
+        .dboard-num, .dboard-comp, .dboard-elapsed {
+            text-align: right;
+        }
+    }
+}
+

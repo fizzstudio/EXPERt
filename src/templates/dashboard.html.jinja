@@ -1,0 +1,109 @@
+{% extends "layout.html.jinja" %}
+
+{% block script %}
+    <script src="https://cdn.socket.io/3.1.1/socket.io.min.js"
+            integrity="sha384-gDaozqUvc4HTgo8iZjwth73C6dDDeOJsAgpxBcMpZYztUfjHXpzrpdrHRdVp8ySO"
+            crossorigin="anonymous"></script>
+    <script type="module">
+     //document.getElementById('task-content').scrollTo(0, 0)
+     window.scrollTo(0, 0)
+    </script>
+
+    <script type="module">
+     let exper = "{{ exper }}"
+
+     let subjids = document.getElementById('dboard-subjids')
+
+     const cellClasses = [
+         'dboard-num', 'dboard-id', 'dboard-clientip', 'dboard-profile',
+         'dboard-state', 'dboard-comp', 'dboard-started',
+         'dboard-elapsed']
+     const numCols = cellClasses.length
+
+     function updateList(instances) {
+         // let numFields = instances.length? instances[0].length : 1
+         // subtract header divs
+         let numInsts = (subjids.childNodes.length - numCols)/numCols
+         let diff = instances.length - numInsts
+         if (diff > 0) {
+             for (let i = 0; i < diff; i++)
+                 for (let j = 0; j < numCols; j++)
+                     subjids.appendChild(document.createElement('div'))
+         }
+         for (let i = 0; i < instances.length; i++) {
+             // skip header divs
+             let numDiv = subjids.childNodes[numCols + i*numCols]
+             numDiv.innerHTML = i + 1
+             numDiv.className = cellClasses[0] + ' ' + 'dboard-item'
+             for (let j = 1; j < numCols; j++) {
+                 let div = subjids.childNodes[numCols + i*numCols + j]
+                 div.innerHTML = instances[i][j - 1]
+                 div.className = cellClasses[j] + ' ' + 'dboard-item'
+             }
+         }
+     }
+
+
+     function addInstance(instance) {
+         // let numFields = instance.length
+         // index of new instance (subtract header divs)
+         let oldNumInsts = (subjids.childNodes.length - numCols)/numCols
+         subjids.appendChild(document.createElement('div'))
+         let numDiv = subjids.childNodes[numCols + oldNumInsts*numCols]
+         numDiv.innerHTML = oldNumInsts + 1
+         numDiv.className = cellClasses[0] + ' ' + 'dboard-item'
+         for (let j = 1; j < numCols; j++) {
+             subjids.appendChild(document.createElement('div'))
+             let div = subjids.childNodes[numCols + oldNumInsts*numCols + j]
+             div.innerHTML = instance[j - 1]
+             div.className = cellClasses[j] + ' ' + 'dboard-item'
+         }
+     }
+
+     function updateInstance(instance) {
+         let numInsts = (subjids.childNodes.length - numCols)/numCols
+         for (let i = 0; i < numInsts; i++) {
+             let subjid = subjids.childNodes[numCols + i*numCols + 1].innerHTML
+             if (subjid === instance[0]) {
+                 for (let j = 2; j < numCols; j++) {
+                     subjids.childNodes[numCols + i*numCols + j].innerHTML =
+                         instance[j - 1]
+                 }
+                 break
+             }
+         }
+     }
+
+     // async function update() {
+     // each instance: [profile, state, num_tasks_completed, elapsed_time]
+     //    let instances = await callApi('get_instances')
+     //    updateList(instances)
+     //    window.setTimeout(update, 10000)
+     // }
+
+     // window.setTimeout(update, 10000)
+
+     const socket = io()
+
+     socket.on('connect', () => {
+         console.log("socket connected")
+         socket.emit('get_instances', (instances) => updateList(instances))
+     })
+
+     socket.on('new_instance', (instance) => addInstance(instance))
+     socket.on('update_instance', (instance) => updateInstance(instance))
+
+
+    </script>
+{% endblock %}
+
+{% block page_content %}
+    <div id="dboard">
+
+        <h2>Dashboard</h2>
+
+        <div id="dboard-wrapper">
+            <div id="dboard-subjids"><div class="dboard-header"></div><div class="dboard-header">ID</div><div class="dboard-header">Client IP</div><div class="dboard-header">Profile</div><div class="dboard-header">State</div><div class="dboard-header">Tasks</div><div class="dboard-header">Started</div><div class="dboard-header">Elapsed (m)</div></div>
+        </div>
+    </div>
+{% endblock %}
