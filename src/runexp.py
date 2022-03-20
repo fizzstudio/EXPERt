@@ -222,8 +222,7 @@ if __name__ == '__main__':
 
     @app.route(f'/expert/{experclass.name}/<path:subpath>')
     def exper_static(subpath):
-        return send_from_directory(
-            global_root / experclass.static_path, subpath)
+        return send_from_directory(experclass.static_path, subpath)
 
     # route for testing task views
     @app.route('/expert/task/<task>')

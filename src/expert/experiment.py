@@ -123,8 +123,9 @@ class Experiment:
         global app
         app = theapp
         cls.name = cls.__qualname__.lower()
-        #cls.dir_path = Path(globalparams.expers_dir) / cls.name
-        cls.dir_path = Path(path)
+        # NB: this is now an absolute path;
+        # previously, it was relative to global_root
+        cls.dir_path = Path(path).resolve(True)
         cls.static_path = cls.dir_path / globalparams.static_dir
         cls.profiles_path = cls.dir_path / globalparams.profiles_dir
         cls.runs_path = cls.dir_path / globalparams.runs_dir
