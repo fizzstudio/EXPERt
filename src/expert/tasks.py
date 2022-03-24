@@ -43,7 +43,7 @@ class Task:
         self.next_tasks = []
         self.timeout_secs = timeout_secs
         # extra data to be added to each participant response
-        self.resp_extra = ''
+        self.resp_extra = None
 
     def get_feedback(self, response):
         pass

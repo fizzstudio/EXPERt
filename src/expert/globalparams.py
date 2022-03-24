@@ -1,4 +1,6 @@
 
+output_format = 'csv'
+
 #expers_dir = 'experiments'
 static_dir = 'static'
 templates_dir = 'templates'

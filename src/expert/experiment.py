@@ -38,7 +38,7 @@ class TaskResponse:
     #  response: any
     #  task_name: str
     #  extra: any
-    def __init__(self, response, task_name, extra):
+    def __init__(self, response, task_name, extra=None):
         self.response = response
         self.task_name = task_name
         self.extra = extra
@@ -53,6 +53,11 @@ class NoSuchCondError(Exception):
 class ExperFullError(Exception):
     def __init__(self):
         super().__init__('no profiles available')
+
+
+class BadOutputFormatError(Exception):
+    def __init__(self, fmt):
+        super().__init__(f'unknown output format "{fmt}"')
 
 
 class Experiment:
@@ -90,9 +95,9 @@ class Experiment:
         self.response = None
         # all saved task responses, plus some other metadata
         self.responses = [
-            TaskResponse(self.sid, 'SID', ''),
-            TaskResponse(self.iphash, 'IPHASH', ''),
-            TaskResponse(request.headers.get('User-Agent'), 'USER_AGENT', '')]
+            TaskResponse(self.sid, 'SID'),
+            TaskResponse(self.iphash, 'IPHASH'),
+            TaskResponse(request.headers.get('User-Agent'), 'USER_AGENT')]
 
         self.state = State.ACTIVE
 
@@ -121,15 +126,9 @@ class Experiment:
     @classmethod
     def setup(cls, path, mode, target, conds, theapp):
         global app
-        app = theapp
+        app, cls.app = theapp, theapp
         cls.name = cls.__qualname__.lower()
-        # NB: this is now an absolute path;
-        # previously, it was relative to global_root
-        cls.dir_path = Path(path).resolve(True)
-        cls.static_path = cls.dir_path / globalparams.static_dir
-        cls.profiles_path = cls.dir_path / globalparams.profiles_dir
-        cls.runs_path = cls.dir_path / globalparams.runs_dir
-        cls.templates_path = cls.dir_path / globalparams.templates_dir
+        cls.setup_paths(path)
         cls.pkg = sys.modules[cls.__module__]
         if conds:
             unknown_conds = [c for c in conds
@@ -155,6 +154,16 @@ class Experiment:
             cls.record = Record(cls)
             cls.record.save()
         cls.load_profiles()
+
+    @classmethod
+    def setup_paths(cls, path):
+        # NB: this is now an absolute path;
+        # previously, it was relative to global_root
+        cls.dir_path = Path(path).resolve(True)
+        cls.static_path = cls.dir_path / globalparams.static_dir
+        cls.profiles_path = cls.dir_path / globalparams.profiles_dir
+        cls.runs_path = cls.dir_path / globalparams.runs_dir
+        cls.templates_path = cls.dir_path / globalparams.templates_dir
 
     @classmethod
     def load_profiles(cls):
@@ -339,12 +348,29 @@ class Experiment:
             resp_path = cond_path / self.profile.subjid
         # newline='' must be set for the csv module
         with open(resp_path, 'w', newline='') as f:
-            writer = csv.writer(f, lineterminator='\n')
-            # write the header line
-            writer.writerow(['tstamp', 'taskname', 'resp', 'extra'])
-            for taskresp in self.responses:
-                writer.writerow([taskresp.timestamp, taskresp.task_name,
-                                 taskresp.response, taskresp.extra])
+            if globalparams.output_format == 'csv':
+                writer = csv.writer(f, lineterminator='\n')
+                # write the header line
+                writer.writerow(['tstamp', 'taskname', 'resp', 'extra'])
+                for r in self.responses:
+                    # NB: None is written as the empty string
+                    writer.writerow([r.timestamp, r.task_name,
+                                     r.response, r.extra])
+            elif globalparams.output_format == 'json':
+                import json
+                output = []
+                for r in self.responses:
+                    item = {'timestamp': r.timestamp, 'task': r.task_name}
+                    if r.response is not None:
+                        item['response'] = r.response
+                    if r.extra is not None:
+                        item['extra'] = r.extra
+                    output.append(item)
+                json.dump(output, f, indent=2)
+            else:
+                # XXX would probably be better to sanity-check this
+                # when the program loads
+                raise BadOutputFormatError(globalparams.output_format)
 
     def check_for_timeout(self):
         if self.state != State.ACTIVE:
