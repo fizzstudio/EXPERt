@@ -8,6 +8,8 @@ export class Task {
         this.debug = debug
         this.nextBtn = elt('next-btn')
         this.nextBtnWrapper = elt('next-btn-wrapper')
+        this.debugBackBtn = elt('debug-back-btn')
+        this.debugFwdBtn = elt('debug-fwd-btn')
         this.content = elt('task-wrapper')
         // this.onClickNext = null
 
@@ -16,26 +18,32 @@ export class Task {
         if (sid !== 'None' || debug) {
             let ns = debug ? 'debug' : sid
             this.socket = io(`/${ns}`)
-            this.nextBtn.onclick = async () => {
+            this.nextBtn.addEventListener('click', async () => {
                 this.disableNext()
-                // let callback = this.onClickNext || (() => location.reload())
-                let vars = await this.api('next_page', this.response)
-                if (vars['task_type'] === this.vars['task_type']) {
-                    this.vars = vars
-                    this.reset()
-                    this.initFunc(this)
-                } else {
-                    // moving on to a new task type
-                    location.reload()
-                }
-
-            }
+                await this._nav('next_page', this.response)
+            })
+            this.debugBackBtn.addEventListener(
+                'click', async () => await this._nav('debug_back'))
+            this.debugFwdBtn.addEventListener(
+                'click', async () => await this._nav('debug_fwd'))
         }
         // if (disableNext) {
         //     this.disableNext()
         // } else {
         //     this.enableNext()
         // }
+    }
+
+    async _nav(...apiParams) {
+        let vars = await this.api(...apiParams)
+        if (vars['task_type'] === this.vars['task_type']) {
+            this.vars = vars
+            this.reset()
+            this.initFunc(this)
+        } else {
+            // moving on to a new task type
+            location.reload()
+        }
     }
 
     init(f) {
@@ -53,9 +61,10 @@ export class Task {
         window.scrollTo(0, 0)
     }
 
-    async api(func, args = {}) {
+    async api(func, args) {
         const p = new Promise(resolve => {
-            this.socket.emit(func, args, resp => {
+            const params = args === undefined ? [func] : [func, args]
+            this.socket.emit(...params, resp => {
                 resolve(resp)
             })
         })
@@ -64,7 +73,7 @@ export class Task {
 
     enableNext() {
         this.nextBtn.disabled = false
-        this.guide(this.nextBtnWrapper)
+        this.guide(this.nextBtn)
     }
 
     disableNext() {

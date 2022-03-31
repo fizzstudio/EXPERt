@@ -37,9 +37,22 @@
     <div id="task-wrapper">
         {% block task_content %}{% endblock %}
     </div>
-    <div id="next-btn-wrapper">
-        <button type="button" id="next-btn" disabled>
-            Next <img src="/expert/static/images/right_arrow.svg">
-        </button>
+    <div id="chin">
+        {% if expert_debug %}
+            {% set back_fwd_class = '' %}
+        {% else %}
+            {% set back_fwd_class = 'hidden' %}
+        {% endif %}
+        <div id="debug-back-btn-wrapper" class="{{ back_fwd_class }}">
+            <button type="button" id="debug-back-btn">Back</button>
+        </div>
+        <div id="next-btn-wrapper">
+            <button type="button" id="next-btn" disabled>
+                Next <img src="/expert/static/images/right_arrow.svg">
+            </button>
+        </div>
+        <div id="debug-fwd-btn-wrapper" class="{{ back_fwd_class }}">
+            <button type="button" id="debug-fwd-btn">Fwd</button>
+        </div>
     </div>
 {% endblock %}

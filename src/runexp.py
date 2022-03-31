@@ -9,7 +9,8 @@ import sys
 from pathlib import Path
 
 from flask import (
-    Flask, render_template, session, request, send_from_directory)
+    Flask, render_template, session,
+    request, make_response, send_from_directory)
 from flask_socketio import SocketIO
 
 from jinja2 import BaseLoader
@@ -59,10 +60,6 @@ def load_exper(exper_path):
     app.logger.info(f'experiment package name: {pkg.__name__}')
     spec.loader.exec_module(pkg)
 
-    #modname = f'experiments.{expername}.src'
-    #app.logger.info(f'experiment module name: {modname}')
-    #expermod = importlib.import_module(modname, __package__)
-    #experparams = importlib.import_module(modname + '.params', __package__)
     #params = importlib.import_module('.params', pkg)
     params = __import__('src.params', fromlist=['params'])
     # return the first subclass of Experiment found
@@ -118,6 +115,8 @@ if __name__ == '__main__':
     parser.add_argument('-l', '--listen',
                         help='hostname/IP address (:port) for' +
                         ' server to listen on')
+    parser.add_argument('-d', '--debug', action='store_true',
+                        help='run in debug mode')
     mutexgrp = parser.add_mutually_exclusive_group()
     mutexgrp.add_argument('-r', '--resume',
                           help='timestamp of experiment run to resume')
@@ -175,6 +174,7 @@ if __name__ == '__main__':
     def index():
         if not setup_complete:
             setup()
+        content = None
         if (sid := session.get('sid')) and \
            session.get('exper') == experclass.name:
             inst = experclass.instances.get(sid)
@@ -186,13 +186,13 @@ if __name__ == '__main__':
                                     session.get('profile'))
                     if results_file.is_file():
                         # Experiment was probably resumed
-                        return error(
+                        content = error(
                             'You have already participated in this experiment')
                     else:
-                        return error(f'Unknown session ID {sid}')
+                        content = error(f'Unknown session ID {sid}')
                 else:
                     # Session ID is for a different run of this experiment
-                    return error(
+                    content = error(
                         'You have already participated in this experiment')
         else:
             ip = request.headers.get('X-Real-IP', request.remote_addr)
@@ -208,7 +208,15 @@ if __name__ == '__main__':
             session['profile'] = inst.profile.fqname
             app.logger.info(f'new instance for SID {inst.sid}')
             socketio.emit('new_instance', inst.status())
-        return inst.present()
+
+        if content is None:
+            content = inst.present({'expert_debug': args.debug})
+        resp = make_response(content)
+        # Caching is disabled entirely to ensure that
+        # users always get fresh content.
+        resp.cache_control.no_store = True
+
+        return resp
 
     @app.route('/expert/dashboard/' + dashboard_code)
     def dashboard():

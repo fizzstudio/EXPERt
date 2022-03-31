@@ -1,6 +1,8 @@
 
 @use 'globals';
 
+.hidden { display: none !important; }
+
 body {
     display: flex;
     flex-direction: column;
@@ -53,8 +55,16 @@ body {
     overflow: scroll;
 }
 
+#chin {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+}
+
 #next-btn-wrapper {
-    flex: initial;
+    display: flex;
+    justify-content: center;
+    flex: auto; //initial;
     margin: 1rem;
     #next-btn {
         font-size: 1.5rem;

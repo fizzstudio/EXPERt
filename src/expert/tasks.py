@@ -40,6 +40,7 @@ class Task:
         self.variables['window_title'] = self.experclass.window_title
         self.variables['sid'] = self.sid
         self.variables['task_type'] = self.template_name
+        self.prev_task = None
         self.next_tasks = []
         self.timeout_secs = timeout_secs
         # extra data to be added to each participant response
@@ -48,8 +49,10 @@ class Task:
     def get_feedback(self, response):
         pass
 
-    def present(self):
-        return render_template(self.template_filename, **self.variables)
+    def present(self, tplt_vars={}):
+        all_vars = self.variables.copy()
+        all_vars.update(tplt_vars)
+        return render_template(self.template_filename, **all_vars)
 
     def then(self, *posargs, **kwargs):
         if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
@@ -58,6 +61,7 @@ class Task:
         else:
             cls = Task
         task = cls(self.sid, *posargs, **kwargs)
+        task.prev_task = self
         self.next_tasks.append(task)
         return task
 

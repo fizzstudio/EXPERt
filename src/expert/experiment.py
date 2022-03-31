@@ -119,6 +119,18 @@ class Experiment:
                 self.next_task()
             return self.task.variables
 
+        @socketio.on('debug_fwd', namespace=f'/{self.sid}')
+        def sio_debug_fwd():
+            if self.task.next_tasks:
+                self.task_fwd()
+            return self.task.variables
+
+        @socketio.on('debug_back', namespace=f'/{self.sid}')
+        def sio_debug_back():
+            if self.task.prev_task:
+                self.task_back()
+            return self.task.variables
+
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
         def sio_get_feedback(resp):
             return self.task.get_feedback(resp)
@@ -266,8 +278,8 @@ class Experiment:
         p.use()
         return p
 
-    def present(self):
-        return self.task.present()
+    def present(self, tplt_vars={}):
+        return self.task.present(tplt_vars)
 
     # Called by sio_next_page immediately before next_task()
     def handle_response(self, resp):
@@ -289,12 +301,16 @@ class Experiment:
                 # serving up the consent-declined page
                 self.profile.unuse()
 
+    def task_fwd(self, resp=None):
+        # XXX currently doesn't handle forking task paths
+        self.task = self.task.next_task(resp)
+
+    def task_back(self):
+        self.task = self.task.prev_task
+
     # Called by sio_next_page immediately after handle_response()
     def next_task(self):
-        task = self.task.next_task(self.response)
-        prev_task = self.task
-
-        self.task = task
+        self.task_fwd(self.response)
 
         if self.state == State.ACTIVE:
             now = time.monotonic()
@@ -310,7 +326,8 @@ class Experiment:
             if self.response is None:
                 # previous task did not send a response
                 self.responses.append(TaskResponse(
-                    None, prev_task.template_name, prev_task.resp_extra))
+                    None, self.task.prev_task.template_name,
+                    self.task.prev_task.resp_extra))
             else:
                 self.responses.append(self.response)
             self.response = None
