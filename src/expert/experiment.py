@@ -314,9 +314,9 @@ class Experiment:
 
         if self.state == State.ACTIVE:
             now = time.monotonic()
-            if task.timeout_secs is not None:
-                if task.timeout_secs >= 0:
-                    self.global_timeout_time = now + task.timeout_secs
+            if self.task.timeout_secs is not None:
+                if self.task.timeout_secs >= 0:
+                    self.global_timeout_time = now + self.task.timeout_secs
                 else:
                     # negative value disables the timeout
                     self.global_timeout_time = None

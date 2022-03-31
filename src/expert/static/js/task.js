@@ -105,7 +105,7 @@ export class FSA {
     constructor(task, transitTable) {
         this.task = task
         this.transitTable = transitTable
-        this.state = 'q0'
+        this._enter('q0')
     }
 
     event(sym) {
@@ -116,11 +116,15 @@ export class FSA {
         let destState = transits[sym]
         // symbols without transitions are treated as loops
         if (destState !== undefined) {
-            this.state = destState
-            let f = this[this.state]
-            if (f !== undefined) {
-                f.apply(this)
-            }
+            this._enter(destState)
+        }
+    }
+
+    _enter(state) {
+        this.state = state
+        let f = this[state]
+        if (f !== undefined) {
+            f.apply(this)
         }
     }
 }
