@@ -14,6 +14,8 @@ from flask import (
 from flask_socketio import SocketIO
 
 from jinja2 import BaseLoader
+
+import expert
 from expert import globalparams, tasks, experiment
 
 
@@ -97,6 +99,7 @@ def error(msg):
 
 
 app = App(__name__)
+expert.app = app
 # sessions aren't enabled until this is set
 # NB: opening the dashboard or displaying a task view
 # doesn't make use of the session
@@ -163,7 +166,7 @@ if __name__ == '__main__':
 
     tasks.Task.experclass = experclass
 
-    experclass.setup(args.exper_path, mode, target, conds, app)
+    experclass.setup(args.exper_path, mode, target, conds)
 
     monitor_task = socketio.start_background_task(monitor, socketio)
 

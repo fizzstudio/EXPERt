@@ -21,10 +21,6 @@ from . import (
 import strictyaml
 
 
-# set by Experiment.setup()
-app = None
-
-
 class State(Enum):
     ACTIVE = 0
     CONSENT_DECLINED = 1
@@ -136,8 +132,9 @@ class Experiment:
             return self.task.get_feedback(resp)
 
     @classmethod
-    def setup(cls, path, mode, target, conds, theapp):
+    def setup(cls, path, mode, target, conds):
         global app
+        from . import app as theapp
         app, cls.app = theapp, theapp
         cls.name = cls.__qualname__.lower()
         cls.setup_paths(path)
