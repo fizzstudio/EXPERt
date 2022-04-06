@@ -3,7 +3,7 @@ import random
 
 from functools import cached_property
 
-from . import globalparams
+from . import cfg
 
 
 class Profile:
@@ -48,8 +48,8 @@ class Profile:
     def make_subjid(self):
         while True:
             subjid = ''
-            for _ in range(globalparams.subjid_length):
-                subjid += random.choice(globalparams.subjid_symbols)
+            for _ in range(cfg.subjid_length):
+                subjid += random.choice(cfg.subjid_symbols)
             subjid_exists = False
             for c, profiles in self.expercls.profiles.items():
                 if subjid in profiles:

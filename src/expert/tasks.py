@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 
 from flask import render_template, current_app as app
 
+from . import cfg
+
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
 # a page of text and clicking Next, to responding to a question
@@ -34,6 +36,7 @@ class Task:
         #     self.template_filename = \
         #         f'{exper.name()}/{self.template_filename}'
         self.variables = variables.copy() if variables else {}
+        self.variables['debug'] = cfg.debug
         self.variables['exper'] = self.experclass.name
         self.variables['expercss'] = \
             f'/expert/{self.experclass.name}/css/main.css'

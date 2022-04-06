@@ -16,7 +16,7 @@ from flask_socketio import SocketIO
 from jinja2 import BaseLoader
 
 import expert
-from expert import globalparams, tasks, experiment
+from expert import cfg, tasks, experiment
 
 
 class TemplateLoader(BaseLoader):
@@ -55,8 +55,10 @@ def load_exper(exper_path):
     E.g., if exper_path == '/foo/bar/my_exper', the source code
     must be located in /foo/bar/my_exper/src.
     """
-    src_path = Path(exper_path) / 'src' / '__init__.py'
-    spec = importlib.util.spec_from_file_location('src', src_path)
+    exper_path = Path(exper_path).resolve(True)
+    app.logger.info(f'loading experiment from {exper_path}')
+    init_path = exper_path / 'src' / '__init__.py'
+    spec = importlib.util.spec_from_file_location('src', init_path)
     pkg = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = pkg
     app.logger.info(f'experiment package name: {pkg.__name__}')
@@ -89,7 +91,7 @@ def setup():
 def monitor(socketio):
     app.logger.info('starting monitor task')
     while True:
-        socketio.sleep(globalparams.monitor_check_interval)
+        socketio.sleep(cfg.monitor_check_interval)
         for inst in experclass.instances.values():
             inst.check_for_timeout()
 
@@ -107,8 +109,8 @@ app.secret_key = b'\xe4\xfb\xfd\xff\x80uZL]\xe8B\xcb\x1c\xb3)g'
 
 app.logger.setLevel(logging.INFO)
 
+# the experiment folder + '/src'
 global_root = Path(app.root_path)
-app.logger.info(f'global_root: {global_root}')
 
 setup_complete = False
 
@@ -129,6 +131,8 @@ if __name__ == '__main__':
                           help='comma-separated (no spaces) list of' +
                           ' conditions from which to choose all profiles')
     args = parser.parse_args()
+
+    cfg.debug = args.debug
 
     socketio = SocketIO(
         app, # logger=True,
@@ -265,7 +269,7 @@ if __name__ == '__main__':
 
     @socketio.on('soundcheck')
     def sio_soundcheck(resp):
-        return resp.strip().lower() == globalparams.soundcheck_word
+        return resp.strip().lower() == cfg.soundcheck_word
 
     if args.listen:
         host, port = args.listen.split(':')

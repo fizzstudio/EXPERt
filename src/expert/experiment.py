@@ -14,7 +14,7 @@ from enum import Enum
 from flask import render_template, request
 
 from . import (
-    globalparams,
+    cfg,
     tasks, timestamp
 )
 
@@ -98,7 +98,7 @@ class Experiment:
         self.state = State.ACTIVE
 
         self.inact_timeout_time = \
-            self.start_time + globalparams.inact_timeout_secs
+            self.start_time + cfg.inact_timeout_secs
         self.global_timeout_time = None
 
         @socketio.on('init_task', namespace=f'/{self.sid}')
@@ -169,10 +169,10 @@ class Experiment:
         # NB: this is now an absolute path;
         # previously, it was relative to global_root
         cls.dir_path = Path(path).resolve(True)
-        cls.static_path = cls.dir_path / globalparams.static_dir
-        cls.profiles_path = cls.dir_path / globalparams.profiles_dir
-        cls.runs_path = cls.dir_path / globalparams.runs_dir
-        cls.templates_path = cls.dir_path / globalparams.templates_dir
+        cls.static_path = cls.dir_path / cfg.static_dir
+        cls.profiles_path = cls.dir_path / cfg.profiles_dir
+        cls.runs_path = cls.dir_path / cfg.runs_dir
+        cls.templates_path = cls.dir_path / cfg.templates_dir
 
     @classmethod
     def load_profiles(cls):
@@ -318,7 +318,7 @@ class Experiment:
                     # negative value disables the timeout
                     self.global_timeout_time = None
             self.inact_timeout_time = \
-                now + globalparams.inact_timeout_secs
+                now + cfg.inact_timeout_secs
 
             if self.response is None:
                 # previous task did not send a response
@@ -362,7 +362,7 @@ class Experiment:
             resp_path = cond_path / self.profile.subjid
         # newline='' must be set for the csv module
         with open(resp_path, 'w', newline='') as f:
-            if globalparams.output_format == 'csv':
+            if cfg.output_format == 'csv':
                 writer = csv.writer(f, lineterminator='\n')
                 # write the header line
                 writer.writerow(['tstamp', 'taskname', 'resp', 'extra'])
@@ -370,7 +370,7 @@ class Experiment:
                     # NB: None is written as the empty string
                     writer.writerow([r.timestamp, r.task_name,
                                      r.response, r.extra])
-            elif globalparams.output_format == 'json':
+            elif cfg.output_format == 'json':
                 import json
                 output = []
                 for r in self.responses:
@@ -384,7 +384,7 @@ class Experiment:
             else:
                 # XXX would probably be better to sanity-check this
                 # when the program loads
-                raise BadOutputFormatError(globalparams.output_format)
+                raise BadOutputFormatError(cfg.output_format)
 
     def check_for_timeout(self):
         if self.state != State.ACTIVE:
