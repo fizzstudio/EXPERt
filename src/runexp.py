@@ -272,10 +272,19 @@ if __name__ == '__main__':
         return resp.strip().lower() == cfg.soundcheck_word
 
     if args.listen:
-        host, port = args.listen.split(':')
-        assert host and port
+        host = '127.0.0.1'
+        port = 5000
+        if ':' in args.listen:
+            h, p = args.listen.split(':')
+            host = h or host
+            try:
+                port = int(p) if p else port
+            except ValueError:
+                app.logger.warn('invalid port; using 5000')
+        else:
+            host = args.listen
         app.logger.info(f'listening on {host}:{port}')
-        socketio.run(app, host=host, port=int(port)) # , log_output=True)
+        socketio.run(app, host=host, port=port) # , log_output=True)
     else:
         app.logger.info('listening on 127.0.0.1:5000')
         socketio.run(app)

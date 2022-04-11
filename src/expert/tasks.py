@@ -58,12 +58,15 @@ class Task:
         return render_template(self.template_filename, **all_vars)
 
     def then(self, *posargs, **kwargs):
-        if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
-            cls = posargs[0]
-            posargs = posargs[1:]
+        if isinstance(posargs[0], Task):
+            task = posargs[0]
         else:
-            cls = Task
-        task = cls(self.sid, *posargs, **kwargs)
+            if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
+                cls = posargs[0]
+                posargs = posargs[1:]
+            else:
+                cls = Task
+            task = cls(self.sid, *posargs, **kwargs)
         task.prev_task = self
         self.next_tasks.append(task)
         return task
