@@ -136,7 +136,7 @@ if __name__ == '__main__':
 
     socketio = SocketIO(
         app, # logger=True,
-        async_handlers=False,
+        #async_handlers=False,
         cors_allowed_origins='*')
 
     @socketio.on('connect')
