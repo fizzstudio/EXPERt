@@ -63,7 +63,7 @@ class Experiment:
     # sid: <Experiment subclass inst>
     instances = {}
 
-    def __init__(self, socketio, clientip):
+    def __init__(self, clientip, urlargs):
         self.sid = secrets.token_hex(16)
 
         self.clientip = clientip
@@ -72,8 +72,6 @@ class Experiment:
 
         self.profile = self.choose_profile()
         app.logger.info(f'profile: {self.profile}')
-
-        self.socketio = socketio
 
         self.instances[self.sid] = self
 
@@ -94,6 +92,13 @@ class Experiment:
             TaskResponse(self.sid, 'SID'),
             TaskResponse(self.iphash, 'IPHASH'),
             TaskResponse(request.headers.get('User-Agent'), 'USER_AGENT')]
+        if cfg.prolific_pid_param in urlargs:
+            self.prolific_pid = urlargs[cfg.prolific_pid_param]
+            app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
+            self.responses.append(
+                TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
+        else:
+            self.prolific_pid = None
 
         self.state = State.ACTIVE
 
@@ -131,11 +136,17 @@ class Experiment:
         def sio_get_feedback(resp):
             return self.task.get_feedback(resp)
 
+        @socketio.on_error(f'/{self.sid}')
+        def sio_inst_error(e):
+            app.logger.info(f'socketio error: {e}')
+
     @classmethod
     def setup(cls, path, mode, target, conds):
-        global app
+        global app, socketio
         from . import app as theapp
+        from . import socketio as thesocketio
         app, cls.app = theapp, theapp
+        socketio = thesocketio
         cls.name = cls.__qualname__.lower()
         cls.setup_paths(path)
         cls.pkg = sys.modules[cls.__module__]
@@ -238,7 +249,7 @@ class Experiment:
         variables = {'exper': cls.name,
                      'expercss': f'/expert/{cls.name}/css/main.css',
                      'window_title': cls.window_title}
-        return render_template('dashboard.j2.html', **variables)
+        return render_template('dashboard' + cfg.template_ext, **variables)
 
     def choose_cond(self):
         cond_counts = Counter()
@@ -341,7 +352,7 @@ class Experiment:
                 self.save_responses()
 
         self.num_tasks_completed += 1
-        self.socketio.emit('update_instance', self.status())
+        socketio.emit('update_instance', self.status())
 
     def status(self):
         if self.state == State.ACTIVE:
@@ -401,7 +412,7 @@ class Experiment:
             self.end()
             self.profile.unuse()
             self.save_responses()
-        self.socketio.emit('update_instance', self.status())
+        socketio.emit('update_instance', self.status())
 
     # called for normal completion, timeout, or nonconsent
     def end(self):

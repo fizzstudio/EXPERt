@@ -6,6 +6,8 @@ from expert.experiment import Experiment, TaskResponse
 
 from expert.tasks import Task, Consent, Soundcheck, TaskDesc
 
+from expert import socketio
+
 from . import params
 
 from .trialtasks import RatingTask
@@ -21,8 +23,8 @@ class Amelio(Experiment):
 
     turk_codes = set()
 
-    def __init__(self, socketio, clientip):
-        super().__init__(socketio, clientip)
+    def __init__(self, *args):
+        super().__init__(*args)
 
         # Example of generating a secure Mechanical Turk code
         # and storing it in the participant's responses

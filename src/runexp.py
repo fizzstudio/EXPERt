@@ -138,6 +138,7 @@ if __name__ == '__main__':
         app, # logger=True,
         #async_handlers=False,
         cors_allowed_origins='*')
+    expert.socketio = socketio
 
     @socketio.on('connect')
     def sio_connect():
@@ -168,7 +169,7 @@ if __name__ == '__main__':
     if not experclass:
         sys.exit(f'unable to load experiment "{args.exper_path}"')
 
-    tasks.Task.experclass = experclass
+    #tasks.Task.experclass = experclass
 
     experclass.setup(args.exper_path, mode, target, conds)
 
@@ -206,7 +207,7 @@ if __name__ == '__main__':
             if ',' in ip:
                 ip = ip.split(',')[0]
             try:
-                inst = experclass(socketio, ip)
+                inst = experclass(ip, request.args)
             except experiment.ExperFullError:
                 return error('No participant profiles are available')
             session['sid'] = inst.sid

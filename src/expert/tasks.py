@@ -26,21 +26,27 @@ class Task:
     template = ''
 
     # set by runexp.py to the concrete class of the experiment
-    experclass = None
+    #experclass = None
 
-    def __init__(self, sid, template=None, variables=None, timeout_secs=None):
-        self.sid = sid
+    def __init__(self, inst, template=None, variables=None, timeout_secs=None):
+        self.inst = inst
+        self.sid = inst.sid
         self.template_name = template or self.template
-        self.template_filename = f'task_{self.template_name}.html.jinja'
+        self.template_filename = \
+            f'task_{self.template_name}{cfg.template_ext}'
         # if (exper.templates_path() / self.template_filename).is_file():
         #     self.template_filename = \
         #         f'{exper.name()}/{self.template_filename}'
         self.variables = variables.copy() if variables else {}
         self.variables['debug'] = cfg.debug
-        self.variables['exper'] = self.experclass.name
+        self.variables['prolific_pid'] = inst.prolific_pid
+        if inst.prolific_pid:
+            self.variables['prolific_completion_url'] = \
+                cfg.prolific_completion_url
+        self.variables['exper'] = inst.name
         self.variables['expercss'] = \
-            f'/expert/{self.experclass.name}/css/main.css'
-        self.variables['window_title'] = self.experclass.window_title
+            f'/expert/{inst.name}/css/main.css'
+        self.variables['window_title'] = inst.window_title
         self.variables['sid'] = self.sid
         self.variables['task_type'] = self.template_name
         self.prev_task = None
@@ -66,7 +72,7 @@ class Task:
                 posargs = posargs[1:]
             else:
                 cls = Task
-            task = cls(self.sid, *posargs, **kwargs)
+            task = cls(self.inst, *posargs, **kwargs)
         task.prev_task = self
         self.next_tasks.append(task)
         return task
@@ -107,3 +113,7 @@ class Soundcheck(Task):
 
     template = 'soundcheck'
 
+
+class Thankyou(Task):
+
+    template = 'thankyou'
