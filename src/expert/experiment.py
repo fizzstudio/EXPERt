@@ -13,8 +13,8 @@ from enum import Enum
 
 from flask import render_template, request
 
+import expert
 from . import (
-    cfg,
     tasks, timestamp
 )
 
@@ -92,8 +92,8 @@ class Experiment:
             TaskResponse(self.sid, 'SID'),
             TaskResponse(self.iphash, 'IPHASH'),
             TaskResponse(request.headers.get('User-Agent'), 'USER_AGENT')]
-        if cfg.prolific_pid_param in urlargs:
-            self.prolific_pid = urlargs[cfg.prolific_pid_param]
+        if expert.cfg['prolific_pid_param'] in urlargs:
+            self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
             app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
             self.responses.append(
                 TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
@@ -103,7 +103,7 @@ class Experiment:
         self.state = State.ACTIVE
 
         self.inact_timeout_time = \
-            self.start_time + cfg.inact_timeout_secs
+            self.start_time + expert.cfg['inact_timeout_secs']
         self.global_timeout_time = None
 
         @socketio.on('init_task', namespace=f'/{self.sid}')
@@ -180,10 +180,10 @@ class Experiment:
         # NB: this is now an absolute path;
         # previously, it was relative to global_root
         cls.dir_path = Path(path).resolve(True)
-        cls.static_path = cls.dir_path / cfg.static_dir
-        cls.profiles_path = cls.dir_path / cfg.profiles_dir
-        cls.runs_path = cls.dir_path / cfg.runs_dir
-        cls.templates_path = cls.dir_path / cfg.templates_dir
+        cls.static_path = cls.dir_path / expert.cfg['static_dir']
+        cls.profiles_path = cls.dir_path / expert.cfg['profiles_dir']
+        cls.runs_path = cls.dir_path / expert.cfg['runs_dir']
+        cls.templates_path = cls.dir_path / expert.cfg['templates_dir']
 
     @classmethod
     def load_profiles(cls):
@@ -246,10 +246,12 @@ class Experiment:
 
     @classmethod
     def present_dashboard(cls):
-        variables = {'exper': cls.name,
-                     'expercss': f'/expert/{cls.name}/css/main.css',
-                     'window_title': cls.window_title}
-        return render_template('dashboard' + cfg.template_ext, **variables)
+        variables = {
+            'exper': cls.name,
+            'expercss': f'/{expert.cfg["url_prefix"]}/{cls.name}/css/main.css',
+            'window_title': cls.window_title
+        }
+        return render_template('dashboard' + expert.template_ext, **variables)
 
     def choose_cond(self):
         cond_counts = Counter()
@@ -301,7 +303,7 @@ class Experiment:
             if self.state == State.ACTIVE:
                 app.logger.info(
                     f'consent declined for profile {self.profile}')
-                self.task.next_tasks = [tasks.Task(self.sid, 'nonconsent')]
+                self.task.next_tasks = [tasks.Task(self, 'nonconsent')]
                 self.state = State.CONSENT_DECLINED
                 self.end()
                 self.save_responses()
@@ -329,7 +331,7 @@ class Experiment:
                     # negative value disables the timeout
                     self.global_timeout_time = None
             self.inact_timeout_time = \
-                now + cfg.inact_timeout_secs
+                now + expert.cfg['inact_timeout_secs']
 
             if self.response is None:
                 # previous task did not send a response
@@ -373,7 +375,7 @@ class Experiment:
             resp_path = cond_path / self.profile.subjid
         # newline='' must be set for the csv module
         with open(resp_path, 'w', newline='') as f:
-            if cfg.output_format == 'csv':
+            if expert.cfg['output_format'] == 'csv':
                 writer = csv.writer(f, lineterminator='\n')
                 # write the header line
                 writer.writerow(['tstamp', 'taskname', 'resp', 'extra'])
@@ -381,7 +383,7 @@ class Experiment:
                     # NB: None is written as the empty string
                     writer.writerow([r.timestamp, r.task_name,
                                      r.response, r.extra])
-            elif cfg.output_format == 'json':
+            elif expert.cfg['output_format'] == 'json':
                 import json
                 output = []
                 for r in self.responses:
@@ -395,7 +397,7 @@ class Experiment:
             else:
                 # XXX would probably be better to sanity-check this
                 # when the program loads
-                raise BadOutputFormatError(cfg.output_format)
+                raise BadOutputFormatError(expert.cfg['output_format'])
 
     def check_for_timeout(self):
         if self.state != State.ACTIVE:
@@ -408,7 +410,7 @@ class Experiment:
         if tout_time and time.monotonic() >= tout_time:
             app.logger.info(f'profile {self.profile} timed out')
             self.state = State.TIMED_OUT
-            self.task.next_tasks = [tasks.Task(self.sid, 'timedout')]
+            self.task.next_tasks = [tasks.Task(self, 'timedout')]
             self.end()
             self.profile.unuse()
             self.save_responses()

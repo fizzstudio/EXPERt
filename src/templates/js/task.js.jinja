@@ -1,10 +1,11 @@
 
-import { elt } from '/expert/static/js/util.js'
+import { elt } from '/{{ expert_js }}/util.js'
 
 export class Task {
-    constructor(exper, sid, debug) {
-        this.exper = exper
-        this.sid = sid
+
+    constructor(debug) {
+        // this.exper = exper
+        // this.sid = sid
         this.debug = debug
         this.nextBtn = elt('next-btn')
         this.nextBtnWrapper = elt('next-btn-wrapper')
@@ -15,8 +16,8 @@ export class Task {
 
         this.reset()
 
-        if (sid !== 'None' || debug) {
-            let ns = debug ? 'debug' : sid
+        if ('{{ sid }}' !== 'None' || debug) {
+            let ns = debug ? 'debug' : '{{ sid }}'
             this.socket = io(`/${ns}`)
             this.nextBtn.addEventListener('click', async () => {
                 this.disableNext()
@@ -97,7 +98,8 @@ export class Task {
 
     // Pre-load a sound
     loadSound(sound) {
-        return new Audio(`/expert/${this.exper}/audio/${sound}.mp3`)
+        return new Audio(
+            `/{{ expert_url_prefix }}/{{ exper }}/audio/${sound}.mp3`)
     }
 }
 
@@ -127,6 +129,3 @@ export class FSA {
         }
     }
 }
-
-// export const nextBtn = document.getElementById('next-btn')
-// nextBtn.disabled = true

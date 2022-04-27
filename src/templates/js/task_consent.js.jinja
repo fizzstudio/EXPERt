@@ -1,9 +1,9 @@
 
-import { elt } from '/expert/static/js/util.js'
+import { elt } from '/{{ expert_js }}/util.js'
 
-let agreeBox = elt('consent-agree-box')
-let radio1 = elt('radio1')
-let radio2 = elt('radio2')
+const agreeBox = elt('consent-agree-box')
+const radio1 = elt('radio1')
+const radio2 = elt('radio2')
 
 export function initTask(task) {
     task.disableNext()

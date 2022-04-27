@@ -1,5 +1,5 @@
 
-import { elt } from '/expert/static/js/util.js'
+import { elt } from '/expert/js/util.js'
 
 let sounds = ['x05', 'x03', 'x02', 'x01', 'x04']
 let playBtns = elt('rating-examples').querySelectorAll('.play-btn')

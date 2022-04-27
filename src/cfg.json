@@ -1,0 +1,17 @@
+{
+    "url_prefix": "expert",
+    "output_format": "csv",
+
+    "static_dir": "static",
+    "templates_dir": "templates",
+    "profiles_dir": "profiles",
+    "runs_dir": "runs",
+
+    "subjid_length": 6,
+    "subjid_symbols": "ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+
+    "inact_timeout_secs": 900,
+    "monitor_check_interval": 10,
+
+    "prolific_pid_param": "PROLIFIC_PID"
+}

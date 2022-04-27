@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 
 from flask import render_template, current_app as app
 
-from . import cfg
+import expert
 
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
@@ -33,19 +33,19 @@ class Task:
         self.sid = inst.sid
         self.template_name = template or self.template
         self.template_filename = \
-            f'task_{self.template_name}{cfg.template_ext}'
+            f'task_{self.template_name}{expert.template_ext}'
         # if (exper.templates_path() / self.template_filename).is_file():
         #     self.template_filename = \
         #         f'{exper.name()}/{self.template_filename}'
         self.variables = variables.copy() if variables else {}
-        self.variables['debug'] = cfg.debug
+        self.variables['debug'] = expert.debug
         self.variables['prolific_pid'] = inst.prolific_pid
         if inst.prolific_pid:
             self.variables['prolific_completion_url'] = \
-                cfg.prolific_completion_url
+                expert.cfg['prolific_completion_url']
         self.variables['exper'] = inst.name
         self.variables['expercss'] = \
-            f'/expert/{inst.name}/css/main.css'
+            f'/{expert.cfg["url_prefix"]}/{inst.name}/css/main.css'
         self.variables['window_title'] = inst.window_title
         self.variables['sid'] = self.sid
         self.variables['task_type'] = self.template_name
@@ -58,10 +58,13 @@ class Task:
     def get_feedback(self, response):
         pass
 
-    def present(self, tplt_vars={}):
+    def render(self, tplt, tplt_vars={}):
         all_vars = self.variables.copy()
         all_vars.update(tplt_vars)
-        return render_template(self.template_filename, **all_vars)
+        return render_template(tplt, **all_vars)
+
+    def present(self, tplt_vars={}):
+        return self.render(self.template_filename, tplt_vars)
 
     def then(self, *posargs, **kwargs):
         if isinstance(posargs[0], Task):

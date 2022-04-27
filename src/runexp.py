@@ -5,6 +5,7 @@ import argparse
 import logging
 import secrets
 import sys
+import json
 
 from pathlib import Path
 
@@ -16,7 +17,7 @@ from flask_socketio import SocketIO
 from jinja2 import BaseLoader
 
 import expert
-from expert import cfg, tasks, experiment
+from expert import tasks, experiment
 
 
 class TemplateLoader(BaseLoader):
@@ -74,6 +75,16 @@ def load_exper(exper_path):
     return None, None
 
 
+def read_config(exper_path):
+    with open(global_root / 'cfg.json') as f:
+        cfg = json.load(f)
+    exper_cfg_path = Path(exper_path).resolve(True) / 'cfg.json'
+    if exper_cfg_path.is_file():
+        with open(exper_cfg_path) as f:
+            cfg.update(json.load(f))
+    return cfg
+
+
 # perform any setup after the first request
 def setup():
     global setup_complete
@@ -91,13 +102,56 @@ def setup():
 def monitor(socketio):
     app.logger.info('starting monitor task')
     while True:
-        socketio.sleep(cfg.monitor_check_interval)
+        socketio.sleep(cfg['monitor_check_interval'])
         for inst in experclass.instances.values():
             inst.check_for_timeout()
 
 
 def error(msg):
-    return render_template('error.html.jinja', msg=msg)
+    return render_template('error' + expert.template_ext,
+                           msg=msg, expert_url_prefix=cfg['url_prefix'])
+
+
+class BadSessionError(Exception): pass
+
+
+def get_inst():
+    required = ['sid', 'exper', 'run', 'profile']
+    # NB: session.new seems to be False here even if we do
+    # in fact have a new, empty session
+    if not any(key in session for key in required):
+        # New participant
+        return None
+
+    if not all(key in session for key in required):
+        app.logger.info('missing some session keys')
+        print(session, session.new)
+        raise BadSessionError('Invalid session')
+
+    if session['exper'] == experclass.name:
+        try:
+            return experclass.instances[session['sid']]
+        except KeyError:
+            if session['run'] == experclass.record.start_time:
+                # We have a sid for this run, but no instance
+                results_file = (experclass.record.run_path /
+                                session['profile'])
+                if results_file.is_file():
+                    # Experiment was probably resumed
+                    raise BadSessionError(
+                        'You have already participated in this experiment')
+                else:
+                    app.logger.info(
+                        f'no inst for profile {session["profile"]}')
+                    raise BadSessionError('Invalid session')
+            else:
+                # Session ID is for a different run of this experiment
+                raise BadSessionError(
+                    'You have already participated in this experiment')
+    else:
+        # Possible participant from different experiment
+        app.logger.info(f'exper name mismatch: {session["exper"]}')
+        raise BadSessionError('Invalid session')
 
 
 app = App(__name__)
@@ -109,7 +163,7 @@ app.secret_key = b'\xe4\xfb\xfd\xff\x80uZL]\xe8B\xcb\x1c\xb3)g'
 
 app.logger.setLevel(logging.INFO)
 
-# the experiment folder + '/src'
+# the EXPERt folder + '/src'
 global_root = Path(app.root_path)
 
 setup_complete = False
@@ -120,6 +174,8 @@ if __name__ == '__main__':
     parser.add_argument('-l', '--listen',
                         help='hostname/IP address (:port) for' +
                         ' server to listen on')
+    parser.add_argument('-u', '--urlprefix',
+                        help='app URL prefix (default: /expert/)')
     parser.add_argument('-d', '--debug', action='store_true',
                         help='run in debug mode')
     mutexgrp = parser.add_mutually_exclusive_group()
@@ -132,7 +188,11 @@ if __name__ == '__main__':
                           ' conditions from which to choose all profiles')
     args = parser.parse_args()
 
-    cfg.debug = args.debug
+    cfg = read_config(args.exper_path)
+    expert.cfg = cfg
+
+    cfg['url_prefix'] = args.urlprefix or cfg['url_prefix']
+    expert.debug = args.debug
 
     socketio = SocketIO(
         app, # logger=True,
@@ -169,8 +229,6 @@ if __name__ == '__main__':
     if not experclass:
         sys.exit(f'unable to load experiment "{args.exper_path}"')
 
-    #tasks.Task.experclass = experclass
-
     experclass.setup(args.exper_path, mode, target, conds)
 
     monitor_task = socketio.start_background_task(monitor, socketio)
@@ -178,90 +236,103 @@ if __name__ == '__main__':
     dashboard_code = secrets.token_urlsafe(16)
     app.logger.info('dashboard code: ' + dashboard_code)
 
-    @app.route('/expert')
+    @app.route('/' + cfg['url_prefix'])
     def index():
         if not setup_complete:
             setup()
         content = None
-        if (sid := session.get('sid')) and \
-           session.get('exper') == experclass.name:
-            inst = experclass.instances.get(sid)
-            if inst is None:
-                if session.get('run') == experclass.record.start_time:
-                    # A session ID is present for this run, but
-                    # no instance is found
-                    results_file = (experclass.record.run_path /
-                                    session.get('profile'))
-                    if results_file.is_file():
-                        # Experiment was probably resumed
-                        content = error(
-                            'You have already participated in this experiment')
-                    else:
-                        content = error(f'Unknown session ID {sid}')
-                else:
-                    # Session ID is for a different run of this experiment
-                    content = error(
-                        'You have already participated in this experiment')
-        else:
-            ip = request.headers.get('X-Real-IP', request.remote_addr)
-            if ',' in ip:
-                ip = ip.split(',')[0]
-            try:
-                inst = experclass(ip, request.args)
-            except experiment.ExperFullError:
-                return error('No participant profiles are available')
-            session['sid'] = inst.sid
-            session['exper'] = experclass.name
-            session['run'] = experclass.record.start_time
-            session['profile'] = inst.profile.fqname
-            app.logger.info(f'new instance for SID {inst.sid}')
-            socketio.emit('new_instance', inst.status())
+        try:
+            inst = get_inst()
+            if not inst:
+                ip = request.headers.get('X-Real-IP', request.remote_addr)
+                if ',' in ip:
+                    ip = ip.split(',')[0]
+                try:
+                    inst = experclass(ip, request.args)
+                except experiment.ExperFullError:
+                    return error('No participant profiles are available')
+                session['sid'] = inst.sid
+                session['exper'] = experclass.name
+                session['run'] = experclass.record.start_time
+                session['profile'] = inst.profile.fqname
+                app.logger.info(f'new instance for SID {inst.sid}')
+                socketio.emit('new_instance', inst.status())
+        except BadSessionError as e:
+            content = error(str(e))
 
         if content is None:
-            content = inst.present({'expert_debug': args.debug})
+            content = inst.present({
+                'expert_debug': args.debug,
+                'expert_url_prefix': cfg['url_prefix'],
+                'expert_static': cfg['url_prefix'] + '/static',
+                'expert_js': cfg['url_prefix'] + '/js'
+            })
+
         resp = make_response(content)
         # Caching is disabled entirely to ensure that
-        # users always get fresh content.
+        # users always get fresh content
         resp.cache_control.no_store = True
 
         return resp
 
-    @app.route('/expert/dashboard/' + dashboard_code)
+    @app.route(f'/{cfg["url_prefix"]}/js/<path:subpath>')
+    def js(subpath):
+        try:
+            inst = get_inst()
+        except BadSessionError as e:
+            return 'Not Found', 404
+        if not inst:
+            return 'Not Found', 404
+
+        body = inst.task.render(f'js/{subpath}.jinja', {
+            'expert_debug': args.debug,
+            'expert_url_prefix': cfg['url_prefix'],
+            'expert_static': cfg['url_prefix'] + '/static',
+            'expert_js': cfg['url_prefix'] + '/js'
+        })
+        resp = make_response(body)
+        resp.cache_control.no_store = True
+        resp.content_type = 'application/javascript'
+
+        return resp
+
+    @app.route(f'/{cfg["url_prefix"]}/dashboard/{dashboard_code}')
     def dashboard():
         return experclass.present_dashboard()
 
     # NB: trying to name this function 'static' will cause an error
-    @app.route('/expert/static/<path:subpath>')
+    @app.route(f'/{cfg["url_prefix"]}/static/<path:subpath>')
     def global_static(subpath):
         return send_from_directory(
             global_root / 'expert' / 'static', subpath)
 
-    @app.route(f'/expert/{experclass.name}/<path:subpath>')
+    @app.route(f'/{cfg["url_prefix"]}/{experclass.name}/<path:subpath>')
     def exper_static(subpath):
         return send_from_directory(experclass.static_path, subpath)
 
-    # route for testing task views
-    @app.route('/expert/task/<task>')
-    def showtask(task):
-        taskvars = {}
-        for k, v in request.args.items():
-            if v.startswith('params:'):
-                taskvars[k] = getattr(experparams, v[7:])
-            else:
-                taskvars[k] = v
-        taskvars['_debug'] = True
+    if expert.debug:
+        # route for testing task views
+        @app.route(f'/{cfg["url_prefix"]}/task/<task>')
+        def showtask(task):
+            taskvars = {}
+            for k, v in request.args.items():
+                if v.startswith('params:'):
+                    taskvars[k] = getattr(experparams, v[7:])
+                else:
+                    taskvars[k] = v
+            taskvars['_debug'] = True
 
-        t = tasks.Task(None, task, taskvars)
+            t = tasks.Task(None, task, taskvars)
 
-        @socketio.on('init_task', namespace='/debug')
-        def sio_init_task():
-            return taskvars
+            @socketio.on('init_task', namespace='/debug')
+            def sio_init_task():
+                return taskvars
 
-        @socketio.on('get_feedback', namespace='/debug')
-        def sio_get_feedback(resp):
-            return eval(taskvars['fbackval'])
+            @socketio.on('get_feedback', namespace='/debug')
+            def sio_get_feedback(resp):
+                return eval(taskvars['fbackval'])
 
-        return t.present()
+            return t.present()
 
     @socketio.on('get_instances')
     def sio_get_instances():
@@ -270,7 +341,8 @@ if __name__ == '__main__':
 
     @socketio.on('soundcheck')
     def sio_soundcheck(resp):
-        return resp.strip().lower() == cfg.soundcheck_word
+        return resp.strip().lower() == expert.soundcheck_word
+
 
     if args.listen:
         host = '127.0.0.1'

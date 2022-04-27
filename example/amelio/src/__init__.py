@@ -47,7 +47,7 @@ class Amelio(Experiment):
         # .then() creates a new instance of the Task class
         # using the arguments it is given. Optionally, the first
         # argument may be a custom sublcass of Task.
-        self.task = Task(self.sid, 'welcome')
+        self.task = Task(self, 'welcome')
         # Use built-in Consent class with custom 'consent' template
         (self.task.then(Consent, 'consent')
          #.then(Soundcheck)

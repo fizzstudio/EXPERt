@@ -1,5 +1,5 @@
 
-import { elt } from '/expert/static/js/util.js'
+import { elt } from '/expert/js/util.js'
 
 let prompt = elt('prompt')
 let showPromptBtn = elt('show-prompt')

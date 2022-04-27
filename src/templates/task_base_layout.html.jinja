@@ -7,22 +7,28 @@
     <script type="module">
      document.getElementById('task-wrapper').scrollTo(0, 0)
      window.scrollTo(0, 0)
-     import { Task } from '/expert/static/js/task.js'
 
-     let exper = '{{ exper }}'
-     let sid = '{{ sid }}'
-     let task = new Task(
-         exper, sid, {{ 'true' if _debug is defined else 'false' }})
+     import { Task } from '/{{ expert_js }}/task.js'
 
-     {# set task_script %}{% block task_script %}{% endblock %}{% endset #}
+     const exper = '{{ exper }}'
+     const sid = '{{ sid }}'
+     //const urlPrefix = '{{ expert_url_prefix }}'
+     //const expertStatic = `${urlPrefix}/static`
+     //const expertJs = `${expertStatic}/js`
+
+     const task = new Task(
+         {{ 'true' if _debug is defined else 'false' }})
+
      {% if task_script is defined %}
          {% if task_script.startswith('_') %}
-             {% set exper = 'static' %}
+             {% set jspath = expert_js %}
              {% set task_script = task_script[1:] %}
+         {% else %}
+             {% set jspath = expert_url_prefix + '/' + exper + '/js' %}
          {% endif %}
          try {
-             let mod = await import(
-                 '/expert/{{ exper }}/js/task_{{ task_script }}.js')
+             const mod = await import(
+                 '/{{ jspath }}/task_{{ task_script }}.js')
              task.init(mod.initTask)
          } catch (error) {
              console.log('error importing script:', error)
@@ -48,7 +54,9 @@
         </div>
         <div id="next-btn-wrapper">
             <button type="button" id="next-btn" disabled>
-                Next <img src="/expert/static/images/right_arrow.svg">
+                Next
+                <img
+                    src="/{{ expert_url_prefix }}/static/images/right_arrow.svg">
             </button>
         </div>
         <div id="debug-fwd-btn-wrapper" class="{{ back_fwd_class }}">
