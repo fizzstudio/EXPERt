@@ -33,10 +33,13 @@ class TaskResponse:
     # args:
     #  response: any
     #  task_name: str
-    #  extra: any
-    def __init__(self, response, task_name, extra=None):
+    #  extra: {str:any}
+    def __init__(self, response, task_name, **extra):
         self.response = response
         self.task_name = task_name
+        # reserved for output files
+        for reserved in ['tstamp', 'task', 'resp']:
+            assert reserved not in extra
         self.extra = extra
         self.timestamp = timestamp.make_timestamp()
 
@@ -63,7 +66,7 @@ class Experiment:
     # sid: <Experiment subclass inst>
     instances = {}
 
-    def __init__(self, clientip, urlargs):
+    def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
 
         self.clientip = clientip
@@ -84,6 +87,7 @@ class Experiment:
         self.task = None
         self.last_task = None
         self.num_tasks_completed = 0
+        self.task_cursor = 1
 
         # response returned by current task
         self.response = None
@@ -91,7 +95,9 @@ class Experiment:
         self.responses = [
             TaskResponse(self.sid, 'SID'),
             TaskResponse(self.iphash, 'IPHASH'),
-            TaskResponse(request.headers.get('User-Agent'), 'USER_AGENT')]
+            TaskResponse(
+                'DUMMY' if dummy else request.headers.get('User-Agent'),
+                'USER_AGENT')]
         if expert.cfg['prolific_pid_param'] in urlargs:
             self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
             app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
@@ -246,12 +252,8 @@ class Experiment:
 
     @classmethod
     def present_dashboard(cls):
-        variables = {
-            'exper': cls.name,
-            'expercss': f'/{expert.cfg["url_prefix"]}/{cls.name}/css/main.css',
-            'window_title': cls.window_title
-        }
-        return render_template('dashboard' + expert.template_ext, **variables)
+        return render_template('dashboard' + expert.template_ext,
+                               **expert.template_vars)
 
     def choose_cond(self):
         cond_counts = Counter()
@@ -294,9 +296,9 @@ class Experiment:
     # Called by sio_next_page immediately before next_task()
     def handle_response(self, resp):
         self.response = TaskResponse(
-            resp, self.task.template_name, self.task.resp_extra)
+            resp, self.task.template_name, **self.task.resp_extra)
         app.logger.info(
-            f'{self.profile} completed "{self.response.task_name}"'
+            f'{self.profile} completed "{self.response.task_name}"' +
             f' ({self.num_tasks_completed + 1})')
         if isinstance(self.task, tasks.Consent) and resp == 'consent_declined':
             # make sure we didn't time out right before
@@ -314,9 +316,13 @@ class Experiment:
     def task_fwd(self, resp=None):
         # XXX currently doesn't handle forking task paths
         self.task = self.task.next_task(resp)
+        self.task_cursor += 1
+        self.task.variables['task_cursor'] = self.task_cursor
 
     def task_back(self):
         self.task = self.task.prev_task
+        self.task_cursor -= 1
+        self.task.variables['task_cursor'] = self.task_cursor
 
     # Called by sio_next_page immediately after handle_response()
     def next_task(self):
@@ -337,7 +343,7 @@ class Experiment:
                 # previous task did not send a response
                 self.responses.append(TaskResponse(
                     None, self.task.prev_task.template_name,
-                    self.task.prev_task.resp_extra))
+                    **self.task.prev_task.resp_extra))
             else:
                 self.responses.append(self.response)
             self.response = None
@@ -377,21 +383,25 @@ class Experiment:
         with open(resp_path, 'w', newline='') as f:
             if expert.cfg['output_format'] == 'csv':
                 writer = csv.writer(f, lineterminator='\n')
+                extras = set()
+                # collect all extra response field names
+                for r in self.responses:
+                    for k in r.extra:
+                        extras.add(k)
                 # write the header line
-                writer.writerow(['tstamp', 'taskname', 'resp', 'extra'])
+                writer.writerow(['tstamp', 'task', 'resp', *extras])
                 for r in self.responses:
                     # NB: None is written as the empty string
-                    writer.writerow([r.timestamp, r.task_name,
-                                     r.response, r.extra])
+                    writer.writerow([r.timestamp, r.task_name, r.response,
+                                     *[r.extra[e] for e in extras]])
             elif expert.cfg['output_format'] == 'json':
                 import json
                 output = []
                 for r in self.responses:
-                    item = {'timestamp': r.timestamp, 'task': r.task_name}
+                    item = {'tstamp': r.timestamp, 'task': r.task_name}
                     if r.response is not None:
-                        item['response'] = r.response
-                    if r.extra is not None:
-                        item['extra'] = r.extra
+                        item['resp'] = r.response
+                    item.update(r.extra)
                     output.append(item)
                 json.dump(output, f, indent=2)
             else:
@@ -419,6 +429,11 @@ class Experiment:
     # called for normal completion, timeout, or nonconsent
     def end(self):
         self.end_time = time.monotonic()
+
+    def dummy_run(self):
+        while self.state != State.COMPLETE:
+            self.handle_response(self.task.dummy_resp())
+            self.next_task()
 
 
 class Record:

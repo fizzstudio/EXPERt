@@ -154,6 +154,14 @@ def get_inst():
         raise BadSessionError('Invalid session')
 
 
+def dummy_run(inst_count):
+    ip = '127.0.0.1'
+    for i in range(inst_count):
+        inst = experclass(
+            ip, {cfg['prolific_pid_param']: f'DUMMY_{i}'}, dummy=True)
+        inst.dummy_run()
+
+
 app = App(__name__)
 expert.app = app
 # sessions aren't enabled until this is set
@@ -178,6 +186,8 @@ if __name__ == '__main__':
                         help='app URL prefix (default: /expert/)')
     parser.add_argument('-d', '--debug', action='store_true',
                         help='run in debug mode')
+    parser.add_argument('-D', '--dummy', type=int,
+                        help='perform a dummy run with the given instance count')
     mutexgrp = parser.add_mutually_exclusive_group()
     mutexgrp.add_argument('-r', '--resume',
                           help='timestamp of experiment run to resume')
@@ -231,6 +241,17 @@ if __name__ == '__main__':
 
     experclass.setup(args.exper_path, mode, target, conds)
 
+    expert.template_vars = {
+        'expert_debug': args.debug,
+        'expert_url_prefix': cfg['url_prefix'],
+        'expert_static': cfg['url_prefix'] + '/static',
+        'expert_js': cfg['url_prefix'] + '/js',
+        'exper': experclass.name,
+        'expercss':
+            f'/{cfg["url_prefix"]}/{experclass.name}/css/main.css',
+        'window_title': experclass.window_title
+    }
+
     monitor_task = socketio.start_background_task(monitor, socketio)
 
     dashboard_code = secrets.token_urlsafe(16)
@@ -261,12 +282,7 @@ if __name__ == '__main__':
             content = error(str(e))
 
         if content is None:
-            content = inst.present({
-                'expert_debug': args.debug,
-                'expert_url_prefix': cfg['url_prefix'],
-                'expert_static': cfg['url_prefix'] + '/static',
-                'expert_js': cfg['url_prefix'] + '/js'
-            })
+            content = inst.present(expert.template_vars)
 
         resp = make_response(content)
         # Caching is disabled entirely to ensure that
@@ -284,12 +300,7 @@ if __name__ == '__main__':
         if not inst:
             return 'Not Found', 404
 
-        body = inst.task.render(f'js/{subpath}.jinja', {
-            'expert_debug': args.debug,
-            'expert_url_prefix': cfg['url_prefix'],
-            'expert_static': cfg['url_prefix'] + '/static',
-            'expert_js': cfg['url_prefix'] + '/js'
-        })
+        body = inst.task.render(f'js/{subpath}.jinja', expert.template_vars)
         resp = make_response(body)
         resp.cache_control.no_store = True
         resp.content_type = 'application/javascript'
@@ -344,20 +355,24 @@ if __name__ == '__main__':
         return resp.strip().lower() == expert.soundcheck_word
 
 
-    if args.listen:
-        host = '127.0.0.1'
-        port = 5000
-        if ':' in args.listen:
-            h, p = args.listen.split(':')
-            host = h or host
-            try:
-                port = int(p) if p else port
-            except ValueError:
-                app.logger.warn('invalid port; using 5000')
-        else:
-            host = args.listen
-        app.logger.info(f'listening on {host}:{port}')
-        socketio.run(app, host=host, port=port) # , log_output=True)
+    if args.dummy:
+        app.logger.info('performing dummy run')
+        dummy_run(args.dummy)
     else:
-        app.logger.info('listening on 127.0.0.1:5000')
-        socketio.run(app)
+        if args.listen:
+            host = '127.0.0.1'
+            port = 5000
+            if ':' in args.listen:
+                h, p = args.listen.split(':')
+                host = h or host
+                try:
+                    port = int(p) if p else port
+                except ValueError:
+                    app.logger.warn('invalid port; using 5000')
+            else:
+                host = args.listen
+            app.logger.info(f'listening on {host}:{port}')
+            socketio.run(app, host=host, port=port) # , log_output=True)
+        else:
+            app.logger.info('listening on 127.0.0.1:5000')
+            socketio.run(app)

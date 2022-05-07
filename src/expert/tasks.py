@@ -25,9 +25,6 @@ class Task:
 
     template = ''
 
-    # set by runexp.py to the concrete class of the experiment
-    #experclass = None
-
     def __init__(self, inst, template=None, variables=None, timeout_secs=None):
         self.inst = inst
         self.sid = inst.sid
@@ -39,21 +36,18 @@ class Task:
         #         f'{exper.name()}/{self.template_filename}'
         self.variables = variables.copy() if variables else {}
         self.variables['debug'] = expert.debug
+        self.variables['task_cursor'] = 1
         self.variables['prolific_pid'] = inst.prolific_pid
         if inst.prolific_pid:
             self.variables['prolific_completion_url'] = \
                 expert.cfg['prolific_completion_url']
-        self.variables['exper'] = inst.name
-        self.variables['expercss'] = \
-            f'/{expert.cfg["url_prefix"]}/{inst.name}/css/main.css'
-        self.variables['window_title'] = inst.window_title
         self.variables['sid'] = self.sid
         self.variables['task_type'] = self.template_name
         self.prev_task = None
         self.next_tasks = []
         self.timeout_secs = timeout_secs
-        # extra data to be added to each participant response
-        self.resp_extra = None
+        # extra fields to be added to each participant response
+        self.resp_extra = {}
 
     def get_feedback(self, response):
         pass
@@ -103,6 +97,9 @@ class Task:
             return None
         else:
             return self.next_tasks[0]
+
+    def dummy_resp(self):
+        return None
 
 
 # This class exists essentially to flag the task

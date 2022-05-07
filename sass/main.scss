@@ -57,8 +57,18 @@ body {
 
 #chin {
     display: flex;
+    flex-direction: column;
     align-items: center;
     align-self: stretch;
+    #debug-panel {
+        display: flex;
+        background: rgb(255, 255, 127);
+        padding: 0.25rem;
+        #debug-task-cursor {
+            width: 4rem;
+            text-align: center;
+        }
+    }
 }
 
 #next-btn-wrapper {

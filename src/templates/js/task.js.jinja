@@ -11,6 +11,7 @@ export class Task {
         this.nextBtnWrapper = elt('next-btn-wrapper')
         this.debugBackBtn = elt('debug-back-btn')
         this.debugFwdBtn = elt('debug-fwd-btn')
+        this.debugTaskCursor = elt('debug-task-cursor')
         this.content = elt('task-wrapper')
         // this.onClickNext = null
 
@@ -39,6 +40,7 @@ export class Task {
         let vars = await this.api(...apiParams)
         if (vars['task_type'] === this.vars['task_type']) {
             this.vars = vars
+            this.debugTaskCursor.textContent = vars['task_cursor']
             this.reset()
             this.initFunc(this)
         } else {

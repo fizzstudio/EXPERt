@@ -53,8 +53,18 @@ body {
 
 #chin {
   display: flex;
+  flex-direction: column;
   align-items: center;
   align-self: stretch;
+}
+#chin #debug-panel {
+  display: flex;
+  background: #ffff7f;
+  padding: 0.25rem;
+}
+#chin #debug-panel #debug-task-cursor {
+  width: 4rem;
+  text-align: center;
 }
 
 #next-btn-wrapper {
@@ -220,5 +230,3 @@ body {
 #dboard-subjids .dboard-num, #dboard-subjids .dboard-comp, #dboard-subjids .dboard-elapsed {
   text-align: right;
 }
-
-/*# sourceMappingURL=main.css.map */
