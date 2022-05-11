@@ -55,7 +55,7 @@ class Task:
     def render(self, tplt, tplt_vars={}):
         all_vars = self.variables.copy()
         all_vars.update(tplt_vars)
-        return render_template(tplt, **all_vars)
+        return expert.render(tplt, all_vars)
 
     def present(self, tplt_vars={}):
         return self.render(self.template_filename, tplt_vars)

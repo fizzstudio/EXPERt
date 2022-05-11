@@ -1,0 +1,13 @@
+
+{# params: id #}
+
+<div id="exp-dlg-{{ exp_dlg_id }}" class="hidden exp-dlg">
+    <div class="exp-dlg-filter"></div>
+    <div class="exp-dlg-elements">
+        <div class="exp-dlg-elements-title"></div>
+        {% block content %}
+        {% endblock %}
+        <div class="exp-dlg-elements-buttons">
+        </div>
+    </div>
+</div>

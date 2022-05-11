@@ -10,9 +10,44 @@
     </script>
 
     <script type="module">
-     let exper = "{{ exper }}"
 
-     let subjids = document.getElementById('dboard-subjids')
+     import { Dialog } from '/{{ expert_js }}/dialog.js'
+     import { elt, callApi } from '/{{ expert_js }}/util.js'
+
+     class DownloadDialog extends Dialog {
+
+         constructor() {
+             super('exp-dlg-download')
+             this.titlebar = 'Download Results'
+             this.selectNode = this.node.querySelector(
+                 '.exp-dlg-download-select')
+         }
+
+         async show() {
+             this.run = null
+             this.selectNode.selectedIndex = 0
+             const runs = await callApi(socket, 'get_runs')
+             this.selectNode.add(new Option('Select a run'))
+             for (const run of runs) {
+                 this.selectNode.add(new Option(run))
+             }
+             const selectionChanged = () => {
+                 this.run = this.selectNode.selectedIndex ?
+                            this.selectNode.value : null
+                 this.setButtonsDisabled({okay: !this.run})
+             }
+             this.selectNode.addEventListener('change', selectionChanged)
+             this.setButtons([{tag: 'cancel', text: 'Cancel'},
+                              {tag: 'okay', text: 'Download', disabled: true}])
+             let tag = await super.show(() => this.buttons['okay'][0].focus())
+             this.selectNode.removeEventListener('change', selectionChanged)
+             return tag === 'okay'
+         }
+     }
+
+     const exper = "{{ exper }}"
+
+     const subjids = elt('dboard-subjids')
 
      const cellClasses = [
          'dboard-num', 'dboard-id', 'dboard-clientip', 'dboard-profile',
@@ -42,7 +77,6 @@
              }
          }
      }
-
 
      function addInstance(instance) {
          // let numFields = instance.length
@@ -74,25 +108,35 @@
          }
      }
 
-     // async function update() {
-     // each instance: [profile, state, num_tasks_completed, elapsed_time]
-     //    let instances = await callApi('get_instances')
-     //    updateList(instances)
-     //    window.setTimeout(update, 10000)
-     // }
+     function download(run) {
+         const anchor = document.createElement('a')
+         anchor.href = `{{ dashboard_path }}/download/${run}`
+         anchor.download = run
+         anchor.style.display = 'none'
+         document.body.appendChild(anchor)
+         anchor.click()
+         document.body.removeChild(anchor)
+     }
 
-     // window.setTimeout(update, 10000)
+     const downloadDlg = new DownloadDialog()
+     const downloadBtn = elt('exp-download-btn')
 
      const socket = io()
 
-     socket.on('connect', () => {
+     socket.on('connect', async () => {
          console.log("socket connected")
-         socket.emit('get_instances', (instances) => updateList(instances))
+         const insts = await callApi(socket, 'get_instances')
+         updateList(insts)
+         downloadBtn.addEventListener(
+             'click', async () => {
+                 if (await downloadDlg.show()) {
+                     download(downloadDlg.run)
+                 }
+         })
      })
 
      socket.on('new_instance', (instance) => addInstance(instance))
      socket.on('update_instance', (instance) => updateInstance(instance))
-
 
     </script>
 {% endblock %}
@@ -102,8 +146,14 @@
 
         <h2>Dashboard</h2>
 
+        <button type="button" id="exp-download-btn">
+            Download Results
+        </button>
+
         <div id="dboard-wrapper">
             <div id="dboard-subjids"><div class="dboard-header"></div><div class="dboard-header">ID</div><div class="dboard-header">Client IP</div><div class="dboard-header">Profile</div><div class="dboard-header">State</div><div class="dboard-header">Tasks</div><div class="dboard-header">Started</div><div class="dboard-header">Elapsed (m)</div></div>
         </div>
     </div>
+    {% set exp_dlg_id = 'download' %}
+    {% include 'download_dialog.html.jinja' %}
 {% endblock %}

@@ -250,11 +250,6 @@ class Experiment:
     def profile_mod(cls):
         return importlib.import_module('.profile', cls.pkg.__package__)
 
-    @classmethod
-    def present_dashboard(cls):
-        return render_template('dashboard' + expert.template_ext,
-                               **expert.template_vars)
-
     def choose_cond(self):
         cond_counts = Counter()
         # make sure we have a key for each cond

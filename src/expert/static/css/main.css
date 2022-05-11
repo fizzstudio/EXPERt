@@ -230,3 +230,44 @@ body {
 #dboard-subjids .dboard-num, #dboard-subjids .dboard-comp, #dboard-subjids .dboard-elapsed {
   text-align: right;
 }
+
+.exp-dlg {
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0);
+}
+.exp-dlg-filter {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+.exp-dlg-elements {
+  background: lightgray;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+}
+.exp-dlg-elements-title {
+  background: black;
+  color: white;
+  align-self: stretch;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.exp-dlg-elements-buttons {
+  padding: 0.5rem;
+}
+
+/*# sourceMappingURL=main.css.map */

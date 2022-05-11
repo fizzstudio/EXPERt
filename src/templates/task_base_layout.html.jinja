@@ -44,11 +44,6 @@
         {% block task_content %}{% endblock %}
     </div>
     <div id="chin">
-        {% if expert_debug %}
-            {% set back_fwd_class = '' %}
-        {% else %}
-            {% set back_fwd_class = 'hidden' %}
-        {% endif %}
         <div id="next-btn-wrapper">
             <button type="button" id="next-btn" disabled>
                 Next
@@ -56,12 +51,12 @@
                     src="/{{ expert_url_prefix }}/static/images/right_arrow.svg">
             </button>
         </div>
-        <div id="debug-panel">
-            <div id="debug-back-btn-wrapper" class="{{ back_fwd_class }}">
+        <div id="debug-panel" class="{{ '' if expert_debug else 'hidden' }}">
+            <div id="debug-back-btn-wrapper">
                 <button type="button" id="debug-back-btn">Back</button>
             </div>
             <div id="debug-task-cursor">{{ task_cursor }}</div>
-            <div id="debug-fwd-btn-wrapper" class="{{ back_fwd_class }}">
+            <div id="debug-fwd-btn-wrapper">
                 <button type="button" id="debug-fwd-btn">Fwd</button>
             </div>
         </div>

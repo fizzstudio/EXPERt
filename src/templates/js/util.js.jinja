@@ -5,6 +5,16 @@ export function elt(id) {
     return document.getElementById(id)
 }
 
+export async function callApi(socket, func, args) {
+    const p = new Promise(resolve => {
+        const params = args === undefined ? [func] : [func, args]
+        socket.emit(...params, resp => {
+            resolve(resp)
+        })
+    })
+    return p
+}
+
 export function aPlay(sound) {
     return new Promise((resolve, reject) => {
         sound.onended = () => resolve()

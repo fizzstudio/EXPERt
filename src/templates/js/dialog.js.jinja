@@ -1,0 +1,156 @@
+
+
+import { View } from '/{{ expert_js }}/view.js'
+import { elt } from '/{{ expert_js }}/util.js'
+
+export class Dialog extends View {
+
+    constructor(id) {
+        super(elt(id).cloneNode(true))
+        this.node.id = undefined
+        this.node.classList.remove('hidden')
+        //this.node.classList.add('exp-dlg')
+        this.titlebarNode = this.node.querySelector(
+            '.exp-dlg-elements-title')
+        // darkens background when a dialog is visible
+        //this.dlgFilter = el('dlg-filter')
+        this.keymap = {}
+        // NB: this has a class instead of an ID bc
+        // multiple dialogs may be present in the DOM
+        this.btnsWrapper = this.node.querySelector(
+            '.exp-dlg-elements-buttons')
+    }
+
+    set titlebar(t) {
+        this.titlebarNode.textContent = t
+    }
+
+    setButtons(buttons) {
+        this.buttons = {}
+        while (this.btnsWrapper.firstChild) {
+            this.btnsWrapper.removeChild(this.btnsWrapper.firstChild)
+        }
+        for (let {tag, text, hook, disabled} of buttons) {
+            let btn = document.createElement('button')
+            btn.append(text)
+            if (disabled) {
+                btn.disabled = true
+            }
+            this.btnsWrapper.append(btn)
+            this.buttons[tag] = [btn, hook, disabled]
+        }
+    }
+
+    getButtonsDisabled() {
+        let state = {}
+        for (let [tag, [btn, hook, disabled]] of
+            Object.entries(this.buttons)) {
+            state[tag] = btn.disabled
+        }
+        return state
+    }
+
+    setButtonsDisabled(state) {
+        if (state) {
+            for (let [tag, disabled] of Object.entries(state)) {
+                this.buttons[tag][0].disabled = disabled
+            }
+        } else {
+            let curState = this.getButtonsDisabled()
+            for (let [tag, [btn, hook, disabled]] of
+                Object.entries(this.buttons)) {
+                btn.disabled = true
+            }
+            return curState
+        }
+    }
+
+    show(afterFunc) {
+        for (let [tag, [btn, hook, disabled]] of
+            Object.entries(this.buttons)) {
+            btn.disabled = disabled
+        }
+        document.querySelector('body').lastChild.after(this.node)
+        //this.dlgFilter.style.display = 'block'
+        //this.node.style.display = 'flex'
+        if (afterFunc) {
+            afterFunc()
+        }
+        return new Promise(resolve => {
+            for (let [tag, [btn, hook]] of Object.entries(this.buttons)) {
+                btn.addEventListener('click', async () => {
+                    let btnState = this.setButtonsDisabled()
+                    let shouldClose = hook ? await hook(tag) : true
+                    if (shouldClose) {
+                        this.close()
+                        resolve(tag)
+                    }
+                    this.setButtonsDisabled(btnState)
+                })
+            }
+            this.oldOnkeydown = document.onkeydown
+            document.onkeydown = async (ev) => {
+                if (ev.code === 'Escape' && this.buttons.cancel) {
+                    let hook = this.buttons.cancel[1]
+                    let shouldClose = hook ? await hook('cancel') : true
+                    if (shouldClose) {
+                        this.close()
+                        resolve('cancel')
+                    }
+                } else {
+                    let handler = this.keymap[ev.code]
+                    if (handler) {
+                        handler()
+                    }
+                }
+            }
+        })
+    }
+
+    close() {
+        // XXX it might be a good idea to call a hook method here
+        // that removes the onclick handlers, thus deleting
+        // references from the DOM to the instance. Subclasses
+        // could override it to remove any other handlers.
+        document.onkeydown = this.oldOnkeydown
+        //this.node.style.display = 'none'
+        this.node.remove()
+        //this.dlgFilter.style.display = 'none'
+    }
+}
+
+export class MessageDialog extends Dialog {
+
+    constructor() {
+        // same template as ConfirmDialog
+        super('exp-dlg-message')
+        this.titlebar = 'Message'
+        this.messageNode = this.node.querySelector(
+            '.exp-dlg-elements-message')
+        this.setButtons([{tag: 'cancel', text: 'Okay'}])
+    }
+
+    async show(text) {
+        this.messageNode.textContent = text
+        await super.show(() => this.buttons['cancel'][0].focus())
+    }
+}
+
+export class ConfirmDialog extends Dialog {
+
+    constructor() {
+        super('exp-dlg-confirm')
+        this.titlebar = 'Confirm'
+        //this.keymap['Enter'] = () => this.close()
+        this.messageNode = this.node.querySelector(
+            '.exp-dlg-elements-message')
+    }
+
+    async show(text, cancelLabel, okayLabel) {
+        this.messageNode.innerHTML = text
+        this.setButtons([{tag: 'cancel', text: cancelLabel},
+                         {tag: 'okay', text: okayLabel}])
+        let tag = await super.show(() => this.buttons['okay'][0].focus())
+        return tag === 'okay'
+    }
+}

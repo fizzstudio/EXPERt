@@ -6,12 +6,14 @@ import logging
 import secrets
 import sys
 import json
+import zipfile
 
 from pathlib import Path
 
 from flask import (
-    Flask, render_template, session,
-    request, make_response, send_from_directory)
+    Flask, session,
+    request, make_response,
+    send_file, send_from_directory)
 from flask_socketio import SocketIO
 
 from jinja2 import BaseLoader
@@ -108,8 +110,7 @@ def monitor(socketio):
 
 
 def error(msg):
-    return render_template('error' + expert.template_ext,
-                           msg=msg, expert_url_prefix=cfg['url_prefix'])
+    return expert.render('error' + expert.template_ext, {'msg': msg})
 
 
 class BadSessionError(Exception): pass
@@ -234,6 +235,18 @@ if __name__ == '__main__':
         target = None
         conds = args.conditions.split(',') if args.conditions else None
 
+    if args.listen:
+        if ':' in args.listen:
+            h, p = args.listen.split(':')
+            cfg['host'] = h or cfg['host']
+            try:
+                cfg['port'] = int(p) if p else cfg['port']
+            except ValueError:
+                app.logger.warn(f'invalid port; using {cfg["port"]}')
+        else:
+            cfg['host'] = args.listen
+    app.logger.info(f'listening on {cfg["host"]}:{cfg["port"]}')
+
     experclass, experparams = load_exper(args.exper_path)
 
     if not experclass:
@@ -255,7 +268,10 @@ if __name__ == '__main__':
     monitor_task = socketio.start_background_task(monitor, socketio)
 
     dashboard_code = secrets.token_urlsafe(16)
-    app.logger.info('dashboard code: ' + dashboard_code)
+    dashboard_path = f'/{cfg["url_prefix"]}/dashboard/{dashboard_code}'
+    dashboard_url = f'http://{cfg["host"]}:{cfg["port"]}' + dashboard_path
+
+    app.logger.info('dashboard URL: ' + dashboard_url)
 
     @app.route('/' + cfg['url_prefix'])
     def index():
@@ -282,7 +298,7 @@ if __name__ == '__main__':
             content = error(str(e))
 
         if content is None:
-            content = inst.present(expert.template_vars)
+            content = inst.present()
 
         resp = make_response(content)
         # Caching is disabled entirely to ensure that
@@ -293,23 +309,57 @@ if __name__ == '__main__':
 
     @app.route(f'/{cfg["url_prefix"]}/js/<path:subpath>')
     def js(subpath):
+        # NB:
+        # 1. Can't detect the dashboard by looking at the referrer;
+        #    e.g., might be listening on 127.0.0.1, but
+        #    referrer is 'localhost'
+        # 2. Indirect requests, e.g., dash imports foo.js,
+        #    foo.js imports bar.js, have foo.js as the referrer
         try:
             inst = get_inst()
         except BadSessionError as e:
             return 'Not Found', 404
-        if not inst:
-            return 'Not Found', 404
-
-        body = inst.task.render(f'js/{subpath}.jinja', expert.template_vars)
+        if inst:
+            body = inst.task.render(f'js/{subpath}.jinja')
+        else:
+            # probably the dashboard
+            body = expert.render(f'js/{subpath}.jinja')
         resp = make_response(body)
         resp.cache_control.no_store = True
         resp.content_type = 'application/javascript'
 
         return resp
 
-    @app.route(f'/{cfg["url_prefix"]}/dashboard/{dashboard_code}')
+    @app.route(dashboard_path)
     def dashboard():
-        return experclass.present_dashboard()
+        return expert.render('dashboard' + expert.template_ext,
+                             {'dashboard_path': dashboard_path})
+
+    @app.route(f'{dashboard_path}/download/<path:subpath>')
+    def dashboard_dl(subpath):
+        dl_name = f'exp_{experclass.name}_{subpath}.zip'
+        app.logger.info(f'download request for {dl_name}')
+        dls_path = experclass.dir_path / 'dl'
+        dls_path.mkdir(exist_ok=True)
+        dl_path = dls_path / dl_name
+        if not dl_path.is_file():
+            app.logger.info('building zip file')
+            run_path = experclass.runs_path / subpath
+            with zipfile.ZipFile(dl_path, 'w',
+                                 compression=zipfile.ZIP_DEFLATED,
+                                 compresslevel=9) as zf:
+                for condit in run_path.iterdir():
+                    if not condit.is_dir():
+                        continue
+                    for respath in condit.iterdir():
+                        if respath.stem[0] == '.':
+                            continue
+                        #print(respath)
+                        zf.write(
+                            str(respath),
+                            str(respath.relative_to(experclass.runs_path)))
+        return send_file(
+            dl_path, as_attachment=True, download_name=dl_name)
 
     # NB: trying to name this function 'static' will cause an error
     @app.route(f'/{cfg["url_prefix"]}/static/<path:subpath>')
@@ -350,6 +400,11 @@ if __name__ == '__main__':
         return [inst.status()
                 for sid, inst in experclass.instances.items()]
 
+    @socketio.on('get_runs')
+    def sio_get_runs():
+        return sorted(x.name for x in experclass.runs_path.iterdir()
+                      if x.is_dir() and x.stem[0] != '.')
+
     @socketio.on('soundcheck')
     def sio_soundcheck(resp):
         return resp.strip().lower() == expert.soundcheck_word
@@ -359,20 +414,4 @@ if __name__ == '__main__':
         app.logger.info('performing dummy run')
         dummy_run(args.dummy)
     else:
-        if args.listen:
-            host = '127.0.0.1'
-            port = 5000
-            if ':' in args.listen:
-                h, p = args.listen.split(':')
-                host = h or host
-                try:
-                    port = int(p) if p else port
-                except ValueError:
-                    app.logger.warn('invalid port; using 5000')
-            else:
-                host = args.listen
-            app.logger.info(f'listening on {host}:{port}')
-            socketio.run(app, host=host, port=port) # , log_output=True)
-        else:
-            app.logger.info('listening on 127.0.0.1:5000')
-            socketio.run(app)
+        socketio.run(app, host=cfg['host'], port=cfg['port']) # , log_output=True)
