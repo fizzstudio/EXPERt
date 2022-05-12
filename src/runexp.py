@@ -3,7 +3,6 @@ import importlib.util
 import datetime
 import argparse
 import logging
-import secrets
 import sys
 import json
 import zipfile
@@ -268,8 +267,11 @@ if __name__ == '__main__':
 
     monitor_task = socketio.start_background_task(monitor, socketio)
 
-    dashboard_code = secrets.token_urlsafe(16)
-    dashboard_path = f'/{cfg["url_prefix"]}/dashboard/{dashboard_code}'
+    #dashboard_code = secrets.token_urlsafe(16)
+    dashboard_code = cfg.get('dashboard_code')
+    dashboard_path = f'/{cfg["url_prefix"]}/dashboard'
+    if dashboard_code:
+        dashboard_path += f'/{dashboard_code}'
     dashboard_url = f'http://{cfg["host"]}:{cfg["port"]}' + dashboard_path
 
     app.logger.info('dashboard URL: ' + dashboard_url)
@@ -343,22 +345,21 @@ if __name__ == '__main__':
         dls_path = experclass.dir_path / 'dl'
         dls_path.mkdir(exist_ok=True)
         dl_path = dls_path / dl_name
-        if not dl_path.is_file():
-            app.logger.info('building zip file')
-            run_path = experclass.runs_path / subpath
-            with zipfile.ZipFile(dl_path, 'w',
-                                 compression=zipfile.ZIP_DEFLATED,
-                                 compresslevel=9) as zf:
-                for condit in run_path.iterdir():
-                    if not condit.is_dir():
+        #if not dl_path.is_file():
+        app.logger.info('building zip file')
+        run_path = experclass.runs_path / subpath
+        with zipfile.ZipFile(dl_path, 'w',
+                             compression=zipfile.ZIP_DEFLATED,
+                             compresslevel=9) as zf:
+            for condit in run_path.iterdir():
+                if not condit.is_dir():
+                    continue
+                for respath in condit.iterdir():
+                    if respath.stem[0] == '.':
                         continue
-                    for respath in condit.iterdir():
-                        if respath.stem[0] == '.':
-                            continue
-                        #print(respath)
-                        zf.write(
-                            str(respath),
-                            str(respath.relative_to(experclass.runs_path)))
+                    zf.write(
+                        str(respath),
+                        str(respath.relative_to(experclass.runs_path)))
         return send_file(
             dl_path, as_attachment=True, download_name=dl_name)
 
@@ -403,8 +404,8 @@ if __name__ == '__main__':
 
     @socketio.on('get_runs')
     def sio_get_runs():
-        return sorted(x.name for x in experclass.runs_path.iterdir()
-                      if x.is_dir() and x.stem[0] != '.')
+        return sorted([x.name for x in experclass.runs_path.iterdir()
+                       if x.is_dir() and x.stem[0] != '.'], reverse=True)
 
     @socketio.on('soundcheck')
     def sio_soundcheck(resp):
