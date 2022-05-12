@@ -18,3 +18,17 @@ def make_timestamp(hires=False):
     if hires:
         fields.append(str(precise_time - seconds)[2:])
     return '.'.join(fields)
+
+
+def simplify(tstamp, others):
+    # NB: others are already simplified
+    nmax = 0
+    pfx = tstamp[:10]
+    for other in others:
+        if pfx == other[:10]:
+            nmax = max(nmax, int(other.split('-')[1]))
+    return f'{pfx}-{nmax + 1}'
+
+
+def make_simple(others):
+    return simplify(make_timestamp(), others)

@@ -225,13 +225,18 @@ class Experiment:
 
     @classmethod
     def make_profiles(cls):
-        app.logger.info('creating profiles')
+        existing_sets = [s.name for s in cls.profiles_path.iterdir()
+                         if s.is_dir() and s.stem[0] != '.']
+        tstamp = timestamp.make_simple(existing_sets)
+        app.logger.info(f'creating profiles {tstamp}')
+        set_path = cls.profiles_path / tstamp
+        set_path.mkdir()
         items_per_cond = round(
             cls.params_mod().n_profiles/len(cls.cond_mod().conds))
         app.logger.info(f'profiles per condition: {items_per_cond}')
         for cname, c in cls.cond_mod().conds.items():
             app.logger.info(f'creating profiles for condition {cname}')
-            (cls.profiles_path / cname).mkdir()
+            (set_path / cname).mkdir()
             cls.profiles[c] = {}
             for i in range(items_per_cond):
                 p = cls.profile_mod().Profile(cls, c)
