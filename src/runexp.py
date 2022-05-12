@@ -262,7 +262,8 @@ if __name__ == '__main__':
         'exper': experclass.name,
         'expercss':
             f'/{cfg["url_prefix"]}/{experclass.name}/css/main.css',
-        'window_title': experclass.window_title
+        'window_title': experclass.window_title,
+        'expert_favicon': cfg['favicon']
     }
 
     monitor_task = socketio.start_background_task(monitor, socketio)

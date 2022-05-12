@@ -1,11 +1,9 @@
 
-import { elt } from '/{{ expert_js }}/util.js'
+import { elt, callApi } from '/{{ expert_js }}/util.js'
 
 export class Task {
 
     constructor(debug) {
-        // this.exper = exper
-        // this.sid = sid
         this.debug = debug
         this.nextBtn = elt('next-btn')
         this.nextBtnWrapper = elt('next-btn-wrapper')
@@ -13,13 +11,21 @@ export class Task {
         this.debugFwdBtn = elt('debug-fwd-btn')
         this.debugTaskCursor = elt('debug-task-cursor')
         this.content = elt('task-wrapper')
-        // this.onClickNext = null
 
         this.reset()
 
         if ('{{ sid }}' !== 'None' || debug) {
             let ns = debug ? 'debug' : '{{ sid }}'
             this.socket = io(`/${ns}`)
+            this.socket.on('connect', async () => {
+                console.log("socket connected")
+            })
+            this.socket.on('disconnect', async () => {
+                console.log("socket disconnected")
+            })
+            this.socket.on('connect_error', async () => {
+                console.log("socket connection error")
+            })
             this.nextBtn.addEventListener('click', async () => {
                 this.disableNext()
                 await this._nav('next_page', this.response)
@@ -29,11 +35,6 @@ export class Task {
             this.debugFwdBtn.addEventListener(
                 'click', async () => await this._nav('debug_fwd'))
         }
-        // if (disableNext) {
-        //     this.disableNext()
-        // } else {
-        //     this.enableNext()
-        // }
     }
 
     async _nav(...apiParams) {
@@ -65,13 +66,7 @@ export class Task {
     }
 
     async api(func, args) {
-        const p = new Promise(resolve => {
-            const params = args === undefined ? [func] : [func, args]
-            this.socket.emit(...params, resp => {
-                resolve(resp)
-            })
-        })
-        return p
+        return await callApi(this.socket, func, args)
     }
 
     enableNext() {

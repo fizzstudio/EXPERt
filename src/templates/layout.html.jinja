@@ -20,6 +20,10 @@
         <link rel="stylesheet"
               href="/{{ expert_url_prefix }}/static/css/main.css">
         <link rel="stylesheet" href="{{ expercss }}">
+        {% if expert_favicon is defined %}
+            <link rel="icon" href="{{ expert_favicon }}">
+        {% endif %}
+
         {% block script %}{% endblock %}
     </head>
 
