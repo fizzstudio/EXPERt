@@ -32,8 +32,7 @@ body {
   }
 }
 #page-content .guide {
-  outline: dashed 4px #00bfbf;
-  outline-offset: 0.25rem;
+  background: #77ff77;
 }
 #page-content button {
   display: inline-flex;
@@ -51,37 +50,51 @@ body {
   overflow: scroll;
 }
 
-#chin {
+#exp-chin {
   display: flex;
   flex-direction: column;
   align-items: center;
   align-self: stretch;
 }
-#chin #debug-panel {
-  display: flex;
-  background: #ffff7f;
-  padding: 0.25rem;
+#exp-chin #exp-progbar {
+  width: 100%;
+  margin-top: 0.5rem;
+  margin-left: 0.5rem;
+  margin-right: 0.5rem;
+  background: #a1a1a1;
+  border: solid 1px black;
 }
-#chin #debug-panel #debug-task-cursor {
-  width: 4rem;
-  text-align: center;
+#exp-chin #exp-progbar div {
+  height: 0.5rem;
+  width: 0%;
+  background: #77ff77;
 }
-
-#next-btn-wrapper {
+#exp-chin #exp-nav-controls {
   display: flex;
-  justify-content: center;
-  flex: auto;
+  align-items: center;
   margin: 1rem;
+  /*#exp-next-btn-wrapper {
+      display: flex;
+      justify-content: center;
+      flex: auto; //initial;
+      margin: 1rem;
+  }*/
 }
-#next-btn-wrapper #next-btn {
+#exp-chin #exp-nav-controls .exp-nav-btn {
   font-size: 1.5rem;
 }
-#next-btn-wrapper #next-btn img {
+#exp-chin #exp-nav-controls .exp-nav-btn img {
   height: 1.5rem;
   vertical-align: text-bottom;
 }
-#next-btn-wrapper #next-btn:disabled img {
+#exp-chin #exp-nav-controls .exp-nav-btn:disabled img {
   opacity: 0.5;
+}
+#exp-chin #exp-nav-controls #exp-task-cursor {
+  margin: 0 0.5rem;
+  background: #ffff7f;
+  width: 4rem;
+  text-align: center;
 }
 
 #task, #consent, #qnaire, #soundcheck {

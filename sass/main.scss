@@ -34,8 +34,9 @@ body {
         max-height: 40rem;
     }
     .guide {
-        outline: dashed 4px #00bfbf;
-        outline-offset: 0.25rem;
+        //outline: dashed 4px #00bfbf;
+        //outline-offset: 0.25rem;
+        background: globals.$bright-green;
     }
     button {
         display: inline-flex;
@@ -55,36 +56,51 @@ body {
     overflow: scroll;
 }
 
-#chin {
+#exp-chin {
     display: flex;
     flex-direction: column;
     align-items: center;
     align-self: stretch;
-    #debug-panel {
+    #exp-progbar {
+        width: 100%;
+        margin-top: 0.5rem;
+        margin-left: 0.5rem;
+        margin-right: 0.5rem;
+        background: globals.$med-gray;
+        border: solid 1px black;
+        div {
+            height: 0.5rem;
+            width: 0%;
+            background: globals.$bright-green;
+        }
+    }
+    #exp-nav-controls {
         display: flex;
-        background: rgb(255, 255, 127);
-        padding: 0.25rem;
-        #debug-task-cursor {
+        align-items: center;
+        margin: 1rem;
+        .exp-nav-btn {
+            font-size: 1.5rem;
+            img {
+                height: 1.5rem;
+                vertical-align: text-bottom;
+            }
+            &:disabled {
+                img { opacity: 0.5; }
+            }
+        }
+        #exp-task-cursor {
+            //align-self: stretch;
+            margin: 0 0.5rem;
+            background: rgb(255, 255, 127);
             width: 4rem;
             text-align: center;
         }
-    }
-}
-
-#next-btn-wrapper {
-    display: flex;
-    justify-content: center;
-    flex: auto; //initial;
-    margin: 1rem;
-    #next-btn {
-        font-size: 1.5rem;
-        img {
-            height: 1.5rem;
-            vertical-align: text-bottom;
-        }
-        &:disabled {
-            img { opacity: 0.5; }
-        }
+        /*#exp-next-btn-wrapper {
+            display: flex;
+            justify-content: center;
+            flex: auto; //initial;
+            margin: 1rem;
+        }*/
     }
 }
 
@@ -216,7 +232,7 @@ body {
     @extend #task-wrapper;
 }
 
-#dboard {
+#exp-dboard {
     overflow: scroll;
 
     &-subjids {

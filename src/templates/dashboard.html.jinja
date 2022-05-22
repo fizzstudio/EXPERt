@@ -11,8 +11,8 @@
 
     <script type="module">
 
-     import { Dialog } from '/{{ expert_js }}/dialog.js'
-     import { elt, callApi } from '/{{ expert_js }}/util.js'
+     import { Dialog } from '/{{ exp_js }}/dialog.js'
+     import { elt, callApi } from '/{{ exp_js }}/util.js'
 
      class DownloadDialog extends Dialog {
 
@@ -45,7 +45,7 @@
          }
      }
 
-     const exper = "{{ exper }}"
+     const exper = "{{ exp_exper }}"
 
      const subjids = elt('dboard-subjids')
 
@@ -110,7 +110,7 @@
 
      function download(run) {
          const anchor = document.createElement('a')
-         anchor.href = `{{ dashboard_path }}/download/${run}`
+         anchor.href = `{{ exp_dashboard_path }}/download/${run}`
          anchor.download = run
          anchor.style.display = 'none'
          document.body.appendChild(anchor)
@@ -142,7 +142,7 @@
 {% endblock %}
 
 {% block page_content %}
-    <div id="dboard">
+    <div id="exp-dboard">
 
         <h2>Dashboard</h2>
 
@@ -151,7 +151,15 @@
         </button>
 
         <div id="dboard-wrapper">
-            <div id="dboard-subjids"><div class="dboard-header"></div><div class="dboard-header">ID</div><div class="dboard-header">Client IP</div><div class="dboard-header">Profile</div><div class="dboard-header">State</div><div class="dboard-header">Tasks</div><div class="dboard-header">Started</div><div class="dboard-header">Elapsed (m)</div></div>
+            {% set headers = [
+                '', 'ID', 'Client IP', 'Profile', 'State',
+                'Tasks', 'Started', 'Elapsed (m)'
+            ] %}
+            <div id="exp-dboard-subjids">
+                {% for header in headers -%}
+                    <div class="dboard-header">{{ header }}</div>
+                {%- endfor %}
+            </div>
         </div>
     </div>
     {% set exp_dlg_id = 'download' %}

@@ -8,11 +8,11 @@
      document.getElementById('task-wrapper').scrollTo(0, 0)
      window.scrollTo(0, 0)
 
-     import { Task } from '/{{ expert_js }}/task.js'
+     import { Task } from '/{{ exp_js }}/task.js'
 
-     const exper = '{{ exper }}'
-     const sid = '{{ sid }}'
-     //const urlPrefix = '{{ expert_url_prefix }}'
+     const exper = '{{ exp_exper }}'
+     const sid = '{{ exp_sid }}'
+     //const urlPrefix = '{{ exp_url_prefix }}'
      //const expertStatic = `${urlPrefix}/static`
      //const expertJs = `${expertStatic}/js`
 
@@ -21,20 +21,20 @@
 
      {% if task_script is defined %}
          {% if task_script.startswith('_') %}
-             {% set jspath = expert_js %}
+             {% set jspath = exp_js %}
              {% set task_script = task_script[1:] %}
          {% else %}
-             {% set jspath = expert_url_prefix + '/' + exper + '/js' %}
+             {% set jspath = exp_url_prefix + '/' + exp_exper + '/js' %}
          {% endif %}
          try {
              const mod = await import(
                  '/{{ jspath }}/task_{{ task_script }}.js')
-             task.init(mod.initTask)
+             await task.init(mod.initTask)
          } catch (error) {
              console.log('error importing script:', error)
          }
      {% else %}
-         task.init(() => task.enableNext())
+         await task.init(() => task.enableNext())
      {% endif %}
     </script>
 {% endblock %}
@@ -43,21 +43,27 @@
     <div id="task-wrapper">
         {% block task_content %}{% endblock %}
     </div>
-    <div id="chin">
-        <div id="next-btn-wrapper">
-            <button type="button" id="next-btn" disabled>
-                Next
-                <img
-                    src="/{{ expert_url_prefix }}/static/images/right_arrow.svg">
-            </button>
+    <div id="exp-chin">
+        <div id="exp-progbar" class="hidden">
+            <div></div>
         </div>
-        <div id="debug-panel" class="{{ '' if expert_debug else 'hidden' }}">
-            <div id="debug-back-btn-wrapper">
-                <button type="button" id="debug-back-btn">Back</button>
-            </div>
-            <div id="debug-task-cursor">{{ task_cursor }}</div>
-            <div id="debug-fwd-btn-wrapper">
-                <button type="button" id="debug-fwd-btn">Fwd</button>
+        <div id="exp-nav-controls">
+            {% if exp_tool_mode %}
+                <div id="exp-prev-btn-wrapper">
+                    <button type="button" id="exp-prev-btn" class="exp-nav-btn"
+                            {{ '' if exp_tool_mode else 'disabled' }}>
+                        <img src="/{{ exp_static }}/images/left_arrow.svg">
+                        Prev
+                    </button>
+                </div>
+                <div id="exp-task-cursor"></div>
+            {% endif %}
+            <div id="exp-next-btn-wrapper">
+                <button type="button" id="exp-next-btn" class="exp-nav-btn"
+                        {{ '' if exp_tool_mode else 'disabled' }}>
+                    Next
+                    <img src="/{{ exp_static }}/images/right_arrow.svg">
+                </button>
             </div>
         </div>
     </div>

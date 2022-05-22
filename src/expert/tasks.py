@@ -35,25 +35,32 @@ class Task:
         #     self.template_filename = \
         #         f'{exper.name()}/{self.template_filename}'
         self.variables = variables.copy() if variables else {}
-        self.variables['debug'] = expert.debug
-        self.variables['task_cursor'] = 1
-        self.variables['prolific_pid'] = inst.prolific_pid
-        if inst.prolific_pid:
-            self.variables['prolific_completion_url'] = \
-                expert.cfg['prolific_completion_url']
-        self.variables['sid'] = self.sid
+        #self.variables['debug'] = expert.debug
         self.variables['task_type'] = self.template_name
         self.prev_task = None
         self.next_tasks = []
         self.timeout_secs = timeout_secs
         # extra fields to be added to each participant response
         self.resp_extra = {}
+        self.inst.num_tasks_created += 1
+        # default ID for the very first task;
+        # will get changed if this task becomes one of
+        # 'next_tasks' for another task;
+        # the ID determines the order task results are saved
+        self.id = self.inst.num_tasks_created
 
     def get_feedback(self, response):
         pass
 
+    def all_vars(self):
+        all_vars = expert.template_vars.copy()
+        all_vars.update(self.inst.variables)
+        all_vars.update(self.variables)
+        return all_vars
+
     def render(self, tplt, tplt_vars={}):
-        all_vars = self.variables.copy()
+        all_vars = self.inst.variables.copy()
+        all_vars.update(self.variables)
         all_vars.update(tplt_vars)
         return expert.render(tplt, all_vars)
 
@@ -102,18 +109,27 @@ class Task:
         return None
 
 
-# This class exists essentially to flag the task
-# so that the server can take the appropriate actions
-# when the agree-or-disagree response arrives
 class Consent(Task):
     pass
 
 
 class Soundcheck(Task):
-
     template = 'soundcheck'
 
 
 class Thankyou(Task):
-
     template = 'thankyou'
+
+
+class FinalTask(Task):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.variables['exp_progbar_enabled'] = False
+
+
+class TimedOut(FinalTask):
+    template = 'timedout'
+
+
+class NonConsent(FinalTask):
+    template = 'nonconsent'

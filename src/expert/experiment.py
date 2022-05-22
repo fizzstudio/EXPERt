@@ -83,10 +83,13 @@ class Experiment:
 
         self.start_timestamp = timestamp.make_timestamp()
 
-        # tasks are stored in a linked list
+        # tasks are stored in a linked tree structure
         self.task = None
         self.last_task = None
-        self.num_tasks_completed = 0
+        # total number of task instances created
+        # (not necessarily the number the participant will complete)
+        self.num_tasks_created = 0
+        #self.num_tasks_completed = 0
         self.task_cursor = 1
 
         # response returned by current task
@@ -112,9 +115,18 @@ class Experiment:
             self.start_time + expert.cfg['inact_timeout_secs']
         self.global_timeout_time = None
 
+        # template variables shared by all tasks for the experiment
+        self.variables = {
+            'exp_prolific_pid': self.prolific_pid,
+            'exp_sid': self.sid
+        }
+        if self.prolific_pid:
+            self.variables['exp_prolific_completion_url'] = \
+                expert.cfg['prolific_completion_url']
+
         @socketio.on('init_task', namespace=f'/{self.sid}')
         def sio_init_task():
-            return self.task.variables
+            return self.task.all_vars()
 
         @socketio.on('next_page', namespace=f'/{self.sid}')
         def sio_next_page(resp):
@@ -122,21 +134,21 @@ class Experiment:
                 # if we're not here, the user was somehow able
                 # to hit 'Next' on the final task screen,
                 # which shouldn't be possible ...
-                self.handle_response(resp)
-                self.next_task()
-            return self.task.variables
+                #self.handle_response(resp)
+                self.next_task(resp)
+            return self.task.all_vars()
 
-        @socketio.on('debug_fwd', namespace=f'/{self.sid}')
-        def sio_debug_fwd():
-            if self.task.next_tasks:
-                self.task_fwd()
-            return self.task.variables
+        #@socketio.on('debug_fwd', namespace=f'/{self.sid}')
+        #def sio_debug_fwd():
+        #    if self.task.next_tasks:
+        #        self.task_fwd()
+        #    return self.task.all_vars()
 
-        @socketio.on('debug_back', namespace=f'/{self.sid}')
-        def sio_debug_back():
+        @socketio.on('prev_page', namespace=f'/{self.sid}')
+        def sio_prev_page():
             if self.task.prev_task:
-                self.task_back()
-            return self.task.variables
+                self.prev_task()
+            return self.task.all_vars()
 
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
         def sio_get_feedback(resp):
@@ -285,76 +297,83 @@ class Experiment:
         p.use()
         return p
 
+    def will_start(self):
+        self.variables['exp_num_tasks'] = self.num_tasks_created
+        self.update_vars()
+
     def present(self, tplt_vars={}):
         return self.task.present(tplt_vars)
 
-    # Called by sio_next_page immediately before next_task()
-    def handle_response(self, resp):
-        self.response = TaskResponse(
+    def update_vars(self):
+        self.variables['exp_task_cursor'] = self.task_cursor
+        self.variables['exp_state'] = self.state.name
+
+    #def task_fwd(self, resp=None):
+    #    # XXX currently doesn't handle forking task paths
+    #    self.task = self.task.next_task(resp)
+    #    self.task_cursor += 1
+    #    self.update_cursor()
+
+    def prev_task(self):
+        self.task = self.task.prev_task
+        self.task_cursor -= 1
+        self.update_timeouts()
+        self.update_vars()
+
+    def update_timeouts(self):
+        now = time.monotonic()
+        if self.task.timeout_secs is not None:
+            if self.task.timeout_secs >= 0:
+                self.global_timeout_time = now + self.task.timeout_secs
+            else:
+                # negative value disables the timeout
+                self.global_timeout_time = None
+        self.inact_timeout_time = \
+            now + expert.cfg['inact_timeout_secs']
+
+    def next_task(self, resp):
+        task_resp = TaskResponse(
             resp, self.task.template_name, **self.task.resp_extra)
+        if self.task_cursor > len(self.responses):
+            self.responses.append(task_resp)
+        else:
+            self.responses[self.task_cursor - 1] = task_resp
         app.logger.info(
-            f'{self.profile} completed "{self.response.task_name}"' +
-            f' ({self.num_tasks_completed + 1})')
-        if isinstance(self.task, tasks.Consent) and resp == 'consent_declined':
-            # make sure we didn't time out right before
-            if self.state == State.ACTIVE:
+            f'{self.profile} completed "{task_resp.task_name}"' +
+            f' ({self.task_cursor})')
+
+        if self.state == State.ACTIVE:
+
+            if isinstance(self.task, tasks.Consent) and \
+               resp == 'consent_declined':
+                # make sure we didn't time out right before
                 app.logger.info(
                     f'consent declined for profile {self.profile}')
-                self.task.next_tasks = [tasks.Task(self, 'nonconsent')]
-                self.state = State.CONSENT_DECLINED
-                self.end()
-                self.save_responses()
+                #self.task.next_tasks = [tasks.Task(self, 'nonconsent')]
+                self.task = tasks.NonConsent(self)
+                self.end(State.CONSENT_DECLINED)
                 # NB: the sid stays in the session so we can keep
                 # serving up the consent-declined page
                 self.profile.unuse()
-
-    def task_fwd(self, resp=None):
-        # XXX currently doesn't handle forking task paths
-        self.task = self.task.next_task(resp)
-        self.task_cursor += 1
-        self.task.variables['task_cursor'] = self.task_cursor
-
-    def task_back(self):
-        self.task = self.task.prev_task
-        self.task_cursor -= 1
-        self.task.variables['task_cursor'] = self.task_cursor
-
-    # Called by sio_next_page immediately after handle_response()
-    def next_task(self):
-        self.task_fwd(self.response)
-
-        if self.state == State.ACTIVE:
-            now = time.monotonic()
-            if self.task.timeout_secs is not None:
-                if self.task.timeout_secs >= 0:
-                    self.global_timeout_time = now + self.task.timeout_secs
-                else:
-                    # negative value disables the timeout
-                    self.global_timeout_time = None
-            self.inact_timeout_time = \
-                now + expert.cfg['inact_timeout_secs']
-
-            if self.response is None:
-                # previous task did not send a response
-                self.responses.append(TaskResponse(
-                    None, self.task.prev_task.template_name,
-                    **self.task.prev_task.resp_extra))
             else:
-                self.responses.append(self.response)
-            self.response = None
+                # XXX currently doesn't handle forking task paths
+                self.task = self.task.next_task(resp)
+                self.task_cursor += 1
 
-            if not self.task.next_tasks:
-                # This is the final task. It must simply be some sort of
-                # "thank you" page where no data is collected.
-                # When the final task is displayed, the subject's responses
-                # are saved to disk. Their instance remains in memory
-                # so that if they reload the page, they won't lose any,
-                # e.g., mturk completion code that is displayed.
-                self.state = State.COMPLETE
-                self.end()
-                self.save_responses()
+                self.update_timeouts()
 
-        self.num_tasks_completed += 1
+                if not self.task.next_tasks:
+                    # This is the final task. It must simply be some sort of
+                    # "thank you" page where no data is collected.
+                    # When the final task is displayed, the subject's responses
+                    # are saved to disk. Their instance remains in memory
+                    # so that if they reload the page, they won't lose any,
+                    # e.g., mturk completion code that is displayed.
+                    self.end(State.COMPLETE)
+
+            self.update_vars()
+
+        #self.num_tasks_completed += 1
         socketio.emit('update_instance', self.status())
 
     def status(self):
@@ -364,7 +383,7 @@ class Experiment:
             elapsed_time = self.end_time - self.start_time
         return [
             f'{self.sid[:6]}...', self.clientip, str(self.profile),
-            self.state.name, self.num_tasks_completed,
+            self.state.name, self.task_cursor,
             self.start_timestamp[11:].replace('.', ':'),
             f'{elapsed_time/60:.1f}']
 
@@ -414,21 +433,21 @@ class Experiment:
             tout_time = self.inact_timeout_time
         if tout_time and time.monotonic() >= tout_time:
             app.logger.info(f'profile {self.profile} timed out')
-            self.state = State.TIMED_OUT
-            self.task.next_tasks = [tasks.Task(self, 'timedout')]
-            self.end()
+            #self.task.next_tasks = [tasks.Task(self, 'timedout')]
+            self.task = tasks.TimedOut(self)
+            self.end(State.TIMED_OUT)
             self.profile.unuse()
-            self.save_responses()
         socketio.emit('update_instance', self.status())
 
     # called for normal completion, timeout, or nonconsent
-    def end(self):
+    def end(self, state):
         self.end_time = time.monotonic()
+        self.state = state
+        self.save_responses()
 
     def dummy_run(self):
         while self.state != State.COMPLETE:
-            self.handle_response(self.task.dummy_resp())
-            self.next_task()
+            self.next_task(self.task.dummy_resp())
 
 
 class Record:

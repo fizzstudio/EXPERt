@@ -15,13 +15,13 @@
         by default, iOS renders at 980 px, then scales down
         #}
         <meta name="viewport" content="width=device-width">
-        <title>{{ window_title }}</title>
+        <title>{{ exp_window_title }}</title>
 
         <link rel="stylesheet"
-              href="/{{ expert_url_prefix }}/static/css/main.css">
-        <link rel="stylesheet" href="{{ expercss }}">
-        {% if expert_favicon is defined %}
-            <link rel="icon" href="{{ expert_favicon }}">
+              href="/{{ exp_url_prefix }}/static/css/main.css">
+        <link rel="stylesheet" href="{{ exp_expercss }}">
+        {% if exp_favicon is defined %}
+            <link rel="icon" href="{{ exp_favicon }}">
         {% endif %}
 
         {% block script %}{% endblock %}

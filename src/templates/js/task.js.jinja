@@ -1,21 +1,25 @@
 
-import { elt, callApi } from '/{{ expert_js }}/util.js'
+import { elt, callApi } from '/{{ exp_js }}/util.js'
 
 export class Task {
 
     constructor(debug) {
         this.debug = debug
-        this.nextBtn = elt('next-btn')
-        this.nextBtnWrapper = elt('next-btn-wrapper')
-        this.debugBackBtn = elt('debug-back-btn')
-        this.debugFwdBtn = elt('debug-fwd-btn')
-        this.debugTaskCursor = elt('debug-task-cursor')
+        this.prevBtn = elt('exp-prev-btn')
+        this.nextBtn = elt('exp-next-btn')
+        this.nextBtnWrapper = elt('exp-next-btn-wrapper')
+        //this.debugBackBtn = elt('debug-back-btn')
+        //this.debugFwdBtn = elt('debug-fwd-btn')
+        this.taskCursor = elt('exp-task-cursor')
         this.content = elt('task-wrapper')
 
+        {% if exp_progbar_enabled %}
+        elt('exp-progbar').classList.remove('hidden')
+        {% endif %}
         this.reset()
 
-        if ('{{ sid }}' !== 'None' || debug) {
-            let ns = debug ? 'debug' : '{{ sid }}'
+        if ('{{ exp_sid }}' !== 'None' || debug) {
+            let ns = debug ? 'debug' : '{{ exp_sid }}'
             this.socket = io(`/${ns}`)
             this.socket.on('connect', async () => {
                 console.log("socket connected")
@@ -27,21 +31,54 @@ export class Task {
                 console.log("socket connection error")
             })
             this.nextBtn.addEventListener('click', async () => {
+                if (this._nextHook) {
+                    await this._nextHook()
+                }
                 this.disableNext()
                 await this._nav('next_page', this.response)
             })
-            this.debugBackBtn.addEventListener(
-                'click', async () => await this._nav('debug_back'))
-            this.debugFwdBtn.addEventListener(
-                'click', async () => await this._nav('debug_fwd'))
+            this.prevBtn.addEventListener(
+                'click', async () => await this._nav('prev_page'))
+            //this.debugFwdBtn.addEventListener(
+            //    'click', async () => await this._nav('debug_fwd'))
         }
+    }
+
+    get nextHook() {
+        return this._nextHook
+    }
+
+    set nextHook(h) {
+        this._nextHook = h
+    }
+
+    _updateProgress() {
+        const cursor = this.vars['exp_task_cursor']
+        const num_tasks = this.vars['exp_num_tasks']
+        // The progress bar shows progress in terms of the cursor index
+        // of the current task (starting at 1) divided by the
+        // total number, so it will show a small value on
+        // the first task, and 100% on the final task
+        const progress_pct = 100*cursor/num_tasks
+        elt('exp-progbar').firstElementChild.style.width = `${progress_pct}%`
+        {% if exp_tool_mode %}
+        {% if exp_tool_display_total_tasks%}
+        this.taskCursor.textContent = `${cursor}/${num_tasks}`
+        {% else %}
+        this.taskCursor.textContent = cursor
+        {% endif %}
+        {% endif %}
+        const state = this.vars['exp_state']
+        this.prevBtn.disabled =
+            state === 'CONSENT_DECLINED' || state === 'TIMED_OUT' || cursor < 2
+        this.nextBtn.disabled = state !== 'ACTIVE'
     }
 
     async _nav(...apiParams) {
         let vars = await this.api(...apiParams)
         if (vars['task_type'] === this.vars['task_type']) {
             this.vars = vars
-            this.debugTaskCursor.textContent = vars['task_cursor']
+            this._updateProgress()
             this.reset()
             this.initFunc(this)
         } else {
@@ -50,12 +87,11 @@ export class Task {
         }
     }
 
-    init(f) {
+    async init(f) {
         this.initFunc = f
-        this.socket.emit('init_task', vars => {
-            this.vars = vars
-            f(this)
-        })
+        this.vars = await this.api('init_task')
+        this._updateProgress()
+        f(this)
     }
 
     reset() {
@@ -75,8 +111,10 @@ export class Task {
     }
 
     disableNext() {
+        {% if not exp_tool_mode %}
         this.nextBtn.disabled = true
         this.guide(null)
+        {% endif %}
     }
 
     setResponse(response) {
@@ -96,7 +134,7 @@ export class Task {
     // Pre-load a sound
     loadSound(sound) {
         return new Audio(
-            `/{{ expert_url_prefix }}/{{ exper }}/audio/${sound}.mp3`)
+            `/{{ exp_url_prefix }}/{{ exp_exper }}/audio/${sound}.mp3`)
     }
 }
 

@@ -176,7 +176,8 @@ global_root = Path(app.root_path)
 
 setup_complete = False
 
-if __name__ == '__main__':
+
+def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('exper_path', help='path to experiment to run')
     parser.add_argument('-l', '--listen',
@@ -184,8 +185,8 @@ if __name__ == '__main__':
                         ' server to listen on')
     parser.add_argument('-u', '--urlprefix',
                         help='app URL prefix (default: /expert/)')
-    parser.add_argument('-d', '--debug', action='store_true',
-                        help='run in debug mode')
+    parser.add_argument('-t', '--tool', action='store_true',
+                        help='run in tool mode')
     parser.add_argument('-D', '--dummy', type=int,
                         help='perform a dummy run with the given instance count')
     mutexgrp = parser.add_mutually_exclusive_group()
@@ -196,13 +197,17 @@ if __name__ == '__main__':
     mutexgrp.add_argument('-c', '--conditions',
                           help='comma-separated (no spaces) list of' +
                           ' conditions from which to choose all profiles')
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_args()
 
     cfg = read_config(args.exper_path)
     expert.cfg = cfg
 
     cfg['url_prefix'] = args.urlprefix or cfg['url_prefix']
-    expert.debug = args.debug
+    expert.tool_mode = args.tool
 
     socketio = SocketIO(
         app, # logger=True,
@@ -254,16 +259,20 @@ if __name__ == '__main__':
     experclass.setup(args.exper_path, mode, target, conds)
 
     expert.template_vars = {
-        'expert_debug': args.debug,
-        'expert_url_prefix': cfg['url_prefix'],
-        'expert_static': cfg['url_prefix'] + '/static',
-        'expert_js': cfg['url_prefix'] + '/js',
-        'exper': experclass.name,
-        'expercss':
+        'exp_tool_mode': args.tool,
+        'exp_url_prefix': cfg['url_prefix'],
+        'exp_static': cfg['url_prefix'] + '/static',
+        'exp_js': cfg['url_prefix'] + '/js',
+        'exp_exper': experclass.name,
+        'exp_expercss':
             f'/{cfg["url_prefix"]}/{experclass.name}/css/main.css',
-        'window_title': experclass.window_title,
-        'expert_favicon': cfg['favicon']
+        'exp_window_title': experclass.window_title,
+        'exp_favicon': cfg['favicon'],
+        'exp_progbar_enabled': cfg['progbar_enabled']
     }
+    if expert.tool_mode:
+        expert.template_vars['exp_tool_display_total_tasks'] = \
+            cfg['tool_display_total_tasks']
 
     monitor_task = socketio.start_background_task(monitor, socketio)
 
@@ -297,6 +306,7 @@ if __name__ == '__main__':
                 session['profile'] = inst.profile.fqname
                 app.logger.info(f'new instance for SID {inst.sid}')
                 socketio.emit('new_instance', inst.status())
+                inst.will_start()
         except BadSessionError as e:
             content = error(str(e))
 
@@ -336,7 +346,7 @@ if __name__ == '__main__':
     @app.route(dashboard_path)
     def dashboard():
         return expert.render('dashboard' + expert.template_ext,
-                             {'dashboard_path': dashboard_path})
+                             {'exp_dashboard_path': dashboard_path})
 
     @app.route(f'{dashboard_path}/download/<path:subpath>')
     def dashboard_dl(subpath):
@@ -373,29 +383,29 @@ if __name__ == '__main__':
     def exper_static(subpath):
         return send_from_directory(experclass.static_path, subpath)
 
-    if expert.debug:
-        # route for testing task views
-        @app.route(f'/{cfg["url_prefix"]}/task/<task>')
-        def showtask(task):
-            taskvars = {}
-            for k, v in request.args.items():
-                if v.startswith('params:'):
-                    taskvars[k] = getattr(experparams, v[7:])
-                else:
-                    taskvars[k] = v
-            taskvars['_debug'] = True
+    # if expert.debug:
+    #     # route for testing task views
+    #     @app.route(f'/{cfg["url_prefix"]}/task/<task>')
+    #     def showtask(task):
+    #         taskvars = {}
+    #         for k, v in request.args.items():
+    #             if v.startswith('params:'):
+    #                 taskvars[k] = getattr(experparams, v[7:])
+    #             else:
+    #                 taskvars[k] = v
+    #         taskvars['_debug'] = True
 
-            t = tasks.Task(None, task, taskvars)
+    #         t = tasks.Task(None, task, taskvars)
 
-            @socketio.on('init_task', namespace='/debug')
-            def sio_init_task():
-                return taskvars
+    #         @socketio.on('init_task', namespace='/debug')
+    #         def sio_init_task():
+    #             return taskvars
 
-            @socketio.on('get_feedback', namespace='/debug')
-            def sio_get_feedback(resp):
-                return eval(taskvars['fbackval'])
+    #         @socketio.on('get_feedback', namespace='/debug')
+    #         def sio_get_feedback(resp):
+    #             return eval(taskvars['fbackval'])
 
-            return t.present()
+    #         return t.present()
 
     @socketio.on('get_instances')
     def sio_get_instances():
