@@ -159,7 +159,7 @@ class Experiment:
             app.logger.info(f'socketio error: {e}')
 
     @classmethod
-    def setup(cls, path, mode, target, conds):
+    def setup(cls, path, conds):
         global app, socketio
         from . import app as theapp
         from . import socketio as thesocketio
@@ -179,12 +179,12 @@ class Experiment:
         cls.profiles_path.mkdir(exist_ok=True)
         cls.conds = conds
         cls.replicate = None
-        if mode == 'rep':
+        if expert.mode == 'rep':
             cls.record = Record(cls)
-            cls.record.replicate = target
+            cls.record.replicate = expert.target
             cls.record.save()
-            cls.replicate = Record(cls, target)
-        elif mode == 'res':
+            cls.replicate = Record(cls, expert.target)
+        elif expert.mode == 'res':
             cls.record = Record(cls, target)
             if cls.record.replicate:
                 cls.replicate = Record(cls, cls.record.replicate)
@@ -454,23 +454,20 @@ class Record:
 
     def __init__(self, experclass, fromsaved=None):
         self.experclass = experclass
-        if fromsaved:
-            saved_path = experclass.runs_path / fromsaved
-            md_path = saved_path / 'metadata'
-            if md_path.is_file():
-                schema = strictyaml.Map({
-                    'replicate': strictyaml.EmptyNone() | strictyaml.Str(),
-                })
-                with open(saved_path / 'metadata') as f:
-                    metadata = strictyaml.load(f.read(), schema).data
-                    self.start_time = fromsaved
-                    # folder name of exper run we are replicating
-                    self.replicate = metadata.get('replicate')
-            else:
+        fromsaved = fromsaved or expert.run
+        saved_path = experclass.runs_path / fromsaved
+        md_path = saved_path / 'metadata'
+        if md_path.is_file():
+            schema = strictyaml.Map({
+                'replicate': strictyaml.EmptyNone() | strictyaml.Str(),
+            })
+            with open(saved_path / 'metadata') as f:
+                metadata = strictyaml.load(f.read(), schema).data
                 self.start_time = fromsaved
-                self.replicate = None
+                # folder name of exper run we are replicating
+                self.replicate = metadata.get('replicate')
         else:
-            self.start_time = timestamp.make_timestamp()
+            self.start_time = fromsaved
             self.replicate = None
         self.run_path = experclass.runs_path / self.start_time
 

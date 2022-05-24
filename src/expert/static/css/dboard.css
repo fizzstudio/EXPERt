@@ -1,0 +1,71 @@
+@media (min-width: 48em) {
+  #page-content {
+    width: unset;
+  }
+}
+
+#exp-dboard {
+  overflow: scroll;
+}
+#exp-dboard-subjids {
+  display: grid;
+  grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
+}
+#exp-dboard-subjids div {
+  margin: 0 0.25rem;
+}
+#exp-dboard-subjids .exp-dboard-header {
+  font-weight: bold;
+  text-align: center;
+}
+#exp-dboard-subjids .exp-dboard-item {
+  padding: 0 0.25rem;
+  background: white;
+}
+#exp-dboard-subjids .dboard-id, #exp-dboard-subjids .dboard-clientip, #exp-dboard-subjids .dboard-profile, #exp-dboard-subjids .dboard-state, #exp-dboard-subjids .dboard-started {
+  text-align: center;
+}
+#exp-dboard-subjids .dboard-num, #exp-dboard-subjids .dboard-comp, #exp-dboard-subjids .dboard-elapsed {
+  text-align: right;
+}
+
+.exp-dlg {
+  position: fixed;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  background: rgba(0, 0, 0, 0);
+}
+.exp-dlg-filter {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+}
+.exp-dlg-elements {
+  background: lightgray;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+}
+.exp-dlg-elements-title {
+  background: black;
+  color: white;
+  align-self: stretch;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.exp-dlg-elements-buttons {
+  padding: 0.5rem;
+}
+
+/*# sourceMappingURL=dboard.css.map */

@@ -219,28 +219,28 @@ body {
   text-align: center;
 }
 
-#dboard {
+#exp-dboard {
   overflow: scroll;
 }
-#dboard-subjids {
+#exp-dboard-subjids {
   display: grid;
   grid-template-columns: 1fr 2fr 2fr 2fr 2fr 2fr 2fr 2fr;
 }
-#dboard-subjids div {
+#exp-dboard-subjids div {
   margin: 0 0.25rem;
 }
-#dboard-subjids .dboard-header {
+#exp-dboard-subjids .exp-dboard-header {
   font-weight: bold;
   text-align: center;
 }
-#dboard-subjids .dboard-item {
+#exp-dboard-subjids .exp-dboard-item {
   padding: 0 0.25rem;
   background: white;
 }
-#dboard-subjids .dboard-id, #dboard-subjids .dboard-clientip, #dboard-subjids .dboard-profile, #dboard-subjids .dboard-state, #dboard-subjids .dboard-started {
+#exp-dboard-subjids .dboard-id, #exp-dboard-subjids .dboard-clientip, #exp-dboard-subjids .dboard-profile, #exp-dboard-subjids .dboard-state, #exp-dboard-subjids .dboard-started {
   text-align: center;
 }
-#dboard-subjids .dboard-num, #dboard-subjids .dboard-comp, #dboard-subjids .dboard-elapsed {
+#exp-dboard-subjids .dboard-num, #exp-dboard-subjids .dboard-comp, #exp-dboard-subjids .dboard-elapsed {
   text-align: right;
 }
 

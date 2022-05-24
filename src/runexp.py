@@ -18,7 +18,7 @@ from flask_socketio import SocketIO
 from jinja2 import BaseLoader
 
 import expert
-from expert import tasks, experiment
+from expert import tasks, experiment, timestamp
 
 
 class TemplateLoader(BaseLoader):
@@ -229,14 +229,17 @@ if __name__ == '__main__':
 
     conds = None
     if args.resume:
-        mode = 'res'
-        target = args.resume
+        expert.mode = 'res'
+        expert.target = None
+        expert.run = args.resume
     elif args.replicate:
-        mode = 'rep'
-        target = args.replicate
+        expert.mode = 'rep'
+        expert.target = args.replicate
+        expert.run = timestamp.make_timestamp()
     else:
-        mode = 'new'
-        target = None
+        expert.mode = 'new'
+        expert.target = None
+        expert.run = timestamp.make_timestamp()
         conds = args.conditions.split(',') if args.conditions else None
 
     if args.listen:
@@ -256,7 +259,7 @@ if __name__ == '__main__':
     if not experclass:
         sys.exit(f'unable to load experiment "{args.exper_path}"')
 
-    experclass.setup(args.exper_path, mode, target, conds)
+    experclass.setup(args.exper_path, conds)
 
     expert.template_vars = {
         'exp_tool_mode': args.tool,
@@ -345,8 +348,12 @@ if __name__ == '__main__':
 
     @app.route(dashboard_path)
     def dashboard():
-        return expert.render('dashboard' + expert.template_ext,
-                             {'exp_dashboard_path': dashboard_path})
+        return expert.render('dashboard' + expert.template_ext, {
+            'exp_dashboard_path': dashboard_path,
+            'exp_mode': expert.mode,
+            'exp_run': expert.run,
+            'exp_target': expert.target
+        })
 
     @app.route(f'{dashboard_path}/download/<path:subpath>')
     def dashboard_dl(subpath):

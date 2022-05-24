@@ -17,9 +17,12 @@
         <meta name="viewport" content="width=device-width">
         <title>{{ exp_window_title }}</title>
 
-        <link rel="stylesheet"
-              href="/{{ exp_url_prefix }}/static/css/main.css">
-        <link rel="stylesheet" href="{{ exp_expercss }}">
+        <link rel="stylesheet" href="/{{ exp_static }}/css/main.css">
+        {% if exp_dashboard_path is defined %}
+            <link rel="stylesheet" href="/{{ exp_static }}/css/dboard.css">
+        {% else %}
+            <link rel="stylesheet" href="{{ exp_expercss }}">
+        {% endif %}
         {% if exp_favicon is defined %}
             <link rel="icon" href="{{ exp_favicon }}">
         {% endif %}

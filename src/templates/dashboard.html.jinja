@@ -45,15 +45,17 @@
          }
      }
 
-     const exper = "{{ exp_exper }}"
+     const exper = "{{ exp_exper }}";
 
-     const subjids = elt('dboard-subjids')
+     const subjids = elt('exp-dboard-subjids');
 
      const cellClasses = [
          'dboard-num', 'dboard-id', 'dboard-clientip', 'dboard-profile',
          'dboard-state', 'dboard-comp', 'dboard-started',
-         'dboard-elapsed']
-     const numCols = cellClasses.length
+         'dboard-elapsed'];
+     const numCols = cellClasses.length;
+
+     let numRows = 0;
 
      function updateList(instances) {
          // let numFields = instances.length? instances[0].length : 1
@@ -78,21 +80,42 @@
          }
      }
 
-     function addInstance(instance) {
-         // let numFields = instance.length
-         // index of new instance (subtract header divs)
-         let oldNumInsts = (subjids.childNodes.length - numCols)/numCols
-         subjids.appendChild(document.createElement('div'))
-         let numDiv = subjids.childNodes[numCols + oldNumInsts*numCols]
-         numDiv.innerHTML = oldNumInsts + 1
-         numDiv.className = cellClasses[0] + ' ' + 'dboard-item'
+     function addRow(fields) {
+         // index of new row (subtract header divs)
+         console.log('numCols', numCols);
+         //const oldNumRows = (subjids.childNodes.length - numCols)/numCols;
+         //console.log('oldNumRows', oldNumRows);
+         console.log('subjids.childNodes', subjids.childNodes);
+         const numDiv = document.createElement('div');
+         subjids.appendChild(numDiv);
+         //const numDiv = subjids.childNodes[numCols + oldNumRows*numCols];
+         //numDiv.innerHTML = oldNumRows + 1;
+         numDiv.innerHTML = ++numRows;
+         numDiv.className = cellClasses[0] + ' ' + 'exp-dboard-item';
          for (let j = 1; j < numCols; j++) {
-             subjids.appendChild(document.createElement('div'))
-             let div = subjids.childNodes[numCols + oldNumInsts*numCols + j]
-             div.innerHTML = instance[j - 1]
-             div.className = cellClasses[j] + ' ' + 'dboard-item'
+             const div = document.createElement('div');
+             subjids.appendChild(div);
+             //const div = subjids.childNodes[numCols + oldNumRows*numCols + j];
+             div.innerHTML = fields[j - 1];
+             div.className = cellClasses[j] + ' ' + 'exp-dboard-item';
          }
      }
+
+     /*function addInstance(instance) {
+        // let numFields = instance.length
+        // index of new instance (subtract header divs)
+        let oldNumInsts = (subjids.childNodes.length - numCols)/numCols
+        subjids.appendChild(document.createElement('div'))
+        let numDiv = subjids.childNodes[numCols + oldNumInsts*numCols]
+        numDiv.innerHTML = oldNumInsts + 1
+        numDiv.className = cellClasses[0] + ' ' + 'dboard-item'
+        for (let j = 1; j < numCols; j++) {
+        subjids.appendChild(document.createElement('div'))
+        let div = subjids.childNodes[numCols + oldNumInsts*numCols + j]
+        div.innerHTML = instance[j - 1]
+        div.className = cellClasses[j] + ' ' + 'dboard-item'
+        }
+        }*/
 
      function updateInstance(instance) {
          let numInsts = (subjids.childNodes.length - numCols)/numCols
@@ -135,8 +158,19 @@
          })
      })
 
-     socket.on('new_instance', (instance) => addInstance(instance))
+     socket.on('new_instance', (instance) => addRow(instance))
      socket.on('update_instance', (instance) => updateInstance(instance))
+
+     /*const dummy = [
+         '0123456789abcdef0123456789abcdef',
+         'xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx',
+         'foobar',
+         'CONSENT_DECLINED',
+         '999',
+         '01/01/1970 00:00:00',
+         '100.5'
+     ];
+     addRow(dummy);*/
 
     </script>
 {% endblock %}
@@ -144,7 +178,14 @@
 {% block page_content %}
     <div id="exp-dboard">
 
-        <h2>Dashboard</h2>
+        {% if exp_mode == 'new' %}
+            {% set run_info = exp_run %}
+        {% elif exp_mode == 'res' %}
+            {% set run_info = exp_run + ' res' %}
+        {% else %}
+            {% set run_info = exp_run + ' rep ' + exp_target %}
+        {% endif %}
+        <h2>Dashboard [{{ run_info }}]</h2>
 
         <button type="button" id="exp-download-btn">
             Download Results
@@ -157,7 +198,7 @@
             ] %}
             <div id="exp-dboard-subjids">
                 {% for header in headers -%}
-                    <div class="dboard-header">{{ header }}</div>
+                    <div class="exp-dboard-header">{{ header }}</div>
                 {%- endfor %}
             </div>
         </div>
