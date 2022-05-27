@@ -1,29 +1,35 @@
 
-'use strict'
-
 export function elt(id) {
-    return document.getElementById(id)
+    return document.getElementById(id);
+}
+
+export function elts(...ids) {
+    const dom = {};
+    for (const id of ids) {
+        dom[id] = document.getElementById(id);
+    }
+    return dom;
 }
 
 export async function callApi(socket, func, args) {
     const p = new Promise(resolve => {
-        const params = args === undefined ? [func] : [func, args]
+        const params = args === undefined ? [func] : [func, args];
         socket.emit(...params, resp => {
-            resolve(resp)
-        })
+            resolve(resp);
+        });
     })
-    return p
+    return p;
 }
 
 export function aPlay(sound) {
     return new Promise((resolve, reject) => {
-        sound.onended = () => resolve()
-        sound.play()
-    })
+        sound.onended = () => resolve();
+        sound.play();
+    });
 }
 
 export function aSleep(ms) {
     return new Promise((resolve, reject) => {
-        setTimeout(resolve, ms)
-    })
+        setTimeout(resolve, ms);
+    });
 }

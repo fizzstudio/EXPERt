@@ -16,7 +16,7 @@ export class Task {
         {% if exp_progbar_enabled %}
         elt('exp-progbar').classList.remove('hidden')
         {% endif %}
-        this.reset()
+        //this.reset()
 
         if ('{{ exp_sid }}' !== 'None' || debug) {
             let ns = debug ? 'debug' : '{{ exp_sid }}'
@@ -37,8 +37,10 @@ export class Task {
                 this.disableNext()
                 await this._nav('next_page', this.response)
             })
+            {% if exp_tool_mode %}
             this.prevBtn.addEventListener(
                 'click', async () => await this._nav('prev_page'))
+            {% endif %}
             //this.debugFwdBtn.addEventListener(
             //    'click', async () => await this._nav('debug_fwd'))
         }
@@ -67,38 +69,38 @@ export class Task {
         {% else %}
         this.taskCursor.textContent = cursor
         {% endif %}
-        {% endif %}
         const state = this.vars['exp_state']
         this.prevBtn.disabled =
             state === 'CONSENT_DECLINED' || state === 'TIMED_OUT' || cursor < 2
         this.nextBtn.disabled = state !== 'ACTIVE'
+        {% endif %}
     }
 
     async _nav(...apiParams) {
         let vars = await this.api(...apiParams)
         if (vars['task_type'] === this.vars['task_type']) {
             this.vars = vars
-            this._updateProgress()
-            this.reset()
-            this.initFunc(this)
+            await this.reset()
+            //this.initFunc(this)
         } else {
             // moving on to a new task type
             location.reload()
         }
     }
 
-    async init(f) {
-        this.initFunc = f
+    async init() {
+        //this.initFunc = f
         this.vars = await this.api('init_task')
-        this._updateProgress()
-        f(this)
+        await this.reset()
+        //f(this)
     }
 
-    reset() {
+    async reset() {
         this.guide(null)
         this.response = null
         this.content.scrollTo(0, 0)
         window.scrollTo(0, 0)
+        this._updateProgress()
     }
 
     async api(func, args) {
@@ -139,17 +141,18 @@ export class Task {
 }
 
 export class FSA {
-    constructor(task, transitTable) {
-        this.task = task
-        this.transitTable = transitTable
+    constructor(states) {
+        this.states = states
+        this.states.fsa = this
+        this.state = null
     }
 
     event(sym) {
-        let transits = this.transitTable[this.state]
+        const transits = this.states.transits[this.state]
         if (transits === undefined) {
             return
         }
-        let destState = transits[sym]
+        const destState = transits[sym]
         // symbols without transitions are treated as loops
         if (destState !== undefined) {
             this.enter(destState)
@@ -158,9 +161,9 @@ export class FSA {
 
     enter(state) {
         this.state = state
-        let f = this[state]
+        let f = this.states[state]
         if (f !== undefined) {
-            f.apply(this)
+            f.apply(this.states)
         }
     }
 }

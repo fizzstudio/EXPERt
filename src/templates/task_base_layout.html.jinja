@@ -5,19 +5,19 @@
             integrity="sha384-gDaozqUvc4HTgo8iZjwth73C6dDDeOJsAgpxBcMpZYztUfjHXpzrpdrHRdVp8ySO"
             crossorigin="anonymous"></script>
     <script type="module">
-     document.getElementById('task-wrapper').scrollTo(0, 0)
-     window.scrollTo(0, 0)
+     document.getElementById('task-wrapper').scrollTo(0, 0);
+     window.scrollTo(0, 0);
 
-     import { Task } from '/{{ exp_js }}/task.js'
+     import { Task } from '/{{ exp_js }}/task.js';
 
-     const exper = '{{ exp_exper }}'
-     const sid = '{{ exp_sid }}'
+     const exper = '{{ exp_exper }}';
+     const sid = '{{ exp_sid }}';
      //const urlPrefix = '{{ exp_url_prefix }}'
      //const expertStatic = `${urlPrefix}/static`
      //const expertJs = `${expertStatic}/js`
 
-     const task = new Task(
-         {{ 'true' if _debug is defined else 'false' }})
+     //const task = new Task(
+     //    {{ 'true' if _debug is defined else 'false' }})
 
      {% if task_script is defined %}
          {% if task_script.startswith('_') %}
@@ -28,14 +28,21 @@
          {% endif %}
          try {
              const mod = await import(
-                 '/{{ jspath }}/task_{{ task_script }}.js')
-             await task.init(mod.initTask)
+                 '/{{ jspath }}/task_{{ task_script }}.js');
+             var task = new mod.taskClass();
+             //await task.init(mod.initTask)
          } catch (error) {
-             console.log('error importing script:', error)
+             console.log('error importing script:', error);
          }
      {% else %}
-         await task.init(() => task.enableNext())
+         var task = new class extends Task {
+             async reset() {
+                 super.reset();
+                 this.enableNext();
+             }
+         };
      {% endif %}
+     await task.init();
     </script>
 {% endblock %}
 
@@ -51,7 +58,8 @@
             {% if exp_tool_mode %}
                 <div id="exp-prev-btn-wrapper">
                     <button type="button" id="exp-prev-btn" class="exp-nav-btn"
-                            {{ '' if exp_tool_mode else 'disabled' }}>
+                            {{ '' if exp_tool_mode else 'disabled' }}
+                            autocomplete="off">
                         <img src="/{{ exp_static }}/images/left_arrow.svg">
                         Prev
                     </button>
@@ -60,7 +68,8 @@
             {% endif %}
             <div id="exp-next-btn-wrapper">
                 <button type="button" id="exp-next-btn" class="exp-nav-btn"
-                        {{ '' if exp_tool_mode else 'disabled' }}>
+                        {{ '' if exp_tool_mode else 'disabled' }}
+                        autocomplete="off">
                     Next
                     <img src="/{{ exp_static }}/images/right_arrow.svg">
                 </button>

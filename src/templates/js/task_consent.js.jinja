@@ -1,21 +1,26 @@
 
-import { elt } from '/{{ exp_js }}/util.js'
+import { elts } from '/{{ exp_js }}/util.js';
+import { Task } from '/{{ exp_js }}/task.js';
 
-const agreeBox = elt('consent-agree-box')
-const radio1 = elt('radio1')
-const radio2 = elt('radio2')
+const dom = elts('consent-agree-box', 'radio1', 'radio2');
 
-export function initTask(task) {
-    task.disableNext()
+class ConsentTask extends Task {
 
-    task.guide(agreeBox)
+    constructor() {
+        super();
+        this.disableNext();
 
-    radio1.onclick = () => {
-        task.setResponse('consent_given')
-        task.enableNext()
-    }
-    radio2.onclick = () => {
-        task.setResponse('consent_declined')
-        task.enableNext()
+        this.guide(dom['consent-agree-box']);
+
+        dom['radio1'].addEventListener('click', () => {
+            this.setResponse('consent_given');
+            this.enableNext();
+        });
+        dom['radio2'].addEventListener('click', () => {
+            this.setResponse('consent_declined');
+            this.enableNext();
+        });
     }
 }
+
+export { ConsentTask as taskClass }
