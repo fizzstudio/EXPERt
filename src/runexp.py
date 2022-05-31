@@ -162,6 +162,14 @@ def dummy_run(inst_count):
         inst.dummy_run()
 
 
+def run_info():
+    return {
+        'run': expert.run,
+        'mode': expert.mode,
+        'target': expert.target
+    }
+
+
 app = App(__name__)
 expert.app = app
 # sessions aren't enabled until this is set
@@ -349,10 +357,7 @@ if __name__ == '__main__':
     @app.route(dashboard_path)
     def dashboard():
         return expert.render('dashboard' + expert.template_ext, {
-            'exp_dashboard_path': dashboard_path,
-            'exp_mode': expert.mode,
-            'exp_run': expert.run,
-            'exp_target': expert.target
+            'dashboard_path': dashboard_path
         })
 
     @app.route(f'{dashboard_path}/download/<path:subpath>')
@@ -414,15 +419,27 @@ if __name__ == '__main__':
 
     #         return t.present()
 
-    @socketio.on('get_instances')
-    def sio_get_instances():
-        return [inst.status()
-                for sid, inst in experclass.instances.items()]
+    @socketio.on('dboard_init')
+    def sio_dboard_init():
+        return {
+            'insts': [inst.status()
+                      for sid, inst in experclass.instances.items()],
+            'runInfo': run_info()
+        }
 
     @socketio.on('get_runs')
     def sio_get_runs():
         return sorted([x.name for x in experclass.runs_path.iterdir()
                        if x.is_dir() and x.stem[0] != '.'], reverse=True)
+
+    @socketio.on('start_new_run')
+    def sio_start_new_run():
+        experclass.start_new_run()
+        return run_info()
+
+    @socketio.on('terminate_inst')
+    def sio_terminate_inst(sid):
+        pass
 
     @socketio.on('soundcheck')
     def sio_soundcheck(resp):

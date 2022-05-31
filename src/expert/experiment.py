@@ -26,6 +26,7 @@ class State(Enum):
     CONSENT_DECLINED = 1
     TIMED_OUT = 2
     COMPLETE = 3
+    TERMINATED = 4
 
 
 class TaskResponse:
@@ -262,6 +263,32 @@ class Experiment:
     def profile_mod(cls):
         return importlib.import_module('.profile', cls.pkg.__package__)
 
+    @classmethod
+    def all_active(cls):
+        return [inst for inst in cls.instances.values()
+                if inst.state == State.ACTIVE]
+
+    @classmethod
+    def start_new_run(cls):
+        app.logger.info('--- starting new run ---')
+        for inst in cls.all_active():
+            inst.terminate()
+        cls.instances.clear()
+        for condprofs in cls.profiles.values():
+            for prof in condprofs.values():
+                prof.unuse()
+        expert.run = timestamp.make_timestamp()
+        cls.record = Record(cls)
+        if expert.mode == 'rep':
+            cls.record.replicate = expert.target
+        elif expert.mode == 'res':
+            if cls.replicate:
+                expert.mode = 'rep'
+                cls.record.replicate = expert.target
+            else:
+                expert.mode = 'new'
+        cls.record.save()
+
     def choose_cond(self):
         cond_counts = Counter()
         # make sure we have a key for each cond
@@ -348,7 +375,7 @@ class Experiment:
                resp == 'consent_declined':
                 # make sure we didn't time out right before
                 app.logger.info(
-                    f'consent declined for profile {self.profile}')
+                    f'consent declined for {self.profile}')
                 #self.task.next_tasks = [tasks.Task(self, 'nonconsent')]
                 self.task = tasks.NonConsent(self)
                 self.end(State.CONSENT_DECLINED)
@@ -381,10 +408,12 @@ class Experiment:
             elapsed_time = time.monotonic() - self.start_time
         else:
             elapsed_time = self.end_time - self.start_time
+        y, mo, d, h, mi, s = self.start_timestamp.split('.')
         return [
-            f'{self.sid[:6]}...', self.clientip, str(self.profile),
+            self.sid, self.clientip, str(self.profile),
             self.state.name, self.task_cursor,
-            self.start_timestamp[11:].replace('.', ':'),
+            #self.start_timestamp[11:].replace('.', ':'),
+            f'{mo}/{d}/{y} {h}:{mi}:{s}',
             f'{elapsed_time/60:.1f}']
 
     def save_responses(self):
@@ -432,12 +461,22 @@ class Experiment:
         else:
             tout_time = self.inact_timeout_time
         if tout_time and time.monotonic() >= tout_time:
-            app.logger.info(f'profile {self.profile} timed out')
+            app.logger.info(f'{self.profile} timed out')
             #self.task.next_tasks = [tasks.Task(self, 'timedout')]
             self.task = tasks.TimedOut(self)
             self.end(State.TIMED_OUT)
             self.profile.unuse()
         socketio.emit('update_instance', self.status())
+
+    def terminate(self):
+        if self.state != State.ACTIVE:
+            return
+        app.logger.info(f'{self.profile} terminated')
+        self.task = tasks.Terminated(self)
+        self.end(State.TERMINATED)
+        self.profile.unuse()
+        socketio.emit('update_instance', self.status())
+
 
     # called for normal completion, timeout, or nonconsent
     def end(self, state):
