@@ -121,15 +121,19 @@ class Thankyou(Task):
     template = 'thankyou'
 
 
-class FinalTask(Task):
+class IncompleteTask(Task):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.variables['exp_progbar_enabled'] = False
 
 
-class TimedOut(FinalTask):
+class TimedOut(IncompleteTask):
     template = 'timedout'
 
 
-class NonConsent(FinalTask):
+class Terminated(IncompleteTask):
+    template = 'terminated'
+
+
+class NonConsent(IncompleteTask):
     template = 'nonconsent'

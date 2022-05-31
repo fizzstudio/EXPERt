@@ -1,0 +1,12 @@
+
+import { Task } from '/{{ exp_js }}/task.js';
+
+class IncompleteTask extends Task {
+
+    constructor() {
+        super();
+        this.disableNext();
+    }
+}
+
+export { IncompleteTask as taskClass }

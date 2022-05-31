@@ -1,31 +1,60 @@
+body {
+  height: 100vh;
+}
+
 @media (min-width: 48em) {
   #page-content {
+    flex: auto;
+    max-height: none;
     width: unset;
+    align-self: stretch;
   }
 }
 
-#exp-dboard {
+#dboard {
+  align-self: stretch;
+  flex: auto;
+  display: flex;
+  flex-direction: column;
+}
+#dboard #inst-list-headers {
+  display: grid;
+  grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
+  text-align: center;
+  font-weight: bold;
+}
+#dboard #inst-list-headers div {
+  margin: 0 0.25rem;
+}
+#dboard #inst-list {
+  flex: 1 1 0;
+  background: #F1F1F1;
+  margin: 0.5rem 0;
   overflow: scroll;
 }
-#exp-dboard-subjids {
+#dboard #inst-list #inst-data {
   display: grid;
   grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
 }
-#exp-dboard-subjids div {
+#dboard #inst-list #inst-data div {
   margin: 0 0.25rem;
 }
-#exp-dboard-subjids .exp-dboard-header {
+#dboard #inst-list #inst-data .dboard-header {
   font-weight: bold;
   text-align: center;
 }
-#exp-dboard-subjids .exp-dboard-item {
+#dboard #inst-list #inst-data .dboard-item {
   padding: 0 0.25rem;
   background: white;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-#exp-dboard-subjids .dboard-id, #exp-dboard-subjids .dboard-clientip, #exp-dboard-subjids .dboard-profile, #exp-dboard-subjids .dboard-state, #exp-dboard-subjids .dboard-started {
+#dboard #inst-list #inst-data .dboard-id, #dboard #inst-list #inst-data .dboard-clientip, #dboard #inst-list #inst-data .dboard-profile,
+#dboard #inst-list #inst-data .dboard-state, #dboard #inst-list #inst-data .dboard-started {
   text-align: center;
 }
-#exp-dboard-subjids .dboard-num, #exp-dboard-subjids .dboard-comp, #exp-dboard-subjids .dboard-elapsed {
+#dboard #inst-list #inst-data .dboard-num, #dboard #inst-list #inst-data .dboard-task, #dboard #inst-list #inst-data .dboard-elapsed {
   text-align: right;
 }
 
