@@ -277,6 +277,7 @@ if __name__ == '__main__':
         'exp_exper': experclass.name,
         'exp_expercss':
             f'/{cfg["url_prefix"]}/{experclass.name}/css/main.css',
+        'exp_experimg': f'/{cfg["url_prefix"]}/{experclass.name}/img',
         'exp_window_title': experclass.window_title,
         'exp_favicon': cfg['favicon'],
         'exp_progbar_enabled': cfg['progbar_enabled']

@@ -41,6 +41,7 @@ body {
 }
 
 #task-wrapper, #error-content {
+  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -57,10 +58,8 @@ body {
   align-self: stretch;
 }
 #exp-chin #exp-progbar {
-  width: 100%;
+  align-self: stretch;
   margin-top: 0.5rem;
-  margin-left: 0.5rem;
-  margin-right: 0.5rem;
   background: #a1a1a1;
   border: solid 1px black;
 }
