@@ -1,0 +1,7 @@
+{
+  "host": "127.0.0.1",
+  "port": 5000,
+  "url_prefix": "survey",
+  "monitor_check_interval": 10,
+  "dashboard_code": "96Q28aD7JgZ2np2-M7tQQQ"
+}
