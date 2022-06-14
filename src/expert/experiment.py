@@ -29,6 +29,13 @@ class State(Enum):
     TERMINATED = 4
 
 
+resp_file_suffixes = {
+    State.CONSENT_DECLINED: '-nonconsent',
+    State.TIMED_OUT: '-timeout',
+    State.TERMINATED: '-terminated'
+}
+
+
 class TaskResponse:
 
     # args:
@@ -418,10 +425,8 @@ class Experiment:
 
     def save_responses(self):
         cond_path = self.record.run_path / str(self.profile.cond)
-        if self.state == State.TIMED_OUT:
-            resp_path = cond_path / (self.profile.subjid + '-timeout')
-        else:
-            resp_path = cond_path / self.profile.subjid
+        resp_path = cond_path / (self.profile.subjid +
+                                 resp_file_suffixes.get(self.state, ''))
         # newline='' must be set for the csv module
         with open(resp_path, 'w', newline='') as f:
             if expert.cfg['output_format'] == 'csv':
@@ -513,11 +518,13 @@ class Record:
     def completed_profiles(self):
         # list of strings of form 'cond/prof'
         profiles = []
+        bad_suffixes = resp_file_suffixes.values()
         for cond_path in self.run_path.iterdir():
             if cond_path.is_dir():
                 for prof_path in cond_path.iterdir():
                     prof = prof_path.name
-                    if not (prof.startswith('.') or prof.endswith('-timeout')):
+                    if not (prof.startswith('.') or \
+                            any(prof.endswith(sfx) for sfx in bad_suffixes)):
                         profiles.append(f'{cond_path.name}/{prof}')
         return profiles
 
