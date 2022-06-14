@@ -285,6 +285,7 @@ if __name__ == '__main__':
     if expert.tool_mode:
         expert.template_vars['exp_tool_display_total_tasks'] = \
             cfg['tool_display_total_tasks']
+        app.templates_auto_reload = True
 
     monitor_task = socketio.start_background_task(monitor, socketio)
 

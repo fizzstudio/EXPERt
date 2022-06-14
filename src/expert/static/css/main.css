@@ -8,6 +8,7 @@ body {
   align-items: center;
   justify-content: center;
   margin: 0;
+  height: 100vh;
   background: #4b9cd3;
   font-family: arial;
   font-size: 10pt;
@@ -22,13 +23,12 @@ body {
   margin: 1rem;
   line-height: 1.5;
   width: calc(100% - 4rem);
-  max-height: calc(100vh - 4rem);
+  flex: auto;
 }
 @media (min-width: 48em) {
   #page-content {
     width: 40rem;
     height: auto;
-    max-height: 40rem;
   }
 }
 #page-content .guide {
@@ -45,7 +45,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  flex: auto;
+  flex: 1 1 0;
   background: #F1F1F1;
   padding: 0rem;
   overflow: scroll;
@@ -97,6 +97,7 @@ body {
 }
 
 #task, #consent, #qnaire, #soundcheck {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   border: solid 1px black;

@@ -1,13 +1,19 @@
 
+import { Task } from '/{{ exp_js }}/task.js';
 import { elt } from '/{{ exp_js }}/util.js'
 
 const pficBtn = elt('pfic-redir-btn')
 
-export function initTask(task) {
-    task.disableNext()
-    if (pficBtn) {
-        pficBtn.addEventListener('click', () => {
-            location = task.vars['prolific_completion_url']
-        })
+class ThankYouTask extends Task {
+    constructor() {
+        super();
+        this.disableNext();
+        if (pficBtn) {
+            pficBtn.addEventListener('click', () => {
+                location = task.vars['prolific_completion_url']
+            });
+        }
     }
 }
+
+export { ThankYouTask as taskClass };
