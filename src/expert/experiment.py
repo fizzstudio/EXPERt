@@ -102,8 +102,8 @@ class Experiment:
 
         # response returned by current task
         self.response = None
-        # all saved task responses, plus some other metadata
-        self.responses = [
+        self.responses = []
+        self.pseudo_responses = [
             TaskResponse(self.sid, 'SID'),
             TaskResponse(self.iphash, 'IPHASH'),
             TaskResponse(
@@ -112,7 +112,7 @@ class Experiment:
         if expert.cfg['prolific_pid_param'] in urlargs:
             self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
             app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
-            self.responses.append(
+            self.pseudo_responses.append(
                 TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
         else:
             self.prolific_pid = None
@@ -371,6 +371,7 @@ class Experiment:
         if self.task_cursor > len(self.responses):
             self.responses.append(task_resp)
         else:
+            # should only ever do this in tool mode
             self.responses[self.task_cursor - 1] = task_resp
         app.logger.info(
             f'{self.profile} completed "{task_resp.task_name}"' +
@@ -433,19 +434,20 @@ class Experiment:
                 writer = csv.writer(f, lineterminator='\n')
                 extras = set()
                 # collect all extra response field names
+                # (NB: skipping pseudo-responses here)
                 for r in self.responses:
                     for k in r.extra:
                         extras.add(k)
                 # write the header line
                 writer.writerow(['tstamp', 'task', 'resp', *extras])
-                for r in self.responses:
+                for r in self.pseudo_responses + self.responses:
                     # NB: None is written as the empty string
                     writer.writerow([r.timestamp, r.task_name, r.response,
                                      *[r.extra[e] for e in extras]])
             elif expert.cfg['output_format'] == 'json':
                 import json
                 output = []
-                for r in self.responses:
+                for r in self.pseudo_responses + self.responses:
                     item = {'tstamp': r.timestamp, 'task': r.task_name}
                     if r.response is not None:
                         item['resp'] = r.response
