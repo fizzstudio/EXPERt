@@ -6,6 +6,7 @@ import logging
 import sys
 import json
 import zipfile
+import shutil
 
 from pathlib import Path
 
@@ -306,20 +307,23 @@ if __name__ == '__main__':
         try:
             inst = get_inst()
             if not inst:
-                ip = request.headers.get('X-Real-IP', request.remote_addr)
-                if ',' in ip:
-                    ip = ip.split(',')[0]
-                try:
-                    inst = experclass(ip, request.args)
-                except experiment.ExperFullError:
-                    return error('No participant profiles are available')
-                session['sid'] = inst.sid
-                session['exper'] = experclass.name
-                session['run'] = experclass.record.start_time
-                session['profile'] = inst.profile.fqname
-                app.logger.info(f'new instance for SID {inst.sid}')
-                socketio.emit('new_instance', inst.status())
-                inst.will_start()
+                if experclass.complete:
+                    content = expert.render('norun' + expert.template_ext)
+                else:
+                    ip = request.headers.get('X-Real-IP', request.remote_addr)
+                    if ',' in ip:
+                        ip = ip.split(',')[0]
+                    try:
+                        inst = experclass(ip, request.args)
+                    except experiment.ExperFullError:
+                        return error('No participant profiles are available')
+                    session['sid'] = inst.sid
+                    session['exper'] = experclass.name
+                    session['run'] = experclass.record.start_time
+                    session['profile'] = inst.profile.fqname
+                    app.logger.info(f'new instance for SID {inst.sid}')
+                    socketio.emit('new_instance', inst.status())
+                    inst.will_start()
         except BadSessionError as e:
             content = error(str(e))
 
@@ -344,7 +348,8 @@ if __name__ == '__main__':
         try:
             inst = get_inst()
         except BadSessionError as e:
-            return 'Not Found', 404
+            #return 'Not Found', 404
+            inst = None
         if inst:
             body = inst.task.render(f'js/{subpath}.jinja')
         else:
@@ -431,8 +436,30 @@ if __name__ == '__main__':
 
     @socketio.on('get_runs')
     def sio_get_runs():
-        return sorted([x.name for x in experclass.runs_path.iterdir()
-                       if x.is_dir() and x.stem[0] != '.'], reverse=True)
+        runs = []
+        for run in experclass.runs_path.iterdir():
+            if not run.is_dir() or run.stem[0] == '.':
+                continue
+            # [name, num_complete, num_incomplete]
+            runs.append([run.name, 0, 0])
+            for cond in run.iterdir():
+                if not cond.is_dir() or cond.stem[0] == '.':
+                    continue
+                for resp in cond.iterdir():
+                    if not resp.is_file() or resp.stem[0] == '.':
+                        continue
+                    if any(resp.name.endswith(sfx)
+                           for sfx in experiment.resp_file_suffixes.values()):
+                        runs[-1][2] += 1
+                    else:
+                        runs[-1][1] += 1
+        return sorted(runs, reverse=True)
+
+    @socketio.on('delete_runs')
+    def sio_delete_run(runs):
+        for run in runs:
+            app.logger.info(f'deleting run {run}')
+            shutil.rmtree(experclass.runs_path / run)
 
     @socketio.on('start_new_run')
     def sio_start_new_run():

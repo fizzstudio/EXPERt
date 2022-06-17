@@ -12,11 +12,11 @@ class Profile:
         self.expercls = expercls
         self.cond = condition
         self.subjid = self.make_subjid()
-        self._used = False
+        #self._used = False
 
-    @property
-    def used(self):
-        return self._used
+    #@property
+    #def used(self):
+    #    return self._used
 
     @cached_property
     def fqname(self):
@@ -33,17 +33,17 @@ class Profile:
         inst.expercls = expercls
         inst.subjid = subjid
         inst.cond = expercls.cond_mod().conds[cond_str]
-        inst._used = False
+        #inst._used = False
         return inst
 
     def save(self):
         pass
 
-    def use(self):
-        self._used = True
+    #def use(self):
+    #    self._used = True
 
-    def unuse(self):
-        self._used = False
+    #def unuse(self):
+    #    self._used = False
 
     def make_subjid(self):
         while True:

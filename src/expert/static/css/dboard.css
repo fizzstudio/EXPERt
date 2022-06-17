@@ -57,6 +57,18 @@ body {
 #dboard #inst-list #inst-data .dboard-num, #dboard #inst-list #inst-data .dboard-task, #dboard #inst-list #inst-data .dboard-elapsed {
   text-align: right;
 }
+#dboard #inst-list #inst-data .dboard-stop-sep {
+  grid-column: 1/-1;
+  background: black;
+  color: white;
+  text-align: center;
+}
+#dboard #inst-list #inst-data .dboard-end-sep {
+  grid-column: 1/-1;
+  background: #77ff77;
+  color: black;
+  text-align: center;
+}
 
 .exp-dlg {
   position: fixed;

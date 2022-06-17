@@ -11,151 +11,227 @@
 
     <script type="module">
 
-     import { Dialog } from '/{{ exp_js }}/dialog.js'
-     import { elt, callApi } from '/{{ exp_js }}/util.js'
+     import { Dialog, ConfirmDialog } from '/{{ exp_js }}/dialog.js';
+     import { elt, callApi } from '/{{ exp_js }}/util.js';
 
-     class DownloadDialog extends Dialog {
+     class RunsDialog extends Dialog {
 
-         constructor() {
-             super('exp-dlg-download')
-             this.titlebar = 'Download Results'
+         constructor(ctrlr, title, btnText, includeCurrent) {
+             super('exp-dlg-download');
+             this.ctrlr = ctrlr;
+             this.titlebar = title;
+             this.btnText = btnText;
+             this.includeCurrent = includeCurrent;
              this.selectNode = this.node.querySelector(
-                 '.exp-dlg-download-select')
+                 '.exp-dlg-download-select');
+         }
+
+         clearOptions() {
+             while (this.selectNode.options.length) {
+                 this.selectNode.remove(0);
+             }
          }
 
          async show() {
-             this.run = null
-             this.selectNode.selectedIndex = 0
-             const runs = await callApi(socket, 'get_runs')
-             this.selectNode.add(new Option('Select a run'))
+             this.run = null;
+             this.selectNode.selectedIndex = 0;
+             const runs = await callApi(this.ctrlr.socket, 'get_runs');
+             this.clearOptions();
+             this.selectNode.add(new Option('Select a run'));
              for (const run of runs) {
-                 this.selectNode.add(new Option(run))
+                 if (run[0] === this.ctrlr.run && !this.includeCurrent) {
+                     continue;
+                 }
+                 const txt = `${run[0]} (${run[1]}, ${run[2]})`;
+                 this.selectNode.add(new Option(txt));
              }
              const selectionChanged = () => {
-                 this.run = this.selectNode.selectedIndex ?
-                            this.selectNode.value : null
-                 this.setButtonsDisabled({okay: !this.run})
+                 this.run = null;
+                 if (this.selectNode.selectedIndex) {
+                     const len = this.selectNode.value.split(' ')[0].length;
+                     this.run = this.selectNode.value.slice(0, len);
+                 }
+                 this.setButtonsDisabled({okay: !this.run});
              }
-             this.selectNode.addEventListener('change', selectionChanged)
-             this.setButtons([{tag: 'cancel', text: 'Cancel'},
-                              {tag: 'okay', text: 'Download', disabled: true}])
-             let tag = await super.show(() => this.buttons['okay'][0].focus())
-             this.selectNode.removeEventListener('change', selectionChanged)
-             return tag === 'okay'
+             this.selectNode.addEventListener('change', selectionChanged);
+             this.setButtons(
+                 [{tag: 'cancel', text: 'Cancel'},
+                  {tag: 'okay', text: this.btnText, disabled: true}]);
+             let tag = await super.show(() => this.buttons['okay'][0].focus());
+             this.selectNode.removeEventListener('change', selectionChanged);
+             return tag === 'okay';
          }
+     }
+
+     class InstList {
+
+         constructor() {
+             this.instDataNode = elt('inst-data');
+             this.cellClasses = [
+                 'dboard-num', 'dboard-id', 'dboard-clientip',
+                 'dboard-profile', 'dboard-state', 'dboard-task',
+                 'dboard-started', 'dboard-elapsed'];
+             this.numRows = 0;
+             this.numCols = this.cellClasses.length;
+         }
+
+         newRow(subjid) {
+             const divs = [];
+             for (let i = 0; i < this.numCols; i++) {
+                 divs.push(document.createElement('div'));
+                 this.instDataNode.append(divs[i]);
+                 divs[i].classList.add(this.cellClasses[i], 'dboard-item');
+             }
+             divs[0].innerHTML = ++this.numRows;
+             divs[1].dataset.subjid = subjid;
+             return divs;
+         }
+
+         getRow(subjid) {
+             const subjidDiv = this.instDataNode.querySelector(
+                 `div[data-subjid="${subjid}"]`);
+             if (subjidDiv) {
+                 const divs = [subjidDiv];
+                 for (let i=2; i<this.numCols; i++) {
+                     divs.push(divs.at(-1).nextElementSibling);
+                 }
+                 return divs;
+             }
+         }
+
+         setRow(subjid, fields, start=0, end=null) {
+             // NB: if end is set, it must be non-negative
+             if (end === null) {
+                 end = this.numCols - 1;
+             }
+             const divs = this.getRow(subjid);
+             for (let i=start; i<end; i++) {
+                 divs[i].innerHTML = fields[i - start];
+             }
+         }
+
+         addInst(inst) {
+             this.newRow(inst[0]);
+             this.setRow(inst[0], inst);
+         }
+
+         addStopSeparator(run) {
+             const div = document.createElement('div');
+             div.className = 'dboard-stop-sep';
+             div.textContent = `Run ${run} stopped early`;
+             this.instDataNode.append(div);
+         }
+
+         addEndSeparator(run) {
+             const div = document.createElement('div');
+             div.className = 'dboard-end-sep';
+             div.textContent = `Run ${run} complete`;
+             this.instDataNode.append(div);
+         }
+
+         updateInst(inst) {
+             this.setRow(inst[0], inst);
+         }
+
+         update(insts) {
+             for (let i = this.numRows; i < insts.length; i++) {
+                 this.newRow(insts[i][0]);
+             }
+             for (let i = 0; i < insts.length; i++) {
+                 this.updateInst(insts[i]);
+             }
+         }
+
      }
 
      const exper = "{{ exp_exper }}";
 
-     const instDataNode = elt('inst-data');
+     class Controller {
 
-     const cellClasses = [
-         'dboard-num', 'dboard-id', 'dboard-clientip', 'dboard-profile',
-         'dboard-state', 'dboard-task', 'dboard-started',
-         'dboard-elapsed'];
-     const numCols = cellClasses.length;
+         constructor() {
+             this.downloadBtn = elt('download-btn');
+             this.deleteBtn = elt('delete-btn');
+             this.newRunBtn = elt('new-run-btn');
+             this.downloadDlg = new RunsDialog(
+                 this, 'Download Results', 'Download', true);
+             this.deleteDlg = new RunsDialog(
+                 this, 'Delete Results', 'Delete', false);
+             this.confirmDlg = new ConfirmDialog(this);
+             this.instList = new InstList();
 
-     let numRows = 0;
-
-     function updateList(instances) {
-         const numInsts = instDataNode.childElementCount/numCols;
-         const diff = instances.length - numInsts;
-         if (diff > 0) {
-             for (let i = 0; i < diff; i++) {
-                 for (let j = 0; j < numCols; j++) {
-                     instDataNode.append(document.createElement('div'));
+             this.downloadBtn.addEventListener('click', async () => {
+                 if (await this.downloadDlg.show()) {
+                     this.download(this.downloadDlg.run);
                  }
-             }
-         }
-         for (let i = 0; i < instances.length; i++) {
-             // skip header divs
-             const numDiv = instDataNode.children[i*numCols];
-             numDiv.innerHTML = i + 1;
-             numDiv.className = cellClasses[0] + ' ' + 'dboard-item';
-             for (let j = 1; j < numCols; j++) {
-                 const div = instDataNode.children[i*numCols + j];
-                 div.innerHTML = instances[i][j - 1]
-                 div.className = cellClasses[j] + ' ' + 'dboard-item'
-             }
-         }
-     }
-
-     function addRow(fields) {
-         //console.log('subjids.childNodes', subjids.childNodes);
-         const numDiv = document.createElement('div');
-         instDataNode.appendChild(numDiv);
-         numDiv.innerHTML = ++numRows;
-         numDiv.className = cellClasses[0] + ' ' + 'dboard-item';
-         for (let j = 1; j < numCols; j++) {
-             const div = document.createElement('div');
-             instDataNode.appendChild(div);
-             div.innerHTML = fields[j - 1];
-             div.className = cellClasses[j] + ' ' + 'dboard-item';
-         }
-     }
-
-     function updateInstance(instance) {
-         const numInsts = instDataNode.childElementCount/numCols;
-         for (let i = 0; i < numInsts; i++) {
-             // NB: Element.children only includes Element nodes
-             const subjid = instDataNode.children[i*numCols + 1].innerHTML;
-             if (subjid === instance[0]) {
-                 for (let j = 2; j < numCols; j++) {
-                     instDataNode.children[i*numCols + j].innerHTML =
-                         instance[j - 1];
+             });
+             this.deleteBtn.addEventListener('click', async () => {
+                 if (await this.deleteDlg.show() &&
+                     await this.confirmDlg.show(
+                         `Really delete results for run ${this.deleteDlg.run}?`,
+                         'Cancel', 'Delete')) {
+                     await callApi(
+                         this.socket, 'delete_runs', [this.deleteDlg.run]);
                  }
-                 break;
+             });
+             this.newRunBtn.addEventListener('click', async () => {
+                 if (await this.confirmDlg.show(
+                     'Really start a new run?', 'Cancel', 'Start')) {
+                     this.newRunBtn.disabled = true;
+                     const runInfo = await callApi(
+                         this.socket, 'start_new_run');
+                     if (this.run) {
+                         this.instList.addStopSeparator(this.run);
+                     }
+                     this.setRunInfo(runInfo);
+                     this.run = runInfo.run;
+                     this.newRunBtn.disabled = false;
+                 }
+             });
+
+             this.socket = io();
+
+             this.socket.on('connect', async () => {
+                 console.log("socket connected");
+                 const data = await callApi(this.socket, 'dboard_init');
+                 this.instList.update(data.insts);
+                 this.setRunInfo(data.runInfo);
+                 this.run = data.runInfo.run;
+             });
+
+             this.socket.on('new_instance',
+                            inst => this.instList.addInst(inst));
+             this.socket.on('update_instance',
+                            inst => this.instList.updateInst(inst));
+             this.socket.on('run_complete', () => {
+                 this.instList.addEndSeparator(this.run);
+                 this.setRunInfo({run: 'not running'});
+                 this.run = null;
+             });
+         }
+
+         download(run) {
+             const anchor = document.createElement('a');
+             anchor.href = `{{ dashboard_path }}/download/${run}`;
+             anchor.download = run;
+             anchor.style.display = 'none';
+             document.body.append(anchor);
+             anchor.click();
+             document.body.removeChild(anchor);
+         }
+
+         setRunInfo(info) {
+             const runInfo = elt('run-info');
+             runInfo.textContent = info.run;
+             if (info.mode === 'res') {
+                 runInfo.textContent += ' res';
+             } else if (info.mode === 'rep') {
+                 runInfo.textContent += ' rep ' + info.target;
              }
          }
+
      }
 
-     function download(run) {
-         const anchor = document.createElement('a');
-         anchor.href = `{{ dashboard_path }}/download/${run}`;
-         anchor.download = run;
-         anchor.style.display = 'none';
-         document.body.appendChild(anchor);
-         anchor.click();
-         document.body.removeChild(anchor);
-     }
-
-     function setRunInfo(info) {
-         const runInfo = elt('run-info');
-         runInfo.textContent = info.run;
-         if (info.mode === 'res') {
-             runInfo.textContent += ' res';
-         } else if (info.mode === 'rep') {
-             runInfo.textContent += ' rep ' + info.target;
-         }
-     }
-
-     const downloadDlg = new DownloadDialog()
-     const downloadBtn = elt('download-btn')
-     const newRunBtn = elt('new-run-btn')
-
-     const socket = io()
-
-     socket.on('connect', async () => {
-         console.log("socket connected");
-         const data = await callApi(socket, 'dboard_init');
-         updateList(data.insts);
-         setRunInfo(data.runInfo);
-         downloadBtn.addEventListener('click', async () => {
-             if (await downloadDlg.show()) {
-                 download(downloadDlg.run);
-             }
-         });
-         newRunBtn.addEventListener('click', async () => {
-             newRunBtn.disabled = true;
-             const runInfo = await callApi(socket, 'start_new_run');
-             setRunInfo(runInfo);
-             // XXX add marker in table to indicate new run
-             newRunBtn.disabled = false;
-         });
-     });
-
-     socket.on('new_instance', (instance) => addRow(instance))
-     socket.on('update_instance', (instance) => updateInstance(instance))
+     const ctrlr = new Controller();
 
      /*const dummy = [
          '0123456789abcdef0123456789abcdef',
@@ -181,6 +257,9 @@
             <button type="button" id="download-btn">
                 Download Results
             </button>
+            <button type="button" id="delete-btn">
+                Delete Results
+            </button>
             <button type="button" id="new-run-btn">
                 Start New Run
             </button>
@@ -203,4 +282,6 @@
     </div>
     {% set exp_dlg_id = 'download' %}
     {% include 'download_dialog.html.jinja' %}
+    {% set exp_dlg_id = 'confirm' %}
+    {% include 'confirm_dialog.html.jinja' %}
 {% endblock %}

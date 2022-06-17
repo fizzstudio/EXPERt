@@ -1,8 +1,8 @@
 
 import { Task } from '/{{ exp_js }}/task.js';
-import { elt } from '/{{ exp_js }}/util.js'
+import { elt } from '/{{ exp_js }}/util.js';
 
-const pficBtn = elt('pfic-redir-btn')
+const pficBtn = elt('pfic-redir-btn');
 
 class ThankYouTask extends Task {
     constructor() {
@@ -10,7 +10,7 @@ class ThankYouTask extends Task {
         this.disableNext();
         if (pficBtn) {
             pficBtn.addEventListener('click', () => {
-                location = task.vars['prolific_completion_url']
+                location = this.vars['exp_prolific_completion_url'];
             });
         }
     }

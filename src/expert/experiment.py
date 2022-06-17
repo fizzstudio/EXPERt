@@ -69,19 +69,18 @@ class BadOutputFormatError(Exception):
 
 class Experiment:
 
-    # cond: {profname: Profile}
-    profiles = {}
+    profiles = []
     # sid: <Experiment subclass inst>
     instances = {}
+
+    # Will be True when all profiles have completed the experiment.
+    complete = False
 
     def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
 
-        self.clientip = clientip
-        self.iphash = hashlib.blake2b(
-            bytes(self.clientip, 'ascii'), digest_size=10).hexdigest()
-
-        self.profile = self.choose_profile()
+        #self.profile = self.choose_profile()
+        self.profile = self.profiles.pop(0)
         app.logger.info(f'profile: {self.profile}')
 
         self.instances[self.sid] = self
@@ -105,10 +104,20 @@ class Experiment:
         self.responses = []
         self.pseudo_responses = [
             TaskResponse(self.sid, 'SID'),
-            TaskResponse(self.iphash, 'IPHASH'),
-            TaskResponse(
-                'DUMMY' if dummy else request.headers.get('User-Agent'),
-                'USER_AGENT')]
+        ]
+        if expert.cfg['save_ip_hash']:
+            self.clientip = clientip
+            iphash = hashlib.blake2b(
+                bytes(self.clientip, 'ascii'), digest_size=10).hexdigest()
+            self.pseudo_responses.append(
+                TaskResponse(iphash, 'IPHASH'))
+        else:
+            self.clientip = 'xxx.xxx.xxx.xxx'
+        if expert.cfg['save_user_agent']:
+            self.pseudo_responses.append(
+                TaskResponse(
+                    'DUMMY' if dummy else request.headers.get('User-Agent'),
+                    'USER_AGENT'))
         if expert.cfg['prolific_pid_param'] in urlargs:
             self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
             app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
@@ -212,50 +221,59 @@ class Experiment:
         cls.templates_path = cls.dir_path / expert.cfg['templates_dir']
 
     @classmethod
+    def read_cond_paths(cls):
+        return [p for p in cls.profiles_path.iterdir()
+                if p.is_dir() and p.stem[0] != '.']
+
+    @classmethod
     def load_profiles(cls):
         if cls.replicate:
             rep_profs = cls.replicate.completed_profiles()
         else:
             rep_profs = None
-        cond_paths = [p for p in cls.profiles_path.iterdir() if p.is_dir()]
-        if cond_paths:
-            app.logger.info('loading profiles')
-            for cond_path in cond_paths:
-                condname = cond_path.name
-                run_cond_path = cls.record.run_path / condname
-                for profile_path in cond_path.iterdir():
-                    profname = profile_path.name
-                    if profname.startswith('.'):
-                        continue
-                    if cls.replicate and \
-                       f'{condname}/{profname}' not in rep_profs:
-                        continue
+        cond_paths = cls.read_cond_paths()
+        if not cond_paths:
+            cls.make_profiles()
+            cond_paths = cls.read_cond_paths()
+
+        app.logger.info('loading profiles')
+        cls.profiles.clear()
+        for cond_path in cond_paths:
+            condname = cond_path.name
+            run_cond_path = cls.record.run_path / condname
+            for prof_path in cond_path.iterdir():
+                profname = prof_path.name
+                if profname.startswith('.') or not prof_path.is_file():
+                    continue
+                if cls.replicate and \
+                   f'{condname}/{profname}' not in rep_profs:
+                    continue
+                #cls.profiles.setdefault(p.cond, {})[profname] = p
+                # only load profile if we don't have a result
+                # for that profile
+                #fullprofname = f'{cond_path.name}/{profname}'
+                if not (run_cond_path / profname).is_file():
+                    #app.logger.info(
+                    #    f'marking profile {fullprofname} as used')
+                    #p.use()
                     p = cls.profile_mod().Profile.load(
                         cls, condname, profname)
-                    cls.profiles.setdefault(p.cond, {})[profname] = p
-                    # mark profile as used if we have a result
-                    # for that profile
-                    fullprofname = f'{cond_path.name}/{profname}'
-                    if (run_cond_path / profname).is_file():
-                        app.logger.info(
-                            f'marking profile {fullprofname} as used')
-                        p.use()
-        else:
-            cls.make_profiles()
+                    cls.profiles.append(p)
+        random.shuffle(cls.profiles)
 
     @classmethod
     def make_profiles(cls):
         app.logger.info('creating profiles')
-        items_per_cond = round(
+        cls.cond_size = round(
             cls.params_mod().n_profiles/len(cls.cond_mod().conds))
-        app.logger.info(f'profiles per condition: {items_per_cond}')
+        app.logger.info(f'profiles per condition: {cls.cond_size}')
         for cname, c in cls.cond_mod().conds.items():
             app.logger.info(f'creating profiles for condition {cname}')
             (cls.profiles_path / cname).mkdir()
-            cls.profiles[c] = {}
-            for i in range(items_per_cond):
+            #cls.profiles[c] = {}
+            for i in range(cls.cond_size):
                 p = cls.profile_mod().Profile(cls, c)
-                cls.profiles[c][p.subjid] = p
+                #cls.profiles[c][p.subjid] = p
                 p.save()
 
     @classmethod
@@ -280,10 +298,11 @@ class Experiment:
         app.logger.info('--- starting new run ---')
         for inst in cls.all_active():
             inst.terminate()
-        cls.instances.clear()
-        for condprofs in cls.profiles.values():
-            for prof in condprofs.values():
-                prof.unuse()
+        #cls.instances.clear()
+        cls.load_profiles()
+        #for condprofs in cls.profiles.values():
+        #    for prof in condprofs.values():
+        #        prof.unuse()
         expert.run = timestamp.make_timestamp()
         cls.record = Record(cls)
         if expert.mode == 'rep':
@@ -295,41 +314,48 @@ class Experiment:
             else:
                 expert.mode = 'new'
         cls.record.save()
+        cls.complete = False
 
-    def choose_cond(self):
-        cond_counts = Counter()
-        # make sure we have a key for each cond
-        for cname, c in self.cond_mod().conds.items():
-            if not self.conds or cname in self.conds:
-                cond_counts[c] = 0
+    @classmethod
+    def complete_run(cls):
+        app.logger.info('--- run complete ---')
+        cls.complete = True
+        socketio.emit('run_complete')
 
-        # count currently-active and completed instances in memory
-        for inst in self.instances.values():
-            if inst.state in (State.ACTIVE, State.COMPLETE):
-                cond_counts[inst.profile.cond] += 1
-        # count completed instances
-        for fqname in self.record.completed_profiles():
-            c, prof = fqname.split('/')
-            cond_counts[self.cond_mod().conds[c]] += 1
+    # def choose_cond(self):
+    #     cond_counts = Counter()
+    #     # make sure we have a key for each cond
+    #     for cname, c in self.cond_mod().conds.items():
+    #         if not self.conds or cname in self.conds:
+    #             cond_counts[c] = 0
 
-        return min(cond_counts.keys(), key=lambda k: cond_counts[k])
+    #     # count currently-active and completed instances in memory
+    #     for inst in self.instances.values():
+    #         if inst.state in (State.ACTIVE, State.COMPLETE):
+    #             cond_counts[inst.profile.cond] += 1
+    #     # count completed instances
+    #     for fqname in self.record.completed_profiles():
+    #         c, prof = fqname.split('/')
+    #         cond_counts[self.cond_mod().conds[c]] += 1
 
-    def choose_profile(self):
-        if self.replicate:
-            avail = [p for c in self.profiles
-                     for p in self.profiles[c].values() if not p.used]
-        else:
-            # find cond with fewest participants
-            cond = self.choose_cond()
-            avail = [p for p in self.profiles[cond].values() if not p.used]
+    #     return min(cond_counts.keys(), key=lambda k: cond_counts[k])
 
-        if not avail:
-            app.logger.warning('no profiles are available')
-            raise ExperFullError()
+    # def choose_profile(self):
+    #     if self.replicate:
+    #         avail = [p for c in self.profiles
+    #                  for p in self.profiles[c].values() if not p.used]
+    #     else:
+    #         # find cond with fewest participants
+    #         cond = self.choose_cond()
+    #         avail = [p for p in self.profiles[cond].values() if not p.used]
 
-        p = random.choice(avail)
-        p.use()
-        return p
+    #     if not avail:
+    #         app.logger.warning('no profiles are available')
+    #         raise ExperFullError()
+
+    #     p = random.choice(avail)
+    #     p.use()
+    #     return p
 
     def will_start(self):
         self.variables['exp_num_tasks'] = self.num_tasks_created
@@ -389,7 +415,8 @@ class Experiment:
                 self.end(State.CONSENT_DECLINED)
                 # NB: the sid stays in the session so we can keep
                 # serving up the consent-declined page
-                self.profile.unuse()
+                #self.profile.unuse()
+                self.profiles.insert(0, self.profile)
             else:
                 # XXX currently doesn't handle forking task paths
                 self.task = self.task.next_task(resp)
@@ -405,6 +432,7 @@ class Experiment:
                     # so that if they reload the page, they won't lose any,
                     # e.g., mturk completion code that is displayed.
                     self.end(State.COMPLETE)
+                    self.complete_run()
 
             self.update_vars()
 
@@ -472,7 +500,8 @@ class Experiment:
             #self.task.next_tasks = [tasks.Task(self, 'timedout')]
             self.task = tasks.TimedOut(self)
             self.end(State.TIMED_OUT)
-            self.profile.unuse()
+            #self.profile.unuse()
+            self.profiles.insert(0, self.profile)
         socketio.emit('update_instance', self.status())
 
     def terminate(self):
@@ -481,9 +510,9 @@ class Experiment:
         app.logger.info(f'{self.profile} terminated')
         self.task = tasks.Terminated(self)
         self.end(State.TERMINATED)
-        self.profile.unuse()
+        #self.profile.unuse()
+        self.profiles.insert(0, self.profile)
         socketio.emit('update_instance', self.status())
-
 
     # called for normal completion, timeout, or nonconsent
     def end(self, state):

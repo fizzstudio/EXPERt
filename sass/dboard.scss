@@ -57,6 +57,18 @@ body {
             .dboard-num, .dboard-task, .dboard-elapsed {
                 text-align: right;
             }
+            .dboard-stop-sep {
+                grid-column: 1 / -1;
+                background: black;
+                color: white;
+                text-align: center;
+            }
+            .dboard-end-sep {
+                grid-column: 1 / -1;
+                background: globals.$bright-green;
+                color: black;
+                text-align: center;
+            }
         }
     }
 }
