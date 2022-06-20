@@ -432,7 +432,8 @@ class Experiment:
                     # so that if they reload the page, they won't lose any,
                     # e.g., mturk completion code that is displayed.
                     self.end(State.COMPLETE)
-                    self.complete_run()
+                    if not self.profiles:
+                        self.complete_run()
 
             self.update_vars()
 

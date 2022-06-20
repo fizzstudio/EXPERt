@@ -5,73 +5,87 @@ class QnaireTask extends Task {
 
     constructor() {
         super();
-        this.disableNext();
 
-        // indicates whether a mandatory item has been set or not
-        this.mandatory = new Map();
+        // indicates whether mandatory items have been set or not
+        this.mandatories = new Map();
 
         for (const item of this.content.querySelectorAll('.qnaire-item')) {
-            if (item.dataset['optional'] === 'False') {
-                this.mandatory.set(item.id, false);
-                // set handlers to enable/disable the next button
-                if (item.dataset['type'] === 'radio') {
-                    for (const opt of item.querySelectorAll('.qnaire-opt')) {
-                        const input = opt.querySelector('input');
-                        /*
-                           this is necessary because the browser may
-                           restore values on page reload
-                         */
-                        if (input.checked) {
-                            this.mandatory.set(item.id, true);
-                        }
-                        input.addEventListener('click', () => {
-                            this.mandatory.set(item.id, true);
-                            this.checkMandatories();
-                        });
-                    }
-                } else if (item.dataset['type'] === 'checkbox') {
+            //if (item.dataset['optional'] === 'False') {
+            const mandatory = item.dataset['optional'] === 'False';
+            if (mandatory) {
+                this.mandatories.set(item.id, false);
+            }
+            // set handlers to enable/disable the next button
+            if (item.dataset['type'] === 'radio') {
+                for (const opt of item.querySelectorAll('.qnaire-opt')) {
+                    const input = opt.querySelector('input');
                     /*
-                       NB: a mandatory checkbox question requires that
-                       at least one option be checked
+                       this is necessary because the browser may
+                       restore values on page reload
                      */
-                    let numChecked = 0;
-                    for (const opt of item.querySelectorAll('.qnaire-opt')) {
-                        const input = opt.querySelector('input');
-                        if (input.checked) {
-                            this.mandatory.set(item.id, true);
-                            numChecked += 1;
-                        }
-                        input.addEventListener('click', () => {
-                            numChecked += input.checked ? 1 : -1;
-                            this.mandatory.set(item.id,
-                                               numChecked ? true : false);
-                            this.checkMandatories();
-                        });
+                    if (mandatory && input.checked) {
+                        this.mandatories.set(item.id, true);
                     }
-                } else if (['text', 'shorttext'].includes(
-                    item.dataset['type'])) {
-                    const elem = ({
-                        text: 'textarea',
-                        shorttext: 'input'})[item.dataset['type']];
-                    const input = item.querySelector(elem);
-                    this.mandatory.set(item.id, Boolean(input.value));
-                    input.addEventListener('input', () => {
-                        this.mandatory.set(item.id, Boolean(input.value));
+                    input.addEventListener('click', () => {
+                        if (mandatory) {
+                            this.mandatories.set(item.id, true);
+                        }
                         this.checkMandatories();
                     });
-                } else {
-                    console.log('unknown question type: ' +
-                                item.dataset['type']);
                 }
+            } else if (item.dataset['type'] === 'checkbox') {
+                /*
+                   NB: a mandatory checkbox question requires that
+                   at least one option be checked
+                 */
+                let numChecked = 0;
+                for (const opt of item.querySelectorAll('.qnaire-opt')) {
+                    const input = opt.querySelector('input');
+                    if (mandatory && input.checked) {
+                        this.mandatories.set(item.id, true);
+                        numChecked += 1;
+                    }
+                    input.addEventListener('click', () => {
+                        if (mandatory) {
+                            numChecked += input.checked ? 1 : -1;
+                            this.mandatories.set(item.id,
+                                                 numChecked ? true : false);
+                        }
+                        this.checkMandatories();
+                    });
+                }
+            } else if (['text', 'shorttext'].includes(item.dataset['type'])) {
+                const elem = ({
+                    text: 'textarea',
+                    shorttext: 'input'})[item.dataset['type']];
+                const input = item.querySelector(elem);
+                if (mandatory) {
+                    this.mandatories.set(item.id, Boolean(input.value));
+                }
+                input.addEventListener('input', () => {
+                    if (mandatory) {
+                        this.mandatories.set(item.id, Boolean(input.value));
+                    }
+                    this.checkMandatories();
+                });
+            } else {
+                console.log('unknown question type: ' +
+                            item.dataset['type']);
             }
+            //}
         }
         // browser might restore all mandatory values,
-        //   making it necessary to enable the Next button
+        // making it necessary to enable the Next button
         this.checkMandatories();
     }
 
+    defaultResponse() {
+        return this.collectAnswers();
+    }
+
     checkMandatories() {
-        if (Array.from(this.mandatory.values()).every(val => val)) {
+        // NB: .every() is true for an empty array
+        if (Array.from(this.mandatories.values()).every(val => val)) {
             const answers = this.collectAnswers();
             this.setResponse(answers);
             this.enableNext();

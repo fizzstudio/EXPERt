@@ -95,9 +95,13 @@ export class Task {
         //f(this)
     }
 
+    defaultResponse() {
+        return null
+    }
+
     async reset() {
         this.guide(null)
-        this.response = null
+        this.response = this.defaultResponse()
         this.content.scrollTo(0, 0)
         window.scrollTo(0, 0)
         this._updateProgress()
