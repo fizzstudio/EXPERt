@@ -260,6 +260,9 @@ class Experiment:
                         cls, condname, profname)
                     cls.profiles.append(p)
         random.shuffle(cls.profiles)
+        # the actual list of profiles will shrink
+        # as the experiment progresses
+        cls.num_profiles = len(cls.profiles)
 
     @classmethod
     def make_profiles(cls):

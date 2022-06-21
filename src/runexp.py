@@ -364,7 +364,8 @@ if __name__ == '__main__':
     @app.route(dashboard_path)
     def dashboard():
         return expert.render('dashboard' + expert.template_ext, {
-            'dashboard_path': dashboard_path
+            'dashboard_path': dashboard_path,
+            'num_profiles': experclass.num_profiles
         })
 
     @app.route(f'{dashboard_path}/download/<path:subpath>')
