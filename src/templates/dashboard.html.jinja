@@ -251,8 +251,11 @@
 {% block page_content %}
     <div id="dboard">
 
-        <h2>Dashboard [<span id="run-info"></span>]</h2>
-
+        <h2>Dashboard</h2>
+        <div>
+            <strong>{{ exp_exper }} ({{ num_profiles }} profiles);
+                run <span id="run-info"></span></strong>
+        </div>
         <div id="controls">
             <button type="button" id="download-btn">
                 Download Results
