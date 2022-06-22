@@ -9,6 +9,7 @@
     "templates_dir": "templates",
     "profiles_dir": "profiles",
     "runs_dir": "runs",
+    "dls_dir": "dls",
 
     "subjid_length": 6,
     "subjid_symbols": "ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklmnopqrstuvwxyz",
@@ -19,6 +20,7 @@
     "save_ip_hash": true,
     "save_user_agent": true,
     "prolific_pid_param": "PROLIFIC_PID",
+    "pii": ["PROLIFIC_PID"],
     "progbar_enabled": false,
     "tool_display_total_tasks": true
 }

@@ -16,12 +16,9 @@
 
      class RunsDialog extends Dialog {
 
-         constructor(ctrlr, title, btnText, includeCurrent) {
+         constructor(ctrlr) {
              super('exp-dlg-download');
              this.ctrlr = ctrlr;
-             this.titlebar = title;
-             this.btnText = btnText;
-             this.includeCurrent = includeCurrent;
              this.selectNode = this.node.querySelector(
                  '.exp-dlg-download-select');
          }
@@ -32,17 +29,23 @@
              }
          }
 
-         async show() {
+         async show(title, btnText, includeCurrent=true, onlyHasPii=false) {
+             this.titlebar = title;
              this.run = null;
              this.selectNode.selectedIndex = 0;
+             {# obj with keys:
+             'id', 'num_complete', 'num_incomplete', 'has_pii'
+             #}
              const runs = await callApi(this.ctrlr.socket, 'get_runs');
              this.clearOptions();
              this.selectNode.add(new Option('Select a run'));
              for (const run of runs) {
-                 if (run[0] === this.ctrlr.run && !this.includeCurrent) {
+                 if ((run.id === this.ctrlr.run && !includeCurrent) ||
+                     (!run.has_pii && onlyHasPii)) {
                      continue;
                  }
-                 const txt = `${run[0]} (${run[1]}, ${run[2]})`;
+                 const txt =
+                     `${run.id} (${run.num_complete}, ${run.num_incomplete})`;
                  this.selectNode.add(new Option(txt));
              }
              const selectionChanged = () => {
@@ -56,7 +59,7 @@
              this.selectNode.addEventListener('change', selectionChanged);
              this.setButtons(
                  [{tag: 'cancel', text: 'Cancel'},
-                  {tag: 'okay', text: this.btnText, disabled: true}]);
+                  {tag: 'okay', text: btnText, disabled: true}]);
              let tag = await super.show(() => this.buttons['okay'][0].focus());
              this.selectNode.removeEventListener('change', selectionChanged);
              return tag === 'okay';
@@ -150,28 +153,53 @@
 
          constructor() {
              this.downloadBtn = elt('download-btn');
-             this.deleteBtn = elt('delete-btn');
+             //this.deleteBtn = elt('delete-btn');
+             this.downloadIdBtn = elt('download-id-btn');
+             this.deleteIdBtn = elt('delete-id-btn');
              this.newRunBtn = elt('new-run-btn');
-             this.downloadDlg = new RunsDialog(
-                 this, 'Download Results', 'Download', true);
-             this.deleteDlg = new RunsDialog(
-                 this, 'Delete Results', 'Delete', false);
+             this.runsDlg = new RunsDialog(this);
              this.confirmDlg = new ConfirmDialog(this);
              this.instList = new InstList();
 
              this.downloadBtn.addEventListener('click', async () => {
-                 if (await this.downloadDlg.show()) {
-                     this.download(this.downloadDlg.run);
+                 this.downloadBtn.disabled = true;
+                 if (await this.runsDlg.show(
+                     'Download Results', 'Download')) {
+                     this.download(this.runsDlg.run, 'results');
                  }
+                 this.downloadBtn.disabled = false;
              });
-             this.deleteBtn.addEventListener('click', async () => {
-                 if (await this.deleteDlg.show() &&
+             /*this.deleteBtn.addEventListener('click', async () => {
+                 this.deleteBtn.disabled = true;
+                 if (await this.runsDlg.show(
+                     'Delete Results', 'Delete', false) &&
                      await this.confirmDlg.show(
-                         `Really delete results for run ${this.deleteDlg.run}?`,
+                         `Really delete results for run ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
                      await callApi(
-                         this.socket, 'delete_runs', [this.deleteDlg.run]);
+                         this.socket, 'delete_runs', [this.runsDlg.run]);
                  }
+                 this.deleteBtn.disabled = false;
+             });*/
+             this.downloadIdBtn.addEventListener('click', async () => {
+                 this.downloadIdBtn.disabled = true;
+                 if (await this.runsDlg.show(
+                     'Download ID Mapping', 'Download', true, true)) {
+                     this.download(this.runsDlg.run, 'id_mapping');
+                 }
+                 this.downloadIdBtn.disabled = false;
+             });
+             this.deleteIdBtn.addEventListener('click', async () => {
+                 this.deleteIdBtn.disabled = true;
+                 if (await this.runsDlg.show(
+                     'Delete ID Mapping', 'Delete', false, true) &&
+                     await this.confirmDlg.show(
+                         `Really delete ID mapping for run ${this.runsDlg.run}?`,
+                         'Cancel', 'Delete')) {
+                     await callApi(
+                         this.socket, 'delete_id_mappings', [this.runsDlg.run]);
+                 }
+                 this.deleteIdBtn.disabled = false;
              });
              this.newRunBtn.addEventListener('click', async () => {
                  if (await this.confirmDlg.show(
@@ -209,9 +237,9 @@
              });
          }
 
-         download(run) {
+         download(run, what) {
              const anchor = document.createElement('a');
-             anchor.href = `{{ dashboard_path }}/download/${run}`;
+             anchor.href = `{{ dashboard_path }}/download/${run}/${what}`;
              anchor.download = run;
              anchor.style.display = 'none';
              document.body.append(anchor);
@@ -260,8 +288,14 @@
             <button type="button" id="download-btn">
                 Download Results
             </button>
-            <button type="button" id="delete-btn">
+            {#<button type="button" id="delete-btn">
                 Delete Results
+            </button>#}
+            <button type="button" id="download-id-btn">
+                Download ID Mapping
+            </button>
+            <button type="button" id="delete-id-btn">
+                Delete ID Mapping
             </button>
             <button type="button" id="new-run-btn">
                 Start New Run
