@@ -171,6 +171,44 @@ def run_info():
     }
 
 
+def zip_results(run_id, zip_name):
+    app.logger.info('building zip file')
+    run_path = experclass.runs_path / run_id
+    root = Path(zip_name).stem
+    with zipfile.ZipFile(experclass.dls_path / zip_name, 'w',
+                         compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=9) as zf:
+        for condit in run_path.iterdir():
+            if condit.name == 'id-mapping' or not condit.is_dir():
+                continue
+            for respath in condit.iterdir():
+                if respath.stem[0] == '.':
+                    continue
+                zf.write(
+                    str(respath),
+                    root + '/' + str(respath.relative_to(run_path)))
+
+
+def zip_id_mapping(run_id, zip_name):
+    app.logger.info('building zip file')
+    id_map_path = experclass.runs_path / run_id / 'id-mapping'
+    root = Path(zip_name).stem
+    with zipfile.ZipFile(experclass.dls_path / zip_name, 'w',
+                         compression=zipfile.ZIP_DEFLATED,
+                         compresslevel=9) as zf:
+        for fpath in id_map_path.iterdir():
+            if fpath.stem[0] == '.' or not fpath.is_file():
+                continue
+            zf.write(str(fpath), root + '/' + fpath.name)
+
+
+def download(dl_name):
+    #if not dl_path.is_file():
+    return send_file(
+        experclass.dls_path / dl_name,
+        as_attachment=True, download_name=dl_name)
+
+
 app = App(__name__)
 expert.app = app
 # sessions aren't enabled until this is set
@@ -368,30 +406,19 @@ if __name__ == '__main__':
             'num_profiles': experclass.num_profiles
         })
 
-    @app.route(f'{dashboard_path}/download/<path:subpath>')
-    def dashboard_dl(subpath):
-        dl_name = f'exp_{experclass.name}_{subpath}.zip'
+    @app.route(f'{dashboard_path}/download/<path:subpath>/results')
+    def dashboard_dl_results(subpath):
+        dl_name = f'exp_{experclass.name}_{subpath}_results.zip'
         app.logger.info(f'download request for {dl_name}')
-        dls_path = experclass.dir_path / 'dl'
-        dls_path.mkdir(exist_ok=True)
-        dl_path = dls_path / dl_name
-        #if not dl_path.is_file():
-        app.logger.info('building zip file')
-        run_path = experclass.runs_path / subpath
-        with zipfile.ZipFile(dl_path, 'w',
-                             compression=zipfile.ZIP_DEFLATED,
-                             compresslevel=9) as zf:
-            for condit in run_path.iterdir():
-                if not condit.is_dir():
-                    continue
-                for respath in condit.iterdir():
-                    if respath.stem[0] == '.':
-                        continue
-                    zf.write(
-                        str(respath),
-                        str(respath.relative_to(experclass.runs_path)))
-        return send_file(
-            dl_path, as_attachment=True, download_name=dl_name)
+        zip_results(subpath, dl_name)
+        return download(dl_name)
+
+    @app.route(f'{dashboard_path}/download/<path:subpath>/id_mapping')
+    def dashboard_dl_id_map(subpath):
+        dl_name = f'exp_{experclass.name}_{subpath}_id_map.zip'
+        app.logger.info(f'download request for {dl_name}')
+        zip_id_mapping(subpath, dl_name)
+        return download(dl_name)
 
     # NB: trying to name this function 'static' will cause an error
     @app.route(f'/{cfg["url_prefix"]}/static/<path:subpath>')
@@ -441,26 +468,39 @@ if __name__ == '__main__':
         for run in experclass.runs_path.iterdir():
             if not run.is_dir() or run.stem[0] == '.':
                 continue
-            # [name, num_complete, num_incomplete]
-            runs.append([run.name, 0, 0])
+            runs.append({
+                'id': run.name,
+                'num_complete': 0,
+                'num_incomplete': 0,
+                'has_pii': False
+            })
             for cond in run.iterdir():
-                if not cond.is_dir() or cond.stem[0] == '.':
+                if cond.name == 'id-mapping' or \
+                   not cond.is_dir() or cond.stem[0] == '.':
                     continue
                 for resp in cond.iterdir():
                     if not resp.is_file() or resp.stem[0] == '.':
                         continue
                     if any(resp.name.endswith(sfx)
                            for sfx in experiment.resp_file_suffixes.values()):
-                        runs[-1][2] += 1
+                        runs[-1]['num_incomplete'] += 1
                     else:
-                        runs[-1][1] += 1
-        return sorted(runs, reverse=True)
+                        runs[-1]['num_complete'] += 1
+            if (run / 'id-mapping').is_dir():
+                runs[-1]['has_pii'] = True
+        return sorted(runs, key=lambda r: r['id'], reverse=True)
 
-    @socketio.on('delete_runs')
-    def sio_delete_run(runs):
+    # @socketio.on('delete_results')
+    # def sio_delete_results(runs):
+    #     for run in runs:
+    #         app.logger.info(f'deleting results for run {run}')
+    #         shutil.rmtree(experclass.runs_path / run)
+
+    @socketio.on('delete_id_mappings')
+    def sio_delete_id_mappings(runs):
         for run in runs:
-            app.logger.info(f'deleting run {run}')
-            shutil.rmtree(experclass.runs_path / run)
+            app.logger.info(f'deleting id mapping for run {run}')
+            shutil.rmtree(experclass.runs_path / run / 'id-mapping')
 
     @socketio.on('start_new_run')
     def sio_start_new_run():

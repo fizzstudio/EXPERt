@@ -4,14 +4,15 @@ import sys
 import time
 import importlib
 import csv
+import json
 import hashlib
 import secrets
 
 from pathlib import Path
-from collections import Counter
 from enum import Enum
+from functools import reduce
 
-from flask import render_template, request
+from flask import request
 
 import expert
 from . import (
@@ -79,7 +80,6 @@ class Experiment:
     def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
 
-        #self.profile = self.choose_profile()
         self.profile = self.profiles.pop(0)
         app.logger.info(f'profile: {self.profile}')
 
@@ -194,6 +194,7 @@ class Experiment:
         cls.dir_path.mkdir(exist_ok=True)
         cls.runs_path.mkdir(exist_ok=True)
         cls.profiles_path.mkdir(exist_ok=True)
+        cls.dls_path.mkdir(exist_ok=True)
         cls.conds = conds
         cls.replicate = None
         if expert.mode == 'rep':
@@ -219,6 +220,7 @@ class Experiment:
         cls.profiles_path = cls.dir_path / expert.cfg['profiles_dir']
         cls.runs_path = cls.dir_path / expert.cfg['runs_dir']
         cls.templates_path = cls.dir_path / expert.cfg['templates_dir']
+        cls.dls_path = cls.dir_path / expert.cfg['dls_dir']
 
     @classmethod
     def read_cond_paths(cls):
@@ -248,14 +250,10 @@ class Experiment:
                 if cls.replicate and \
                    f'{condname}/{profname}' not in rep_profs:
                     continue
-                #cls.profiles.setdefault(p.cond, {})[profname] = p
                 # only load profile if we don't have a result
                 # for that profile
                 #fullprofname = f'{cond_path.name}/{profname}'
                 if not (run_cond_path / profname).is_file():
-                    #app.logger.info(
-                    #    f'marking profile {fullprofname} as used')
-                    #p.use()
                     p = cls.profile_mod().Profile.load(
                         cls, condname, profname)
                     cls.profiles.append(p)
@@ -273,10 +271,8 @@ class Experiment:
         for cname, c in cls.cond_mod().conds.items():
             app.logger.info(f'creating profiles for condition {cname}')
             (cls.profiles_path / cname).mkdir()
-            #cls.profiles[c] = {}
             for i in range(cls.cond_size):
                 p = cls.profile_mod().Profile(cls, c)
-                #cls.profiles[c][p.subjid] = p
                 p.save()
 
     @classmethod
@@ -303,9 +299,6 @@ class Experiment:
             inst.terminate()
         #cls.instances.clear()
         cls.load_profiles()
-        #for condprofs in cls.profiles.values():
-        #    for prof in condprofs.values():
-        #        prof.unuse()
         expert.run = timestamp.make_timestamp()
         cls.record = Record(cls)
         if expert.mode == 'rep':
@@ -324,41 +317,6 @@ class Experiment:
         app.logger.info('--- run complete ---')
         cls.complete = True
         socketio.emit('run_complete')
-
-    # def choose_cond(self):
-    #     cond_counts = Counter()
-    #     # make sure we have a key for each cond
-    #     for cname, c in self.cond_mod().conds.items():
-    #         if not self.conds or cname in self.conds:
-    #             cond_counts[c] = 0
-
-    #     # count currently-active and completed instances in memory
-    #     for inst in self.instances.values():
-    #         if inst.state in (State.ACTIVE, State.COMPLETE):
-    #             cond_counts[inst.profile.cond] += 1
-    #     # count completed instances
-    #     for fqname in self.record.completed_profiles():
-    #         c, prof = fqname.split('/')
-    #         cond_counts[self.cond_mod().conds[c]] += 1
-
-    #     return min(cond_counts.keys(), key=lambda k: cond_counts[k])
-
-    # def choose_profile(self):
-    #     if self.replicate:
-    #         avail = [p for c in self.profiles
-    #                  for p in self.profiles[c].values() if not p.used]
-    #     else:
-    #         # find cond with fewest participants
-    #         cond = self.choose_cond()
-    #         avail = [p for p in self.profiles[cond].values() if not p.used]
-
-    #     if not avail:
-    #         app.logger.warning('no profiles are available')
-    #         raise ExperFullError()
-
-    #     p = random.choice(avail)
-    #     p.use()
-    #     return p
 
     def will_start(self):
         self.variables['exp_num_tasks'] = self.num_tasks_created
@@ -456,30 +414,51 @@ class Experiment:
             f'{mo}/{d}/{y} {h}:{mi}:{s}',
             f'{elapsed_time/60:.1f}']
 
+    def save_pii(self, pii):
+        # dir might exist if resuming
+        self.record.id_mapping_path.mkdir(exist_ok=True)
+        pii_path = self.record.id_mapping_path / self.sid
+        output = [{'key': 'SESSION_ID', 'val': self.sid}]
+        for item in pii:
+            record = {'key': item.task_name, 'val': item.response}
+            output.append(record)
+        with open(pii_path, 'w') as f:
+            json.dump(output, f, indent=2)
+
     def save_responses(self):
         cond_path = self.record.run_path / str(self.profile.cond)
         resp_path = cond_path / (self.profile.subjid +
                                  resp_file_suffixes.get(self.state, ''))
+
+        all_resps = self.pseudo_responses + self.responses
+        def splitter(pii_resps, resp):
+            if resp.task_name in expert.cfg['pii']:
+                pii_resps[0].append(resp)
+            else:
+                pii_resps[1].append(resp)
+            return pii_resps
+        pii, resps = reduce(splitter, all_resps, [[], []])
+        if pii:
+            self.save_pii(pii)
+
         # newline='' must be set for the csv module
         with open(resp_path, 'w', newline='') as f:
             if expert.cfg['output_format'] == 'csv':
                 writer = csv.writer(f, lineterminator='\n')
                 extras = set()
                 # collect all extra response field names
-                # (NB: skipping pseudo-responses here)
-                for r in self.responses:
+                for r in resps:
                     for k in r.extra:
                         extras.add(k)
                 # write the header line
                 writer.writerow(['tstamp', 'task', 'resp', *extras])
-                for r in self.pseudo_responses + self.responses:
+                for r in resps:
                     # NB: None is written as the empty string
                     writer.writerow([r.timestamp, r.task_name, r.response,
                                      *[r.extra[e] for e in extras]])
             elif expert.cfg['output_format'] == 'json':
-                import json
                 output = []
-                for r in self.pseudo_responses + self.responses:
+                for r in resps:
                     item = {'tstamp': r.timestamp, 'task': r.task_name}
                     if r.response is not None:
                         item['resp'] = r.response
@@ -501,10 +480,8 @@ class Experiment:
             tout_time = self.inact_timeout_time
         if tout_time and time.monotonic() >= tout_time:
             app.logger.info(f'{self.profile} timed out')
-            #self.task.next_tasks = [tasks.Task(self, 'timedout')]
             self.task = tasks.TimedOut(self)
             self.end(State.TIMED_OUT)
-            #self.profile.unuse()
             self.profiles.insert(0, self.profile)
         socketio.emit('update_instance', self.status())
 
@@ -514,15 +491,15 @@ class Experiment:
         app.logger.info(f'{self.profile} terminated')
         self.task = tasks.Terminated(self)
         self.end(State.TERMINATED)
-        #self.profile.unuse()
         self.profiles.insert(0, self.profile)
         socketio.emit('update_instance', self.status())
 
-    # called for normal completion, timeout, or nonconsent
+    # called for normal completion, timeout, nonconsent, or termination
     def end(self, state):
         self.end_time = time.monotonic()
         self.state = state
-        self.save_responses()
+        if state != State.CONSENT_DECLINED:
+            self.save_responses()
 
     def dummy_run(self):
         while self.state != State.COMPLETE:
@@ -549,6 +526,7 @@ class Record:
             self.start_time = fromsaved
             self.replicate = None
         self.run_path = experclass.runs_path / self.start_time
+        self.id_mapping_path = self.run_path / 'id-mapping'
 
     def completed_profiles(self):
         # list of strings of form 'cond/prof'
