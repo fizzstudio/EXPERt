@@ -50,5 +50,5 @@ class Profile:
             subjid = ''
             for _ in range(cfg['subjid_length']):
                 subjid += random.choice(cfg['subjid_symbols'])
-            if subjid not in self.expercls.profiles:
+            if subjid not in [p.subjid for p in self.expercls.profiles]:
                 return subjid
