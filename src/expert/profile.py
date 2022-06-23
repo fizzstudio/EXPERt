@@ -50,10 +50,5 @@ class Profile:
             subjid = ''
             for _ in range(cfg['subjid_length']):
                 subjid += random.choice(cfg['subjid_symbols'])
-            subjid_exists = False
-            for c, profiles in self.expercls.profiles.items():
-                if subjid in profiles:
-                    subjid_exists = True
-                    break
-            if not subjid_exists:
+            if subjid not in self.expercls.profiles:
                 return subjid
