@@ -116,43 +116,61 @@ def error(msg):
 class BadSessionError(Exception): pass
 
 
+# def get_inst():
+#     required = ['sid', 'exper', 'run', 'profile']
+#     # NB: session.new seems to be False here even if we do
+#     # in fact have a new, empty session
+#     if not any(key in session for key in required):
+#         # New participant
+#         return None
+
+#     if not all(key in session for key in required):
+#         app.logger.info('missing some session keys')
+#         print(session, session.new)
+#         raise BadSessionError('Invalid session')
+
+#     if session['exper'] == experclass.name:
+#         try:
+#             return experclass.instances[session['sid']]
+#         except KeyError:
+#             if session['run'] == experclass.record.start_time:
+#                 # We have a sid for this run, but no instance;
+#                 # run was probably resumed
+#                 if session['profile'] == '_unassigned':
+#                     raise BadSessionError(
+#                         'You have already participated in this experiment')
+#                 else:
+#                     results_file = (experclass.record.run_path /
+#                                     session['profile'])
+#                     # XXX check for terminated/timed-out, too
+#                     if results_file.is_file():
+#                         raise BadSessionError(
+#                             'You have already participated in this experiment')
+#                     else:
+#                         # maybe the server was shut down mid-session?
+#                         app.logger.info(
+#                             f'no inst for profile {session["profile"]}')
+#                         raise BadSessionError('Invalid session')
+#             else:
+#                 # Session ID is for a different run of this experiment
+#                 raise BadSessionError(
+#                     'You have already participated in this experiment')
+#     else:
+#         # Possible participant from different experiment
+#         app.logger.info(f'exper name mismatch: {session["exper"]}')
+#         raise BadSessionError('Invalid session')
+
+
 def get_inst():
-    required = ['sid', 'exper', 'run', 'profile']
     # NB: session.new seems to be False here even if we do
     # in fact have a new, empty session
-    if not any(key in session for key in required):
+    if 'sid' not in session:
         # New participant
         return None
-
-    if not all(key in session for key in required):
-        app.logger.info('missing some session keys')
-        print(session, session.new)
-        raise BadSessionError('Invalid session')
-
-    if session['exper'] == experclass.name:
-        try:
-            return experclass.instances[session['sid']]
-        except KeyError:
-            if session['run'] == experclass.record.start_time:
-                # We have a sid for this run, but no instance
-                results_file = (experclass.record.run_path /
-                                session['profile'])
-                if results_file.is_file():
-                    # Experiment was probably resumed
-                    raise BadSessionError(
-                        'You have already participated in this experiment')
-                else:
-                    app.logger.info(
-                        f'no inst for profile {session["profile"]}')
-                    raise BadSessionError('Invalid session')
-            else:
-                # Session ID is for a different run of this experiment
-                raise BadSessionError(
-                    'You have already participated in this experiment')
-    else:
-        # Possible participant from different experiment
-        app.logger.info(f'exper name mismatch: {session["exper"]}')
-        raise BadSessionError('Invalid session')
+    try:
+        return experclass.instances[session['sid']]
+    except KeyError:
+        raise BadSessionError('Unrecognized user')
 
 
 def dummy_run(inst_count):
@@ -351,17 +369,18 @@ if __name__ == '__main__':
                     ip = request.headers.get('X-Real-IP', request.remote_addr)
                     if ',' in ip:
                         ip = ip.split(',')[0]
-                    try:
+                    if experclass.profiles:
+                        # not full yet
                         inst = experclass(ip, request.args)
-                    except experiment.ExperFullError:
-                        return error('No participant profiles are available')
-                    session['sid'] = inst.sid
-                    session['exper'] = experclass.name
-                    session['run'] = experclass.record.start_time
-                    session['profile'] = inst.profile.fqname
-                    app.logger.info(f'new instance for SID {inst.sid}')
-                    socketio.emit('new_instance', inst.status())
-                    inst.will_start()
+                        session['sid'] = inst.sid
+                        #session['exper'] = experclass.name
+                        #session['run'] = experclass.record.start_time
+                        #session['profile'] = inst.profile.fqname
+                        app.logger.info(f'new instance for sid {inst.sid[:4]}')
+                        socketio.emit('new_instance', inst.status())
+                        inst.will_start()
+                    else:
+                        content = expert.render('full' + expert.template_ext)
         except BadSessionError as e:
             content = error(str(e))
 

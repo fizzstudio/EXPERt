@@ -31,7 +31,7 @@ class State(Enum):
 
 
 resp_file_suffixes = {
-    State.CONSENT_DECLINED: '-nonconsent',
+    # NB: CONSENT_DECLINED insts never have their results saved
     State.TIMED_OUT: '-timeout',
     State.TERMINATED: '-terminated'
 }
@@ -58,11 +58,6 @@ class NoSuchCondError(Exception):
         super().__init__(f'no such condition(s) "{condname}"')
 
 
-class ExperFullError(Exception):
-    def __init__(self):
-        super().__init__('no profiles available')
-
-
 class BadOutputFormatError(Exception):
     def __init__(self, fmt):
         super().__init__(f'unknown output format "{fmt}"')
@@ -80,8 +75,7 @@ class Experiment:
     def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
 
-        self.profile = self.profiles.pop(0)
-        app.logger.info(f'profile: {self.profile}')
+        self.profile = None
 
         self.instances[self.sid] = self
 
@@ -147,7 +141,7 @@ class Experiment:
 
         @socketio.on('next_page', namespace=f'/{self.sid}')
         def sio_next_page(resp):
-            if self.task.next_tasks:
+            if self.task.next_tasks or isinstance(self.task, tasks.Consent):
                 # if we're not here, the user was somehow able
                 # to hit 'Next' on the final task screen,
                 # which shouldn't be possible ...
@@ -318,6 +312,11 @@ class Experiment:
         cls.complete = True
         socketio.emit('run_complete')
 
+    def assign_profile(self):
+        self.profile = self.profiles.pop(0)
+        app.logger.info(
+            f'sid {self.sid[:4]} assigned profile: {self.profile}')
+
     def will_start(self):
         self.variables['exp_num_tasks'] = self.num_tasks_created
         self.update_vars()
@@ -361,31 +360,37 @@ class Experiment:
             # should only ever do this in tool mode
             self.responses[self.task_cursor - 1] = task_resp
         app.logger.info(
-            f'{self.profile} completed "{task_resp.task_name}"' +
+            f'sid {self.sid[:4]} completed "{task_resp.task_name}"' +
             f' ({self.task_cursor})')
 
-        if self.state == State.ACTIVE:
+        try:
+            if self.state == State.ACTIVE:
 
-            if isinstance(self.task, tasks.Consent) and \
-               resp == 'consent_declined':
-                # make sure we didn't time out right before
-                app.logger.info(
-                    f'consent declined for {self.profile}')
-                #self.task.next_tasks = [tasks.Task(self, 'nonconsent')]
-                self.task = tasks.NonConsent(self)
-                self.end(State.CONSENT_DECLINED)
-                # NB: the sid stays in the session so we can keep
-                # serving up the consent-declined page
-                #self.profile.unuse()
-                self.profiles.insert(0, self.profile)
-            else:
+                if isinstance(self.task, tasks.Consent):
+                    if resp == 'consent_declined':
+                        # make sure we didn't time out right before
+                        app.logger.info(f'sid {self.sid[:4]} declined consent')
+                        self.task = tasks.NonConsent(self)
+                        self.end(State.CONSENT_DECLINED)
+                        # NB: the sid stays in the session so we can keep
+                        # serving up the consent-declined page
+                        #self.profiles.insert(0, self.profile)
+                        return
+                    else:
+                        self.assign_profile()
+                        # new tasks get created
+                        self.variables['exp_num_tasks'] = self.num_tasks_created
+
                 # XXX currently doesn't handle forking task paths
                 self.task = self.task.next_task(resp)
                 self.task_cursor += 1
 
                 self.update_timeouts()
 
-                if not self.task.next_tasks:
+                if not self.task.next_tasks and \
+                   not isinstance(self.task, tasks.Consent):
+                    # (The Consent task initially has no next_tasks,
+                    # because the profile hasn't been assigned yet.)
                     # This is the final task. It must simply be some sort of
                     # "thank you" page where no data is collected.
                     # When the final task is displayed, the subject's responses
@@ -396,10 +401,9 @@ class Experiment:
                     if not self.profiles:
                         self.complete_run()
 
+        finally:
             self.update_vars()
-
-        #self.num_tasks_completed += 1
-        socketio.emit('update_instance', self.status())
+            socketio.emit('update_instance', self.status())
 
     def status(self):
         if self.state == State.ACTIVE:
@@ -408,7 +412,8 @@ class Experiment:
             elapsed_time = self.end_time - self.start_time
         y, mo, d, h, mi, s = self.start_timestamp.split('.')
         return [
-            self.sid, self.clientip, str(self.profile),
+            self.sid, self.clientip,
+            str(self.profile) if self.profile else 'unassigned',
             self.state.name, self.task_cursor,
             #self.start_timestamp[11:].replace('.', ':'),
             f'{mo}/{d}/{y} {h}:{mi}:{s}',
@@ -426,6 +431,7 @@ class Experiment:
             json.dump(output, f, indent=2)
 
     def save_responses(self):
+        app.logger.info(f'saving responses for sid {self.sid[:4]}')
         cond_path = self.record.run_path / str(self.profile.cond)
         resp_path = cond_path / (self.profile.subjid +
                                  resp_file_suffixes.get(self.state, ''))
@@ -479,26 +485,29 @@ class Experiment:
         else:
             tout_time = self.inact_timeout_time
         if tout_time and time.monotonic() >= tout_time:
-            app.logger.info(f'{self.profile} timed out')
+            app.logger.info(f'sid {self.sid[:4]} timed out')
             self.task = tasks.TimedOut(self)
             self.end(State.TIMED_OUT)
-            self.profiles.insert(0, self.profile)
+            if self.profile:
+                self.profiles.insert(0, self.profile)
         socketio.emit('update_instance', self.status())
 
     def terminate(self):
         if self.state != State.ACTIVE:
             return
-        app.logger.info(f'{self.profile} terminated')
+        app.logger.info(f'sid {self.sid[:4]} terminated')
         self.task = tasks.Terminated(self)
         self.end(State.TERMINATED)
-        self.profiles.insert(0, self.profile)
+        if self.profile:
+            self.profiles.insert(0, self.profile)
         socketio.emit('update_instance', self.status())
 
     # called for normal completion, timeout, nonconsent, or termination
     def end(self, state):
         self.end_time = time.monotonic()
         self.state = state
-        if state != State.CONSENT_DECLINED:
+        if self.profile:
+            # this also includes CONSENT_DECLINED
             self.save_responses()
 
     def dummy_run(self):

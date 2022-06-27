@@ -109,7 +109,17 @@ class Task:
         return None
 
 
-class Consent(Task):
+class NoProgbarTask(Task):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.variables['exp_progbar_enabled'] = False
+
+
+class Welcome(NoProgbarTask):
+    pass
+
+
+class Consent(NoProgbarTask):
     pass
 
 
@@ -121,19 +131,13 @@ class Thankyou(Task):
     template = 'thankyou'
 
 
-class IncompleteTask(Task):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.variables['exp_progbar_enabled'] = False
-
-
-class TimedOut(IncompleteTask):
+class TimedOut(NoProgbarTask):
     template = 'timedout'
 
 
-class Terminated(IncompleteTask):
+class Terminated(NoProgbarTask):
     template = 'terminated'
 
 
-class NonConsent(IncompleteTask):
+class NonConsent(NoProgbarTask):
     template = 'nonconsent'
