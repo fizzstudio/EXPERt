@@ -114,7 +114,7 @@ class Experiment:
                     'USER_AGENT'))
         if expert.cfg['prolific_pid_param'] in urlargs:
             self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
-            app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
+            #app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
             self.pseudo_responses.append(
                 TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
         else:
