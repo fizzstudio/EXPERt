@@ -116,51 +116,6 @@ def error(msg):
 class BadSessionError(Exception): pass
 
 
-# def get_inst():
-#     required = ['sid', 'exper', 'run', 'profile']
-#     # NB: session.new seems to be False here even if we do
-#     # in fact have a new, empty session
-#     if not any(key in session for key in required):
-#         # New participant
-#         return None
-
-#     if not all(key in session for key in required):
-#         app.logger.info('missing some session keys')
-#         print(session, session.new)
-#         raise BadSessionError('Invalid session')
-
-#     if session['exper'] == experclass.name:
-#         try:
-#             return experclass.instances[session['sid']]
-#         except KeyError:
-#             if session['run'] == experclass.record.start_time:
-#                 # We have a sid for this run, but no instance;
-#                 # run was probably resumed
-#                 if session['profile'] == '_unassigned':
-#                     raise BadSessionError(
-#                         'You have already participated in this experiment')
-#                 else:
-#                     results_file = (experclass.record.run_path /
-#                                     session['profile'])
-#                     # XXX check for terminated/timed-out, too
-#                     if results_file.is_file():
-#                         raise BadSessionError(
-#                             'You have already participated in this experiment')
-#                     else:
-#                         # maybe the server was shut down mid-session?
-#                         app.logger.info(
-#                             f'no inst for profile {session["profile"]}')
-#                         raise BadSessionError('Invalid session')
-#             else:
-#                 # Session ID is for a different run of this experiment
-#                 raise BadSessionError(
-#                     'You have already participated in this experiment')
-#     else:
-#         # Possible participant from different experiment
-#         app.logger.info(f'exper name mismatch: {session["exper"]}')
-#         raise BadSessionError('Invalid session')
-
-
 def get_inst():
     # NB: session.new seems to be False here even if we do
     # in fact have a new, empty session

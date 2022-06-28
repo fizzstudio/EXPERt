@@ -391,14 +391,17 @@ class Experiment:
                    not isinstance(self.task, tasks.Consent):
                     # (The Consent task initially has no next_tasks,
                     # because the profile hasn't been assigned yet.)
-                    # This is the final task. It must simply be some sort of
-                    # "thank you" page where no data is collected.
+                    # We have moved onto the final task. This will
+                    # typically be some sort of "thank you" page
+                    # that returns the participant to mturk or wherever.
+                    # No response is collected from this task.
                     # When the final task is displayed, the subject's responses
                     # are saved to disk. Their instance remains in memory
                     # so that if they reload the page, they won't lose any,
                     # e.g., mturk completion code that is displayed.
                     self.end(State.COMPLETE)
-                    if not self.profiles:
+                    if not self.profiles and \
+                       not any(i.state == State.ACTIVE for i in self.instances):
                         self.complete_run()
 
         finally:
