@@ -54,6 +54,16 @@
         <div id="exp-progbar" class="hidden">
             <div></div>
         </div>
+        {% if exp_tool_mode %}
+            <div id="exp-nav-menu">
+                <select id="exp-nav-menu-select">
+                    <option>Go to ...</option>
+                    {% for nav_item in exp_nav_items %}
+                        <option>{{ nav_item }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endif %}
         <div id="exp-nav-controls">
             {% if exp_tool_mode %}
                 <div id="exp-prev-btn-wrapper">

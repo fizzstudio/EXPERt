@@ -79,6 +79,11 @@ class Task:
             task = cls(self.inst, *posargs, **kwargs)
         task.prev_task = self
         self.next_tasks.append(task)
+        if len(self.next_tasks) > 1:
+            self.inst.last_task = None
+        else:
+            self.inst.last_task = task
+        task.was_added()
         return task
 
     def then_all(self, task_descriptors):
@@ -94,6 +99,9 @@ class Task:
             else:
                 cursor = cursor.then(task)
         return cursor
+
+    def was_added(self):
+        pass
 
     def next_task(self, response=None):
         if len(self.next_tasks) > 1:
