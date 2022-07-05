@@ -11,8 +11,8 @@ export class Task {
         //this.debugBackBtn = elt('debug-back-btn')
         //this.debugFwdBtn = elt('debug-fwd-btn')
         this.taskCursor = elt('exp-task-cursor')
+        this.navSelect = elt('exp-nav-menu-select')
         this.content = elt('task-wrapper')
-
         {% if exp_progbar_enabled %}
         elt('exp-progbar').classList.remove('hidden')
         {% endif %}
@@ -40,6 +40,13 @@ export class Task {
             {% if exp_tool_mode %}
             this.prevBtn.addEventListener(
                 'click', async () => await this._nav('prev_page'))
+            this.navSelect.addEventListener('change', async () => {
+                const idx = this.navSelect.selectedIndex
+                if (idx) {
+                    //this.run = this.navSelect.value
+                    await this._nav('goto', this.vars['exp_nav_items'][idx - 1])
+                }
+            })
             {% endif %}
             //this.debugFwdBtn.addEventListener(
             //    'click', async () => await this._nav('debug_fwd'))

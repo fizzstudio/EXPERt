@@ -78,14 +78,13 @@ class Experiment:
         self.profile = None
 
         self.instances[self.sid] = self
-
         self.start_time = time.monotonic()
         self.end_time = None
-
         self.start_timestamp = timestamp.make_timestamp()
 
         # tasks are stored in a linked tree structure
         self.task = None
+        # None if there are forking paths through the experiment
         self.last_task = None
         # total number of task instances created
         # (not necessarily the number the participant will complete)
@@ -159,6 +158,11 @@ class Experiment:
         def sio_prev_page():
             if self.task.prev_task:
                 self.prev_task()
+            return self.task.all_vars()
+
+        @socketio.on('goto', namespace=f'/{self.sid}')
+        def sio_gotoe(task_label):
+            self.go_to(task_label)
             return self.task.all_vars()
 
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
@@ -318,8 +322,17 @@ class Experiment:
             f'sid {self.sid[:4]} assigned profile: {self.profile}')
 
     def will_start(self):
+        self.first_task = self.task
         self.variables['exp_num_tasks'] = self.num_tasks_created
+        self.variables['exp_nav_items'] = [label
+                                           for label, task in self.nav_items()]
         self.update_vars()
+
+    def nav_items(self):
+        if self.last_task:
+            return [('First', self.first_task), ('Last', self.last_task)]
+        else:
+            return []
 
     def present(self, tplt_vars={}):
         return self.task.present(tplt_vars)
@@ -337,6 +350,17 @@ class Experiment:
     def prev_task(self):
         self.task = self.task.prev_task
         self.task_cursor -= 1
+        self.update_timeouts()
+        self.update_vars()
+
+    def go_to(self, task_label):
+        dest_task = None
+        for label, task in self.nav_items():
+            if label == task_label:
+                dest_task = task
+                break
+        self.task = dest_task
+        self.task_cursor = dest_task.id
         self.update_timeouts()
         self.update_vars()
 
@@ -464,7 +488,7 @@ class Experiment:
                 for r in resps:
                     # NB: None is written as the empty string
                     writer.writerow([r.timestamp, r.task_name, r.response,
-                                     *[r.extra[e] for e in extras]])
+                                     *[r.extra.get(e) for e in extras]])
             elif expert.cfg['output_format'] == 'json':
                 output = []
                 for r in resps:
