@@ -240,6 +240,8 @@ class Experiment:
         cls.profiles.clear()
         for cond_path in cond_paths:
             condname = cond_path.name
+            if cls.conds and condname not in cls.conds:
+                continue
             run_cond_path = cls.record.run_path / condname
             for prof_path in cond_path.iterdir():
                 profname = prof_path.name
