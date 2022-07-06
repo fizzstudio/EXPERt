@@ -197,7 +197,7 @@
                          `Really delete ID mapping for run ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
                      await callApi(
-                         this.socket, 'delete_id_mappings', [this.runsDlg.run]);
+                         this.socket, 'delete_id_mappings', this.runsDlg.run);
                  }
                  this.deleteIdBtn.disabled = false;
              });

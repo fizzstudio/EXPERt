@@ -11,9 +11,8 @@ export function elts(...ids) {
     return dom;
 }
 
-export async function callApi(socket, func, args) {
+export async function callApi(socket, ...params) {
     const p = new Promise(resolve => {
-        const params = args === undefined ? [func] : [func, args];
         socket.emit(...params, resp => {
             resolve(resp);
         });

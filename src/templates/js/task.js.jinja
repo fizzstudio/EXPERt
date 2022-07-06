@@ -38,13 +38,19 @@ export class Task {
                 await this._nav('next_page', this.response)
             })
             {% if exp_tool_mode %}
-            this.prevBtn.addEventListener(
-                'click', async () => await this._nav('prev_page'))
+            this.prevBtn.addEventListener('click', async () => {
+                this.prevBtn.disabled = true
+                await this._nav('prev_page', this.response)
+                this.prevBtn.disabled = false
+            })
             this.navSelect.addEventListener('change', async () => {
                 const idx = this.navSelect.selectedIndex
                 if (idx) {
                     //this.run = this.navSelect.value
-                    await this._nav('goto', this.vars['exp_nav_items'][idx - 1])
+                    await this._nav(
+                        'goto',
+                        this.vars['exp_nav_items'][idx - 1],
+                        this.response)
                 }
             })
             {% endif %}
@@ -96,10 +102,7 @@ export class Task {
     }
 
     async init() {
-        //this.initFunc = f
         this.vars = await this.api('init_task')
-        await this.reset()
-        //f(this)
     }
 
     defaultResponse() {
@@ -114,8 +117,8 @@ export class Task {
         this._updateProgress()
     }
 
-    async api(func, args) {
-        return await callApi(this.socket, func, args)
+    async api(...params) {
+        return await callApi(this.socket, ...params)
     }
 
     enableNext() {

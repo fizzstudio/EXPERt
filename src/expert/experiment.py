@@ -155,14 +155,14 @@ class Experiment:
         #    return self.task.all_vars()
 
         @socketio.on('prev_page', namespace=f'/{self.sid}')
-        def sio_prev_page():
+        def sio_prev_page(resp):
             if self.task.prev_task:
-                self.prev_task()
+                self.prev_task(resp)
             return self.task.all_vars()
 
         @socketio.on('goto', namespace=f'/{self.sid}')
-        def sio_gotoe(task_label):
-            self.go_to(task_label)
+        def sio_goto(task_label, resp):
+            self.go_to(task_label, resp)
             return self.task.all_vars()
 
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
@@ -347,13 +347,30 @@ class Experiment:
     #    self.task_cursor += 1
     #    self.update_cursor()
 
-    def prev_task(self):
+    def store_resp(self, resp):
+        task_resp = TaskResponse(
+            resp, self.task.template_name, **self.task.resp_extra)
+        if self.task_cursor > len(self.responses):
+            self.responses.append(task_resp)
+        else:
+            # should only ever do this in tool mode
+            self.responses[self.task_cursor - 1] = task_resp
+        app.logger.info(
+            f'sid {self.sid[:4]} completed "{task_resp.task_name}"' +
+            f' ({self.task_cursor})')
+        if expert.tool_mode:
+            self.task.variables['exp_resp'] = resp
+
+    def prev_task(self, resp):
+        self.store_resp(resp)
         self.task = self.task.prev_task
         self.task_cursor -= 1
         self.update_timeouts()
         self.update_vars()
+        socketio.emit('update_instance', self.status())
 
-    def go_to(self, task_label):
+    def go_to(self, task_label, resp):
+        self.store_resp(resp)
         dest_task = None
         for label, task in self.nav_items():
             if label == task_label:
@@ -363,6 +380,7 @@ class Experiment:
         self.task_cursor = dest_task.id
         self.update_timeouts()
         self.update_vars()
+        socketio.emit('update_instance', self.status())
 
     def update_timeouts(self):
         now = time.monotonic()
@@ -376,17 +394,7 @@ class Experiment:
             now + expert.cfg['inact_timeout_secs']
 
     def next_task(self, resp):
-        task_resp = TaskResponse(
-            resp, self.task.template_name, **self.task.resp_extra)
-        if self.task_cursor > len(self.responses):
-            self.responses.append(task_resp)
-        else:
-            # should only ever do this in tool mode
-            self.responses[self.task_cursor - 1] = task_resp
-        app.logger.info(
-            f'sid {self.sid[:4]} completed "{task_resp.task_name}"' +
-            f' ({self.task_cursor})')
-
+        self.store_resp(resp)
         try:
             if self.state == State.ACTIVE:
 
