@@ -63,14 +63,11 @@ class BadOutputFormatError(Exception):
         super().__init__(f'unknown output format "{fmt}"')
 
 
-class Experiment:
+class BaseExper:
 
     profiles = []
     # sid: <Experiment subclass inst>
     instances = {}
-
-    # Will be True when all profiles have completed the experiment.
-    complete = False
 
     def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
@@ -94,45 +91,22 @@ class Experiment:
 
         # response returned by current task
         self.response = None
-        self.responses = []
+        # {task.id: TaskResponse}
+        self.responses = {}
         self.pseudo_responses = [
             TaskResponse(self.sid, 'SID'),
         ]
-        if expert.cfg['save_ip_hash']:
-            self.clientip = clientip
-            iphash = hashlib.blake2b(
-                bytes(self.clientip, 'ascii'), digest_size=10).hexdigest()
-            self.pseudo_responses.append(
-                TaskResponse(iphash, 'IPHASH'))
-        else:
-            self.clientip = 'xxx.xxx.xxx.xxx'
-        if expert.cfg['save_user_agent']:
-            self.pseudo_responses.append(
-                TaskResponse(
-                    'DUMMY' if dummy else request.headers.get('User-Agent'),
-                    'USER_AGENT'))
-        if expert.cfg['prolific_pid_param'] in urlargs:
-            self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
-            #app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
-            self.pseudo_responses.append(
-                TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
-        else:
-            self.prolific_pid = None
+
+        self.clientip = clientip
+        self.prolific_pid = None
 
         self.state = State.ACTIVE
-
-        self.inact_timeout_time = \
-            self.start_time + expert.cfg['inact_timeout_secs']
-        self.global_timeout_time = None
 
         # template variables shared by all tasks for the experiment
         self.variables = {
             'exp_prolific_pid': self.prolific_pid,
             'exp_sid': self.sid
         }
-        if self.prolific_pid:
-            self.variables['exp_prolific_completion_url'] = \
-                expert.cfg['prolific_completion_url']
 
         @socketio.on('init_task', namespace=f'/{self.sid}')
         def sio_init_task():
@@ -146,23 +120,6 @@ class Experiment:
                 # which shouldn't be possible ...
                 #self.handle_response(resp)
                 self.next_task(resp)
-            return self.task.all_vars()
-
-        #@socketio.on('debug_fwd', namespace=f'/{self.sid}')
-        #def sio_debug_fwd():
-        #    if self.task.next_tasks:
-        #        self.task_fwd()
-        #    return self.task.all_vars()
-
-        @socketio.on('prev_page', namespace=f'/{self.sid}')
-        def sio_prev_page(resp):
-            if self.task.prev_task:
-                self.prev_task(resp)
-            return self.task.all_vars()
-
-        @socketio.on('goto', namespace=f'/{self.sid}')
-        def sio_goto(task_label, resp):
-            self.go_to(task_label, resp)
             return self.task.all_vars()
 
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
@@ -312,12 +269,6 @@ class Experiment:
         cls.record.save()
         cls.complete = False
 
-    @classmethod
-    def complete_run(cls):
-        app.logger.info('--- run complete ---')
-        cls.complete = True
-        socketio.emit('run_complete')
-
     def assign_profile(self):
         self.profile = self.profiles.pop(0)
         app.logger.info(
@@ -343,57 +294,136 @@ class Experiment:
         self.variables['exp_task_cursor'] = self.task_cursor
         self.variables['exp_state'] = self.state.name
 
-    #def task_fwd(self, resp=None):
-    #    # XXX currently doesn't handle forking task paths
-    #    self.task = self.task.next_task(resp)
-    #    self.task_cursor += 1
-    #    self.update_cursor()
-
     def store_resp(self, resp):
         task_resp = TaskResponse(
             resp, self.task.template_name, **self.task.resp_extra)
-        if self.task_cursor > len(self.responses):
-            self.responses.append(task_resp)
-        else:
+        self.responses[self.task.id] = task_resp
+        #if self.task_cursor > len(self.responses):
+        #    self.responses.append(task_resp)
+        #else:
             # should only ever do this in tool mode
-            self.responses[self.task_cursor - 1] = task_resp
+        #    self.responses[self.task_cursor - 1] = task_resp
+
+    def status(self):
+        if self.state == State.ACTIVE:
+            elapsed_time = time.monotonic() - self.start_time
+        else:
+            elapsed_time = self.end_time - self.start_time
+        y, mo, d, h, mi, s = self.start_timestamp.split('.')
+        return [
+            self.sid, self.clientip,
+            str(self.profile) if self.profile else 'unassigned',
+            self.state.name, self.task_cursor,
+            #self.start_timestamp[11:].replace('.', ':'),
+            f'{mo}/{d}/{y} {h}:{mi}:{s}',
+            f'{elapsed_time/60:.1f}']
+
+    def save_pii(self, pii):
+        # dir might exist if resuming
+        self.record.id_mapping_path.mkdir(exist_ok=True)
+        pii_path = self.record.id_mapping_path / self.sid
+        output = [{'key': 'SESSION_ID', 'val': self.sid}]
+        for item in pii:
+            record = {'key': item.task_name, 'val': item.response}
+            output.append(record)
+        with open(pii_path, 'w') as f:
+            json.dump(output, f, indent=2)
+
+    def save_responses(self):
+        cond_path = self.record.run_path / str(self.profile.cond)
+        resp_path = cond_path / (self.profile.subjid +
+                                 resp_file_suffixes.get(self.state, ''))
+
+        actual_resps = [self.responses[tid]
+                        for tid in sorted(self.responses.keys())]
+        all_resps = self.pseudo_responses + actual_resps
+        def splitter(pii_resps, resp):
+            if resp.task_name in expert.cfg['pii']:
+                pii_resps[0].append(resp)
+            else:
+                pii_resps[1].append(resp)
+            return pii_resps
+        pii, resps = reduce(splitter, all_resps, [[], []])
+        if pii:
+            self.save_pii(pii)
+
+        # newline='' must be set for the csv module
+        with open(resp_path, 'w', newline='') as f:
+            if expert.cfg['output_format'] == 'csv':
+                writer = csv.writer(f, lineterminator='\n')
+                extras = set()
+                # collect all extra response field names
+                for r in resps:
+                    for k in r.extra:
+                        extras.add(k)
+                # write the header line
+                writer.writerow(['tstamp', 'task', 'resp', *extras])
+                for r in resps:
+                    # NB: None is written as the empty string
+                    writer.writerow([r.timestamp, r.task_name, r.response,
+                                     *[r.extra.get(e) for e in extras]])
+            elif expert.cfg['output_format'] == 'json':
+                output = []
+                for r in resps:
+                    item = {'tstamp': r.timestamp, 'task': r.task_name}
+                    if r.response is not None:
+                        item['resp'] = r.response
+                    item.update(r.extra)
+                    output.append(item)
+                json.dump(output, f, indent=2)
+            else:
+                # XXX would probably be better to sanity-check this
+                # when the program loads
+                raise BadOutputFormatError(expert.cfg['output_format'])
+
+    def dummy_run(self):
+        while self.state != State.COMPLETE:
+            self.next_task(self.task.dummy_resp())
+
+
+class Exper(BaseExper):
+
+    # Will be True when all profiles have completed the experiment.
+    complete = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if expert.cfg['save_user_agent']:
+            self.pseudo_responses.append(
+                TaskResponse(
+                    'DUMMY' if dummy else request.headers.get('User-Agent'),
+                    'USER_AGENT'))
+        if expert.cfg['save_ip_hash']:
+            iphash = hashlib.blake2b(
+                bytes(self.clientip, 'ascii'), digest_size=10).hexdigest()
+            self.pseudo_responses.append(
+                TaskResponse(iphash, 'IPHASH'))
+        if expert.cfg['prolific_pid_param'] in urlargs:
+            self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
+            #app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
+            self.pseudo_responses.append(
+                TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
+
+        if self.prolific_pid:
+            self.variables['exp_prolific_completion_url'] = \
+                expert.cfg['prolific_completion_url']
+
+        self.inact_timeout_time = \
+            self.start_time + expert.cfg['inact_timeout_secs']
+        self.global_timeout_time = None
+
+    @classmethod
+    def complete_run(cls):
+        app.logger.info('--- run complete ---')
+        cls.complete = True
+        socketio.emit('run_complete')
+
+    def store_resp(self, resp):
+        super().store_resp(resp)
         app.logger.info(
             f'sid {self.sid[:4]} completed "{task_resp.task_name}"' +
             f' ({self.task_cursor})')
-        if expert.tool_mode:
-            self.task.variables['exp_resp'] = resp
-
-    def prev_task(self, resp):
-        self.store_resp(resp)
-        self.task = self.task.prev_task
-        self.task_cursor -= 1
-        self.update_timeouts()
-        self.update_vars()
-        socketio.emit('update_instance', self.status())
-
-    def go_to(self, task_label, resp):
-        self.store_resp(resp)
-        dest_task = None
-        for label, task in self.nav_items():
-            if label == task_label:
-                dest_task = task
-                break
-        self.task = dest_task
-        self.task_cursor = dest_task.id
-        self.update_timeouts()
-        self.update_vars()
-        socketio.emit('update_instance', self.status())
-
-    def update_timeouts(self):
-        now = time.monotonic()
-        if self.task.timeout_secs is not None:
-            if self.task.timeout_secs >= 0:
-                self.global_timeout_time = now + self.task.timeout_secs
-            else:
-                # negative value disables the timeout
-                self.global_timeout_time = None
-        self.inact_timeout_time = \
-            now + expert.cfg['inact_timeout_secs']
 
     def next_task(self, resp):
         self.store_resp(resp)
@@ -442,76 +472,16 @@ class Experiment:
             self.update_vars()
             socketio.emit('update_instance', self.status())
 
-    def status(self):
-        if self.state == State.ACTIVE:
-            elapsed_time = time.monotonic() - self.start_time
-        else:
-            elapsed_time = self.end_time - self.start_time
-        y, mo, d, h, mi, s = self.start_timestamp.split('.')
-        return [
-            self.sid, self.clientip,
-            str(self.profile) if self.profile else 'unassigned',
-            self.state.name, self.task_cursor,
-            #self.start_timestamp[11:].replace('.', ':'),
-            f'{mo}/{d}/{y} {h}:{mi}:{s}',
-            f'{elapsed_time/60:.1f}']
-
-    def save_pii(self, pii):
-        # dir might exist if resuming
-        self.record.id_mapping_path.mkdir(exist_ok=True)
-        pii_path = self.record.id_mapping_path / self.sid
-        output = [{'key': 'SESSION_ID', 'val': self.sid}]
-        for item in pii:
-            record = {'key': item.task_name, 'val': item.response}
-            output.append(record)
-        with open(pii_path, 'w') as f:
-            json.dump(output, f, indent=2)
-
-    def save_responses(self):
-        app.logger.info(f'saving responses for sid {self.sid[:4]}')
-        cond_path = self.record.run_path / str(self.profile.cond)
-        resp_path = cond_path / (self.profile.subjid +
-                                 resp_file_suffixes.get(self.state, ''))
-
-        all_resps = self.pseudo_responses + self.responses
-        def splitter(pii_resps, resp):
-            if resp.task_name in expert.cfg['pii']:
-                pii_resps[0].append(resp)
+    def update_timeouts(self):
+        now = time.monotonic()
+        if self.task.timeout_secs is not None:
+            if self.task.timeout_secs >= 0:
+                self.global_timeout_time = now + self.task.timeout_secs
             else:
-                pii_resps[1].append(resp)
-            return pii_resps
-        pii, resps = reduce(splitter, all_resps, [[], []])
-        if pii:
-            self.save_pii(pii)
-
-        # newline='' must be set for the csv module
-        with open(resp_path, 'w', newline='') as f:
-            if expert.cfg['output_format'] == 'csv':
-                writer = csv.writer(f, lineterminator='\n')
-                extras = set()
-                # collect all extra response field names
-                for r in resps:
-                    for k in r.extra:
-                        extras.add(k)
-                # write the header line
-                writer.writerow(['tstamp', 'task', 'resp', *extras])
-                for r in resps:
-                    # NB: None is written as the empty string
-                    writer.writerow([r.timestamp, r.task_name, r.response,
-                                     *[r.extra.get(e) for e in extras]])
-            elif expert.cfg['output_format'] == 'json':
-                output = []
-                for r in resps:
-                    item = {'tstamp': r.timestamp, 'task': r.task_name}
-                    if r.response is not None:
-                        item['resp'] = r.response
-                    item.update(r.extra)
-                    output.append(item)
-                json.dump(output, f, indent=2)
-            else:
-                # XXX would probably be better to sanity-check this
-                # when the program loads
-                raise BadOutputFormatError(expert.cfg['output_format'])
+                # negative value disables the timeout
+                self.global_timeout_time = None
+        self.inact_timeout_time = \
+            now + expert.cfg['inact_timeout_secs']
 
     def check_for_timeout(self):
         if self.state != State.ACTIVE:
@@ -544,12 +514,52 @@ class Experiment:
         self.end_time = time.monotonic()
         self.state = state
         if self.profile:
-            # this also includes CONSENT_DECLINED
+            app.logger.info(f'saving responses for sid {self.sid[:4]}')
             self.save_responses()
 
-    def dummy_run(self):
-        while self.state != State.COMPLETE:
-            self.next_task(self.task.dummy_resp())
+
+class Tool(BaseExper):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.assign_profile()
+
+        @socketio.on('prev_page', namespace=f'/{self.sid}')
+        def sio_prev_page(resp):
+            if self.task.prev_task:
+                self.prev_task(resp)
+            return self.task.all_vars()
+
+        @socketio.on('goto', namespace=f'/{self.sid}')
+        def sio_goto(task_label, resp):
+            self.go_to(task_label, resp)
+            return self.task.all_vars()
+
+    def store_resp(self, resp):
+        super().store_resp(resp)
+        self.task.variables['exp_resp'] = resp
+
+    def _nav(self, resp, dest_task):
+        self.store_resp(resp)
+        self.task = dest_task
+        self.task_cursor = dest_task.id
+        self.update_vars()
+        self.save_responses()
+        socketio.emit('update_instance', self.status())
+
+    def prev_task(self, resp):
+        self._nav(resp, self.task.prev_task)
+
+    def next_task(self, resp):
+        self._nav(resp, self.task.next_task(resp))
+
+    def go_to(self, task_label, resp):
+        dest_task = None
+        for label, task in self.nav_items():
+            if label == task_label:
+                dest_task = task
+                break
+        self._nav(resp, dest_task)
 
 
 class Record:

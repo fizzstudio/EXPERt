@@ -77,15 +77,14 @@ export class Task {
         const progress_pct = 100*cursor/num_tasks
         elt('exp-progbar').firstElementChild.style.width = `${progress_pct}%`
         {% if exp_tool_mode %}
-        {% if exp_tool_display_total_tasks%}
-        this.taskCursor.textContent = `${cursor}/${num_tasks}`
-        {% else %}
-        this.taskCursor.textContent = cursor
-        {% endif %}
-        const state = this.vars['exp_state']
-        this.prevBtn.disabled =
-            state === 'CONSENT_DECLINED' || state === 'TIMED_OUT' || cursor < 2
-        this.nextBtn.disabled = state !== 'ACTIVE'
+            {% if exp_tool_display_total_tasks%}
+                this.taskCursor.textContent = `${cursor}/${num_tasks}`
+            {% else %}
+                this.taskCursor.textContent = cursor
+            {% endif %}
+            const state = this.vars['exp_state']
+            this.prevBtn.disabled = cursor < 2
+            this.nextBtn.disabled = cursor === num_tasks
         {% endif %}
     }
 

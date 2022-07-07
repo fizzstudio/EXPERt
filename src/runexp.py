@@ -122,9 +122,12 @@ def get_inst():
     if 'sid' not in session:
         # New participant
         return None
-    try:
-        return experclass.instances[session['sid']]
-    except KeyError:
+    inst = experclass.instances.get(session['sid'])
+    if inst:
+        return inst
+    elif expert.tool_mode:
+        return None
+    else:
         raise BadSessionError('Unrecognized user')
 
 
@@ -228,6 +231,8 @@ if __name__ == '__main__':
 
     cfg['url_prefix'] = args.urlprefix or cfg['url_prefix']
     expert.tool_mode = args.tool
+    experiment.Experiment = experiment.Tool \
+        if expert.tool_mode else experiment.Exper
 
     socketio = SocketIO(
         app, # logger=True,
@@ -298,8 +303,8 @@ if __name__ == '__main__':
         expert.template_vars['exp_tool_display_total_tasks'] = \
             cfg['tool_display_total_tasks']
         app.templates_auto_reload = True
-
-    monitor_task = socketio.start_background_task(monitor, socketio)
+    else:
+        monitor_task = socketio.start_background_task(monitor, socketio)
 
     #dashboard_code = secrets.token_urlsafe(16)
     dashboard_code = cfg.get('dashboard_code')
@@ -318,7 +323,7 @@ if __name__ == '__main__':
         try:
             inst = get_inst()
             if not inst:
-                if experclass.complete:
+                if not expert.tool_mode and experclass.complete:
                     content = expert.render('norun' + expert.template_ext)
                 else:
                     ip = request.headers.get('X-Real-IP', request.remote_addr)

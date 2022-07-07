@@ -7,7 +7,11 @@
     <div id="task">
         <p>
             <strong>
-                Thank you for your participation in this experiment!
+                {% if exp_tool_mode %}
+                    You have reached the end!
+                {% else %}
+                    Thank you for your participation!
+                {% endif %}
             </strong>
         </p>
         {% if exp_prolific_pid %}
