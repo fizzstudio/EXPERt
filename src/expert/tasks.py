@@ -113,6 +113,9 @@ class Task:
         else:
             return self.next_tasks[0]
 
+    def replace_next_task(self, task):
+        self.next_tasks[:] = [task]
+
     def dummy_resp(self):
         return None
 
@@ -128,7 +131,17 @@ class Welcome(NoProgbarTask):
 
 
 class Consent(NoProgbarTask):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.inst.has_consent_task = True
+
+    def next_task(self, resp):
+        if resp == 'consent_declined':
+            app.logger.info(f'sid {self.inst.sid[:4]} declined consent')
+            return NonConsent(self.inst)
+        else:
+            self.inst.assign_profile()
+            return self.next_tasks[0]
 
 
 class Soundcheck(Task):

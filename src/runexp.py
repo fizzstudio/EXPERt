@@ -106,14 +106,13 @@ def monitor(socketio):
     while True:
         socketio.sleep(cfg['monitor_check_interval'])
         for inst in experclass.instances.values():
-            inst.check_for_timeout()
+            if not inst.check_for_timeout():
+                # Exper.end() sends the update if the inst has timed out
+                socketio.emit('update_instance', inst.status())
 
 
 def error(msg):
     return expert.render('error' + expert.template_ext, {'msg': msg})
-
-
-class BadSessionError(Exception): pass
 
 
 def get_inst():
@@ -122,13 +121,10 @@ def get_inst():
     if 'sid' not in session:
         # New participant
         return None
-    inst = experclass.instances.get(session['sid'])
-    if inst:
-        return inst
-    elif expert.tool_mode:
-        return None
-    else:
-        raise BadSessionError('Unrecognized user')
+    # NB: The presence of an existing sid with no
+    # instance now simply results in a new sid+inst,
+    # rather than an error.
+    return experclass.instances.get(session['sid'])
 
 
 def dummy_run(inst_count):
@@ -320,29 +316,23 @@ if __name__ == '__main__':
         if not setup_complete:
             setup()
         content = None
-        try:
-            inst = get_inst()
-            if not inst:
-                if not expert.tool_mode and experclass.complete:
-                    content = expert.render('norun' + expert.template_ext)
+        inst = get_inst()
+        if not inst:
+            if not expert.tool_mode and experclass.complete:
+                content = expert.render('norun' + expert.template_ext)
+            else:
+                ip = request.headers.get('X-Real-IP', request.remote_addr)
+                if ',' in ip:
+                    ip = ip.split(',')[0]
+                if experclass.profiles:
+                    # not full yet
+                    inst = experclass(ip, request.args)
+                    session['sid'] = inst.sid
+                    app.logger.info(f'new instance for sid {inst.sid[:4]}')
+                    socketio.emit('new_instance', inst.status())
+                    inst.will_start()
                 else:
-                    ip = request.headers.get('X-Real-IP', request.remote_addr)
-                    if ',' in ip:
-                        ip = ip.split(',')[0]
-                    if experclass.profiles:
-                        # not full yet
-                        inst = experclass(ip, request.args)
-                        session['sid'] = inst.sid
-                        #session['exper'] = experclass.name
-                        #session['run'] = experclass.record.start_time
-                        #session['profile'] = inst.profile.fqname
-                        app.logger.info(f'new instance for sid {inst.sid[:4]}')
-                        socketio.emit('new_instance', inst.status())
-                        inst.will_start()
-                    else:
-                        content = expert.render('full' + expert.template_ext)
-        except BadSessionError as e:
-            content = error(str(e))
+                    content = expert.render('full' + expert.template_ext)
 
         if content is None:
             content = inst.present()
@@ -362,12 +352,7 @@ if __name__ == '__main__':
         #    referrer is 'localhost'
         # 2. Indirect requests, e.g., dash imports foo.js,
         #    foo.js imports bar.js, have foo.js as the referrer
-        try:
-            inst = get_inst()
-        except BadSessionError as e:
-            #return 'Not Found', 404
-            inst = None
-        if inst:
+        if inst := get_inst():
             body = inst.task.render(f'js/{subpath}.jinja')
         else:
             # probably the dashboard

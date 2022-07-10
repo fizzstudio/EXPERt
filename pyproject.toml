@@ -21,3 +21,6 @@ Homepage = "https://github.com/fizzstudio/EXPERt"
 [build-system]
 requires = ["pdm-pep517>=0.12.0"]
 build-backend = "pdm.pep517.api"
+
+[tool.pyright]
+extraPaths = ["__pypackages__/3.10/lib"]

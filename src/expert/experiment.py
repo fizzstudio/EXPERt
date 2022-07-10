@@ -71,6 +71,8 @@ class BaseExper:
 
     def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
+        self.urlargs = urlargs
+        self.dummy = dummy
 
         self.profile = None
 
@@ -88,6 +90,8 @@ class BaseExper:
         self.num_tasks_created = 0
         #self.num_tasks_completed = 0
         self.task_cursor = 1
+        # gets set to True if a Consent task is created
+        self.has_consent_task = False
 
         # response returned by current task
         self.response = None
@@ -273,13 +277,18 @@ class BaseExper:
         self.profile = self.profiles.pop(0)
         app.logger.info(
             f'sid {self.sid[:4]} assigned profile: {self.profile}')
+        self.create_tasks()
+        self.variables['exp_num_tasks'] = self.num_tasks_created
 
     def will_start(self):
         self.first_task = self.task
+        if not self.has_consent_task:
+            self.assign_profile()
         self.variables['exp_num_tasks'] = self.num_tasks_created
-        self.variables['exp_nav_items'] = [label
-                                           for label, task in self.nav_items()]
         self.update_vars()
+
+    def create_tasks(self):
+        pass
 
     def nav_items(self):
         if self.last_task:
@@ -298,11 +307,7 @@ class BaseExper:
         task_resp = TaskResponse(
             resp, self.task.template_name, **self.task.resp_extra)
         self.responses[self.task.id] = task_resp
-        #if self.task_cursor > len(self.responses):
-        #    self.responses.append(task_resp)
-        #else:
-            # should only ever do this in tool mode
-        #    self.responses[self.task_cursor - 1] = task_resp
+        #self.task.did_store_resp(resp)
 
     def status(self):
         if self.state == State.ACTIVE:
@@ -392,15 +397,16 @@ class Exper(BaseExper):
         if expert.cfg['save_user_agent']:
             self.pseudo_responses.append(
                 TaskResponse(
-                    'DUMMY' if dummy else request.headers.get('User-Agent'),
+                    'DUMMY' if self.dummy
+                    else request.headers.get('User-Agent'),
                     'USER_AGENT'))
         if expert.cfg['save_ip_hash']:
             iphash = hashlib.blake2b(
                 bytes(self.clientip, 'ascii'), digest_size=10).hexdigest()
             self.pseudo_responses.append(
                 TaskResponse(iphash, 'IPHASH'))
-        if expert.cfg['prolific_pid_param'] in urlargs:
-            self.prolific_pid = urlargs[expert.cfg['prolific_pid_param']]
+        if expert.cfg['prolific_pid_param'] in self.urlargs:
+            self.prolific_pid = self.urlargs[expert.cfg['prolific_pid_param']]
             #app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
             self.pseudo_responses.append(
                 TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
@@ -414,62 +420,43 @@ class Exper(BaseExper):
         self.global_timeout_time = None
 
     @classmethod
-    def complete_run(cls):
-        app.logger.info('--- run complete ---')
-        cls.complete = True
-        socketio.emit('run_complete')
+    def check_for_run_complete(cls):
+        if not cls.profiles and \
+           not any(i.state == State.ACTIVE for i in cls.instances):
+            app.logger.info('--- run complete ---')
+            cls.complete = True
+            socketio.emit('run_complete')
 
-    def store_resp(self, resp):
-        super().store_resp(resp)
-        app.logger.info(
-            f'sid {self.sid[:4]} completed "{task_resp.task_name}"' +
-            f' ({self.task_cursor})')
+    def check_for_complete(self):
+        if not self.task.next_tasks and self.profile:
+            # (The Consent task initially has no next_tasks,
+            # because the profile hasn't been assigned yet.)
+            # We have moved onto the final task. This will
+            # typically be some sort of "thank you" page
+            # that returns the participant to mturk or wherever.
+            # No response is collected from this task.
+            # When the final task is displayed, the subject's responses
+            # are saved to disk. Their instance remains in memory
+            # so that if they reload the page, they won't lose any,
+            # e.g., mturk completion code that is displayed.
+            self.end(State.COMPLETE)
+            self.check_for_run_complete()
 
     def next_task(self, resp):
         self.store_resp(resp)
-        try:
-            if self.state == State.ACTIVE:
-
-                if isinstance(self.task, tasks.Consent):
-                    if resp == 'consent_declined':
-                        # make sure we didn't time out right before
-                        app.logger.info(f'sid {self.sid[:4]} declined consent')
-                        self.task = tasks.NonConsent(self)
-                        self.end(State.CONSENT_DECLINED)
-                        # NB: the sid stays in the session so we can keep
-                        # serving up the consent-declined page
-                        #self.profiles.insert(0, self.profile)
-                        return
-                    else:
-                        self.assign_profile()
-                        # new tasks get created
-                        self.variables['exp_num_tasks'] = self.num_tasks_created
-
-                # XXX currently doesn't handle forking task paths
-                self.task = self.task.next_task(resp)
-                self.task_cursor += 1
-
-                self.update_timeouts()
-
-                if not self.task.next_tasks and \
-                   not isinstance(self.task, tasks.Consent):
-                    # (The Consent task initially has no next_tasks,
-                    # because the profile hasn't been assigned yet.)
-                    # We have moved onto the final task. This will
-                    # typically be some sort of "thank you" page
-                    # that returns the participant to mturk or wherever.
-                    # No response is collected from this task.
-                    # When the final task is displayed, the subject's responses
-                    # are saved to disk. Their instance remains in memory
-                    # so that if they reload the page, they won't lose any,
-                    # e.g., mturk completion code that is displayed.
-                    self.end(State.COMPLETE)
-                    if not self.profiles and \
-                       not any(i.state == State.ACTIVE for i in self.instances):
-                        self.complete_run()
-
-        finally:
-            self.update_vars()
+        app.logger.info(
+            f'sid {self.sid[:4]} completed "{self.task.template_name}"' +
+            f' ({self.task.id})')
+        self.task = self.task.next_task(resp)
+        self.task_cursor = self.task.id
+        if isinstance(self.task, tasks.NonConsent):
+            self.end(State.CONSENT_DECLINED)
+        if self.state == State.ACTIVE:
+            self.update_timeouts()
+            # may change self.state
+            self.check_for_complete()
+        self.update_vars()
+        if self.state == State.ACTIVE:
             socketio.emit('update_instance', self.status())
 
     def update_timeouts(self):
@@ -485,7 +472,7 @@ class Exper(BaseExper):
 
     def check_for_timeout(self):
         if self.state != State.ACTIVE:
-            return
+            return False
         if self.global_timeout_time:
             tout_time = min(self.inact_timeout_time,
                             self.global_timeout_time)
@@ -493,26 +480,27 @@ class Exper(BaseExper):
             tout_time = self.inact_timeout_time
         if tout_time and time.monotonic() >= tout_time:
             app.logger.info(f'sid {self.sid[:4]} timed out')
-            self.task = tasks.TimedOut(self)
+            self.task.replace_next_task(tasks.TimedOut(self))
             self.end(State.TIMED_OUT)
             if self.profile:
                 self.profiles.insert(0, self.profile)
-        socketio.emit('update_instance', self.status())
+            return True
+        return False
 
     def terminate(self):
         if self.state != State.ACTIVE:
             return
         app.logger.info(f'sid {self.sid[:4]} terminated')
-        self.task = tasks.Terminated(self)
+        self.task.replace_next_task(tasks.Terminated(self))
         self.end(State.TERMINATED)
         if self.profile:
             self.profiles.insert(0, self.profile)
-        socketio.emit('update_instance', self.status())
 
-    # called for normal completion, timeout, nonconsent, or termination
     def end(self, state):
+        # called for normal completion, timeout, nonconsent, or termination
         self.end_time = time.monotonic()
         self.state = state
+        socketio.emit('update_instance', self.status())
         if self.profile:
             app.logger.info(f'saving responses for sid {self.sid[:4]}')
             self.save_responses()
@@ -522,7 +510,6 @@ class Tool(BaseExper):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.assign_profile()
 
         @socketio.on('prev_page', namespace=f'/{self.sid}')
         def sio_prev_page(resp):
@@ -535,6 +522,11 @@ class Tool(BaseExper):
             self.go_to(task_label, resp)
             return self.task.all_vars()
 
+    def assign_profile(self):
+        super().assign_profile()
+        self.variables['exp_nav_items'] = [
+            label for label, task in self.nav_items()]
+
     def store_resp(self, resp):
         super().store_resp(resp)
         self.task.variables['exp_resp'] = resp
@@ -544,7 +536,8 @@ class Tool(BaseExper):
         self.task = dest_task
         self.task_cursor = dest_task.id
         self.update_vars()
-        self.save_responses()
+        if self.profile:
+            self.save_responses()
         socketio.emit('update_instance', self.status())
 
     def prev_task(self, resp):

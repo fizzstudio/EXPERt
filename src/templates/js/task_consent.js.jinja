@@ -6,8 +6,8 @@ const dom = elts('consent-agree-box', 'radio1', 'radio2');
 
 class ConsentTask extends Task {
 
-    constructor() {
-        super();
+    async reset() {
+        await super.reset();
         this.disableNext();
 
         this.guide(dom['consent-agree-box']);
