@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 import random
 import sys
 import time
@@ -11,6 +13,7 @@ import secrets
 from pathlib import Path
 from enum import Enum
 from functools import reduce
+from typing import Type, List, Dict
 
 from flask import request
 
@@ -65,9 +68,10 @@ class BadOutputFormatError(Exception):
 
 class BaseExper:
 
+    #profiles: List[profile.Profile] = []
     profiles = []
     # sid: <Experiment subclass inst>
-    instances = {}
+    instances: Dict[str, BaseExper] = {}
 
     def __init__(self, clientip, urlargs, dummy=False):
         self.sid = secrets.token_hex(16)
@@ -606,3 +610,6 @@ class Record:
             #     fields['time_end'] = self.time_end
             fields['replicate'] = self.replicate or ''
             print(strictyaml.as_document(fields).as_yaml(), file=f)
+
+
+Experiment: Type[Exper]|Type[Tool]

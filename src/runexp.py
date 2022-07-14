@@ -9,6 +9,7 @@ import zipfile
 import shutil
 
 from pathlib import Path
+from typing import Type, Optional
 
 from flask import (
     Flask, session,
@@ -67,14 +68,14 @@ def load_exper(exper_path):
     app.logger.info(f'experiment package name: {pkg.__name__}')
     spec.loader.exec_module(pkg)
 
-    #params = importlib.import_module('.params', pkg)
-    params = __import__('src.params', fromlist=['params'])
+    ##params = importlib.import_module('.params', pkg)
+    #params = __import__('src.params', fromlist=['params'])
     # return the first subclass of Experiment found
     for k, v in pkg.__dict__.items():
         if isinstance(v, type) and issubclass(v, experiment.Experiment) \
            and v is not experiment.Experiment:
-            return v, params
-    return None, None
+            return v
+    return None
 
 
 def read_config(exper_path):
@@ -275,7 +276,8 @@ if __name__ == '__main__':
             cfg['host'] = args.listen
     app.logger.info(f'listening on {cfg["host"]}:{cfg["port"]}')
 
-    experclass, experparams = load_exper(args.exper_path)
+    experclass: Optional[Type[experiment.Experiment]] = \
+        load_exper(args.exper_path)
 
     if not experclass:
         sys.exit(f'unable to load experiment "{args.exper_path}"')

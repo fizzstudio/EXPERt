@@ -14,11 +14,9 @@ public/script/
 
 ## No external packages
 node_modules/
+__pypackages__
 
-# Data files
-**/chart-data
-
-# Env files      
+# Env files
 ## A good safeguard against accidentally publishing
 ##  private information, including security keys
 .vscode/
@@ -32,4 +30,7 @@ node_modules/
 ## experiments and references _ignore/        
 ## Macs often create this file
 .DS_Store       
+
 ## Personal project notes, not my reference notes.md
+profiles
+runs
