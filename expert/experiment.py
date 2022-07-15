@@ -179,6 +179,7 @@ class BaseExper:
         # NB: this is now an absolute path;
         # previously, it was relative to global_root
         cls.dir_path = Path(path).resolve(True)
+        app.logger.info(f'bundle path: {cls.dir_path}')
         cls.static_path = cls.dir_path / expert.cfg['static_dir']
         cls.profiles_path = cls.dir_path / expert.cfg['profiles_dir']
         cls.runs_path = cls.dir_path / expert.cfg['runs_dir']
