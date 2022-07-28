@@ -1,5 +1,5 @@
 
-import { elt, callApi } from '/{{ exp_js }}/util.js'
+import { elt, callApi } from '{{ exp_js }}/util.js'
 
 export class Task {
 
@@ -149,7 +149,7 @@ export class Task {
     // Pre-load a sound
     loadSound(sound) {
         return new Audio(
-            `/{{ exp_url_prefix }}/{{ exp_exper }}/audio/${sound}.mp3`)
+            `{{ exp_app_static }}/audio/${sound}.mp3`)
     }
 }
 

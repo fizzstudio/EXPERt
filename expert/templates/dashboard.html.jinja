@@ -11,8 +11,8 @@
 
     <script type="module">
 
-     import { Dialog, ConfirmDialog } from '/{{ exp_js }}/dialog.js';
-     import { elt, callApi } from '/{{ exp_js }}/util.js';
+     import { Dialog, ConfirmDialog } from '{{ exp_js }}/dialog.js';
+     import { elt, callApi } from '{{ exp_js }}/util.js';
 
      class RunsDialog extends Dialog {
 
@@ -147,7 +147,7 @@
 
      }
 
-     const exper = "{{ exp_exper }}";
+     const exper = "{{ exp_app_name }}";
 
      class Controller {
 
@@ -281,7 +281,7 @@
 
         <h2>Dashboard</h2>
         <div>
-            <strong>{{ exp_exper }} ({{ num_profiles }} profiles);
+            <strong>{{ exp_app_name }} ({{ num_profiles }} profiles);
                 run <span id="run-info"></span></strong>
         </div>
         <div id="controls">

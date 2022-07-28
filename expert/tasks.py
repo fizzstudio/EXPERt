@@ -1,9 +1,14 @@
 
-from dataclasses import dataclass, field
+from __future__ import annotations
 
-from flask import render_template, current_app as app
+from dataclasses import dataclass, field
+from typing import ClassVar, Any, Optional
+
+from flask import current_app as app
 
 import expert
+
+from . import templates
 
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
@@ -23,14 +28,24 @@ class TaskDesc:
 
 class Task:
 
-    template = ''
+    template: ClassVar[str] = ''
+
+    inst: expert.Experiment
+    template_name: str
+    template_filename: str
+    variables: dict[str, Any]
+    prev_task: Optional[Task]
+    next_tasks: list[Task]
+    timeout_secs: Optional[int]
+    resp_extra: dict[str, Any]
+    id: int
 
     def __init__(self, inst, template=None, variables=None, timeout_secs=None):
         self.inst = inst
         self.sid = inst.sid
         self.template_name = template or self.template
         self.template_filename = \
-            f'task_{self.template_name}{expert.template_ext}'
+            f'task_{self.template_name}{templates.html_ext}'
         # if (exper.templates_path() / self.template_filename).is_file():
         #     self.template_filename = \
         #         f'{exper.name()}/{self.template_filename}'
@@ -48,12 +63,13 @@ class Task:
         # 'next_tasks' for another task;
         # the ID determines the order task results are saved
         self.id = self.inst.num_tasks_created
+        self.inst.tasks_by_id[self.id] = self
 
     def get_feedback(self, response):
         pass
 
     def all_vars(self):
-        all_vars = expert.template_vars.copy()
+        all_vars = templates.variables.copy()
         all_vars.update(self.inst.variables)
         all_vars.update(self.variables)
         return all_vars
@@ -62,7 +78,7 @@ class Task:
         all_vars = self.inst.variables.copy()
         all_vars.update(self.variables)
         all_vars.update(tplt_vars)
-        return expert.render(tplt, all_vars)
+        return templates.render(tplt, all_vars)
 
     def present(self, tplt_vars={}):
         return self.render(self.template_filename, tplt_vars)

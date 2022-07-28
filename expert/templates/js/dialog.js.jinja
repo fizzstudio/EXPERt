@@ -1,7 +1,7 @@
 
 
-import { View } from '/{{ exp_js }}/view.js'
-import { elt } from '/{{ exp_js }}/util.js'
+import { View } from '{{ exp_js }}/view.js'
+import { elt } from '{{ exp_js }}/util.js'
 
 export class Dialog extends View {
 
@@ -19,6 +19,7 @@ export class Dialog extends View {
         // multiple dialogs may be present in the DOM
         this.btnsWrapper = this.node.querySelector(
             '.exp-dlg-elements-buttons')
+        this.visible = false;
     }
 
     set titlebar(t) {
@@ -71,6 +72,7 @@ export class Dialog extends View {
             btn.disabled = disabled
         }
         document.querySelector('body').lastChild.after(this.node)
+        this.visible = true;
         //this.dlgFilter.style.display = 'block'
         //this.node.style.display = 'flex'
         if (afterFunc) {
@@ -115,6 +117,7 @@ export class Dialog extends View {
         document.onkeydown = this.oldOnkeydown
         //this.node.style.display = 'none'
         this.node.remove()
+        this.visible = false;
         //this.dlgFilter.style.display = 'none'
     }
 }

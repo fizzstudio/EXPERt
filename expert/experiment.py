@@ -3,23 +3,25 @@ from __future__ import annotations
 
 import random
 import sys
+import traceback
 import time
+import datetime
 import importlib
+import importlib.util
 import csv
 import json
-import hashlib
 import secrets
 
 from pathlib import Path
 from enum import Enum
 from functools import reduce
-from typing import Type, List, Dict
+from typing import ClassVar, Optional, Any
 
-from flask import request
+from flask import session, request, make_response, send_from_directory
 
 import expert
 from . import (
-    tasks, timestamp
+    tasks, timestamp, profile, templates
 )
 
 import strictyaml
@@ -41,11 +43,9 @@ resp_file_suffixes = {
 
 
 class TaskResponse:
-
-    # args:
-    #  response: any
-    #  task_name: str
-    #  extra: {str:any}
+    response: Any
+    task_name: str
+    extra: dict[str, Any]
     def __init__(self, response, task_name, **extra):
         self.response = response
         self.task_name = task_name
@@ -68,30 +68,49 @@ class BadOutputFormatError(Exception):
 
 class BaseExper:
 
-    #profiles: List[profile.Profile] = []
-    profiles = []
+    dir_path: ClassVar[Path]
+    static_path: ClassVar[Path]
+    profiles_path: ClassVar[Path]
+    runs_path: ClassVar[Path]
+    templates_path: ClassVar[Path]
+    dls_path: ClassVar[Path]
+    mode: ClassVar[str]
+    target: ClassVar[Optional[str]]
+    run: ClassVar[str]
+    record: ClassVar[Record]
+    replicate: ClassVar[Optional[Record]]
+    name: ClassVar[str]
+    profiles: ClassVar[list[profile.Profile]] = []
     # sid: <Experiment subclass inst>
-    instances: Dict[str, BaseExper] = {}
+    instances: ClassVar[dict[str, BaseExper]] = {}
 
-    def __init__(self, clientip, urlargs, dummy=False):
+    ## instance vars
+    sid: str
+    profile: Optional[profile.Profile]
+    start_time: float
+    start_timestamp: str
+    task: tasks.Task
+    last_task: tasks.Task
+    tasks_by_id: dict[int, tasks.Task]
+
+    def __init__(self, clientip, urlargs):
         self.sid = secrets.token_hex(16)
         self.urlargs = urlargs
-        self.dummy = dummy
 
         self.profile = None
 
         self.instances[self.sid] = self
         self.start_time = time.monotonic()
-        self.end_time = None
         self.start_timestamp = timestamp.make_timestamp()
 
         # tasks are stored in a linked tree structure
-        self.task = None
+        #self.task = None
         # None if there are forking paths through the experiment
-        self.last_task = None
+        #self.last_task = None
         # total number of task instances created
         # (not necessarily the number the participant will complete)
         self.num_tasks_created = 0
+        self.tasks_by_id = {}
         #self.num_tasks_completed = 0
         self.task_cursor = 1
         # gets set to True if a Consent task is created
@@ -127,7 +146,7 @@ class BaseExper:
                 # to hit 'Next' on the final task screen,
                 # which shouldn't be possible ...
                 #self.handle_response(resp)
-                self.next_task(resp)
+                self._next_task(resp)
             return self.task.all_vars()
 
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
@@ -136,17 +155,143 @@ class BaseExper:
 
         @socketio.on_error(f'/{self.sid}')
         def sio_inst_error(e):
-            app.logger.info(f'socketio error: {e}')
+            expert.log.info(f'socketio error:\n{traceback.format_exc()}')
 
     @classmethod
-    def setup(cls, path, conds):
-        global app, socketio
-        from . import app as theapp
+    def start(cls, path, mode, obj, conds=None, tool_mode=False):
+        cls.dir_path = Path(path).resolve(True)
+
+        cls._read_config()
+
+        cls.mode = mode
+        cls.target = None
+        if mode == 'res':
+            cls.run = obj
+        elif mode == 'rep':
+            cls.target = obj
+            cls.run = timestamp.make_timestamp()
+        else:
+            cls.run = timestamp.make_timestamp()
+
+        expert.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
+
+        expert.experclass = cls._load()
+        if expert.experclass is None:
+            sys.exit(f'unable to load experiment "{cls.dir_path}"')
+
+        expert.experclass._setup(path, conds)
+        expert.experclass._add_routes()
+
+        templates.set_variables()
+
+        cls.running = True
+
+    @classmethod
+    def _add_routes(cls):
+        first_request_setup_complete = False
+
+        @expert.app.route('/' + expert.cfg['url_prefix'])
+        def index():
+            nonlocal first_request_setup_complete
+            if not first_request_setup_complete:
+                cls._first_request_setup()
+                first_request_setup_complete = True
+            content = None
+            inst = expert.get_inst()
+            if not inst:
+                if not expert.tool_mode and not cls.running:
+                    content = templates.render('norun' + templates.html_ext)
+                else:
+                    ip = request.headers.get('X-Real-IP', request.remote_addr)
+                    if ',' in ip:
+                        ip = ip.split(',')[0]
+                    if cls.profiles:
+                        # not full yet
+                        inst = cls(ip, request.args)
+                        session['sid'] = inst.sid
+                        expert.log.info(f'new instance for sid {inst.sid[:4]}')
+                        socketio.emit('new_instance', inst.status())
+                        inst._will_start()
+                    else:
+                        content = templates.render('full' + templates.html_ext)
+
+            if content is None:
+                content = inst._present()
+
+            resp = make_response(content)
+            # Caching is disabled entirely to ensure that
+            # users always get fresh content
+            resp.cache_control.no_store = True
+
+            return resp
+
+        @expert.app.route(f'/{expert.cfg["url_prefix"]}/app/{cls.id}/<path:subpath>')
+        def exper_static(subpath):
+            return send_from_directory(cls.static_path, subpath)
+
+    @classmethod
+    def _first_request_setup(cls):
+        # session will expire after 24 hours
+        expert.app.permanent_session_lifetime = datetime.timedelta(hours=24)
+        # session cookie will expire after app.permanent_session_lifetime
+        session.permanent = True
+        if request.url.startswith('https'):
+            expert.app.config['SESSION_COOKIE_SECURE'] = True
+        else:
+            expert.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+    @classmethod
+    def _read_config(cls):
+        with open(expert.expert_path / 'cfg.json') as f:
+            cls.cfg = json.load(f)
+        exper_cfg_path = cls.dir_path / 'cfg.json'
+        exper_cfg = {}
+        if exper_cfg_path.is_file():
+            with open(exper_cfg_path) as f:
+                exper_cfg = json.load(f)
+
+        exper_id = exper_cfg.get('id')
+        cls.id = exper_id or secrets.token_urlsafe(8)
+        if not exper_id:
+            exper_cfg['id'] = cls.id
+            with open(exper_cfg_path, 'w') as f:
+                json.dump(exper_cfg, f, indent=2)
+
+        cls.cfg.update(exper_cfg)
+
+    @classmethod
+    def _load(cls):
+        """Load the experiment in the directory at cls.dir_path.
+
+        NB: The source code for the experiment must be located in
+        the 'src' subfolder of the experiment bundle directory.
+        E.g., if exper_path == '/foo/bar/my_exper', the source code
+        must be located in /foo/bar/my_exper/src.
+        """
+        #exper_path = Path(exper_path).resolve(True)
+        expert.log.info(f'loading experiment from {cls.dir_path}')
+        init_path = cls.dir_path / 'src' / '__init__.py'
+        spec = importlib.util.spec_from_file_location('src', init_path)
+        pkg = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = pkg
+        expert.log.info(f'experiment package name: {pkg.__name__}')
+        spec.loader.exec_module(pkg)
+        ##params = importlib.import_module('.params', pkg)
+        #params = __import__('src.params', fromlist=['params'])
+        # return the first subclass of Experiment found
+        for k, v in pkg.__dict__.items():
+            if isinstance(v, type) and issubclass(v, expert.Experiment) and \
+               v is not expert.Experiment:
+                return v
+        return None
+
+    @classmethod
+    def _setup(cls, path, conds):
+        global socketio
         from . import socketio as thesocketio
-        app, cls.app = theapp, theapp
         socketio = thesocketio
         cls.name = cls.__qualname__.lower()
-        cls.setup_paths(path)
+        cls._setup_paths()
         cls.pkg = sys.modules[cls.__module__]
         if conds:
             unknown_conds = [c for c in conds
@@ -160,49 +305,44 @@ class BaseExper:
         cls.dls_path.mkdir(exist_ok=True)
         cls.conds = conds
         cls.replicate = None
-        if expert.mode == 'rep':
-            cls.record = Record(cls)
-            cls.record.replicate = expert.target
+        cls.record = Record(cls)
+        if cls.mode == 'rep':
+            cls.record.replicate = cls.target
             cls.record.save()
-            cls.replicate = Record(cls, expert.target)
-        elif expert.mode == 'res':
-            cls.record = Record(cls, target)
+            cls.replicate = Record(cls, cls.target)
+        elif cls.mode == 'res':
             if cls.record.replicate:
                 cls.replicate = Record(cls, cls.record.replicate)
         else:
-            cls.record = Record(cls)
             cls.record.save()
-        cls.load_profiles()
+        cls._load_profiles()
 
     @classmethod
-    def setup_paths(cls, path):
-        # NB: this is now an absolute path;
-        # previously, it was relative to global_root
-        cls.dir_path = Path(path).resolve(True)
-        app.logger.info(f'bundle path: {cls.dir_path}')
-        cls.static_path = cls.dir_path / expert.cfg['static_dir']
-        cls.profiles_path = cls.dir_path / expert.cfg['profiles_dir']
-        cls.runs_path = cls.dir_path / expert.cfg['runs_dir']
-        cls.templates_path = cls.dir_path / expert.cfg['templates_dir']
-        cls.dls_path = cls.dir_path / expert.cfg['dls_dir']
+    def _setup_paths(cls):
+        expert.log.info(f'bundle path: {cls.dir_path}')
+        cls.static_path = cls.dir_path / cls.cfg['static_dir']
+        cls.profiles_path = cls.dir_path / cls.cfg['profiles_dir']
+        cls.runs_path = cls.dir_path / cls.cfg['runs_dir']
+        cls.templates_path = cls.dir_path / cls.cfg['templates_dir']
+        cls.dls_path = cls.dir_path / cls.cfg['dls_dir']
 
     @classmethod
-    def read_cond_paths(cls):
+    def _read_cond_paths(cls):
         return [p for p in cls.profiles_path.iterdir()
                 if p.is_dir() and p.stem[0] != '.']
 
     @classmethod
-    def load_profiles(cls):
+    def _load_profiles(cls):
         if cls.replicate:
             rep_profs = cls.replicate.completed_profiles()
         else:
             rep_profs = None
-        cond_paths = cls.read_cond_paths()
+        cond_paths = cls._read_cond_paths()
         if not cond_paths:
-            cls.make_profiles()
-            cond_paths = cls.read_cond_paths()
+            cls._make_profiles()
+            cond_paths = cls._read_cond_paths()
 
-        app.logger.info('loading profiles')
+        expert.log.info('loading profiles')
         cls.profiles.clear()
         for cond_path in cond_paths:
             condname = cond_path.name
@@ -221,7 +361,7 @@ class BaseExper:
                 #fullprofname = f'{cond_path.name}/{profname}'
                 if not (run_cond_path / profname).is_file():
                     p = cls.profile_mod().Profile.load(
-                        cls, condname, profname)
+                        condname, profname)
                     cls.profiles.append(p)
         random.shuffle(cls.profiles)
         # the actual list of profiles will shrink
@@ -229,16 +369,16 @@ class BaseExper:
         cls.num_profiles = len(cls.profiles)
 
     @classmethod
-    def make_profiles(cls):
-        app.logger.info('creating profiles')
+    def _make_profiles(cls):
+        expert.log.info('creating profiles')
         cls.cond_size = round(
             cls.params_mod().n_profiles/len(cls.cond_mod().conds))
-        app.logger.info(f'profiles per condition: {cls.cond_size}')
+        expert.log.info(f'profiles per condition: {cls.cond_size}')
         for cname, c in cls.cond_mod().conds.items():
-            app.logger.info(f'creating profiles for condition {cname}')
+            expert.log.info(f'creating profiles for condition {cname}')
             (cls.profiles_path / cname).mkdir()
             for i in range(cls.cond_size):
-                p = cls.profile_mod().Profile(cls, c)
+                p = cls.profile_mod().Profile(c)
                 p.save()
 
     @classmethod
@@ -253,72 +393,18 @@ class BaseExper:
     def profile_mod(cls):
         return importlib.import_module('.profile', cls.pkg.__package__)
 
-    @classmethod
-    def all_active(cls):
-        return [inst for inst in cls.instances.values()
-                if inst.state == State.ACTIVE]
-
-    @classmethod
-    def start_new_run(cls):
-        app.logger.info('--- starting new run ---')
-        for inst in cls.all_active():
-            inst.terminate()
-        #cls.instances.clear()
-        cls.load_profiles()
-        expert.run = timestamp.make_timestamp()
-        cls.record = Record(cls)
-        if expert.mode == 'rep':
-            cls.record.replicate = expert.target
-        elif expert.mode == 'res':
-            if cls.replicate:
-                expert.mode = 'rep'
-                cls.record.replicate = expert.target
-            else:
-                expert.mode = 'new'
-        cls.record.save()
-        cls.complete = False
-
-    def assign_profile(self):
-        self.profile = self.profiles.pop(0)
-        app.logger.info(
-            f'sid {self.sid[:4]} assigned profile: {self.profile}')
-        self.create_tasks()
-        self.variables['exp_num_tasks'] = self.num_tasks_created
-
-    def will_start(self):
-        self.first_task = self.task
-        if not self.has_consent_task:
-            self.assign_profile()
-        self.variables['exp_num_tasks'] = self.num_tasks_created
-        self.update_vars()
-
     def create_tasks(self):
+        """Overridden by the bundle class to create post-consent tasks."""
         pass
 
     def nav_items(self):
+        """May be overridden by the bundle class to add nav menu items."""
         if self.last_task:
             return [('First', self.first_task), ('Last', self.last_task)]
         else:
             return []
 
-    def present(self, tplt_vars={}):
-        return self.task.present(tplt_vars)
-
-    def update_vars(self):
-        self.variables['exp_task_cursor'] = self.task_cursor
-        self.variables['exp_state'] = self.state.name
-
-    def store_resp(self, resp):
-        task_resp = TaskResponse(
-            resp, self.task.template_name, **self.task.resp_extra)
-        self.responses[self.task.id] = task_resp
-        #self.task.did_store_resp(resp)
-
     def status(self):
-        if self.state == State.ACTIVE:
-            elapsed_time = time.monotonic() - self.start_time
-        else:
-            elapsed_time = self.end_time - self.start_time
         y, mo, d, h, mi, s = self.start_timestamp.split('.')
         return [
             self.sid, self.clientip,
@@ -326,9 +412,42 @@ class BaseExper:
             self.state.name, self.task_cursor,
             #self.start_timestamp[11:].replace('.', ':'),
             f'{mo}/{d}/{y} {h}:{mi}:{s}',
-            f'{elapsed_time/60:.1f}']
+            f'{self._elapsed_time()/60:.1f}']
 
-    def save_pii(self, pii):
+    def assign_profile(self):
+        self.profile = self.profiles.pop(0)
+        expert.log.info(
+            f'sid {self.sid[:4]} assigned profile: {self.profile}')
+        self.create_tasks()
+        self.variables['exp_num_tasks'] = self.num_tasks_created
+
+    def _will_start(self):
+        self.first_task = self.task
+        if not self.has_consent_task:
+            self.assign_profile()
+        self.variables['exp_num_tasks'] = self.num_tasks_created
+        self._update_vars()
+
+    def _next_task(self, resp):
+        pass
+
+    def _present(self, tplt_vars={}):
+        return self.task.present(tplt_vars)
+
+    def _update_vars(self):
+        self.variables['exp_task_cursor'] = self.task_cursor
+        self.variables['exp_state'] = self.state.name
+
+    def _store_resp(self, resp):
+        task_resp = TaskResponse(
+            resp, self.task.template_name, **self.task.resp_extra)
+        self.responses[self.task.id] = task_resp
+        #self.task.did_store_resp(resp)
+
+    def _elapsed_time(self):
+        return time.monotonic() - self.start_time
+
+    def _save_pii(self, pii):
         # dir might exist if resuming
         self.record.id_mapping_path.mkdir(exist_ok=True)
         pii_path = self.record.id_mapping_path / self.sid
@@ -339,7 +458,7 @@ class BaseExper:
         with open(pii_path, 'w') as f:
             json.dump(output, f, indent=2)
 
-    def save_responses(self):
+    def _save_responses(self):
         cond_path = self.record.run_path / str(self.profile.cond)
         resp_path = cond_path / (self.profile.subjid +
                                  resp_file_suffixes.get(self.state, ''))
@@ -348,18 +467,18 @@ class BaseExper:
                         for tid in sorted(self.responses.keys())]
         all_resps = self.pseudo_responses + actual_resps
         def splitter(pii_resps, resp):
-            if resp.task_name in expert.cfg['pii']:
+            if resp.task_name in self.cfg['pii']:
                 pii_resps[0].append(resp)
             else:
                 pii_resps[1].append(resp)
             return pii_resps
         pii, resps = reduce(splitter, all_resps, [[], []])
         if pii:
-            self.save_pii(pii)
+            self._save_pii(pii)
 
         # newline='' must be set for the csv module
         with open(resp_path, 'w', newline='') as f:
-            if expert.cfg['output_format'] == 'csv':
+            if self.cfg['output_format'] == 'csv':
                 writer = csv.writer(f, lineterminator='\n')
                 extras = set()
                 # collect all extra response field names
@@ -372,7 +491,7 @@ class BaseExper:
                     # NB: None is written as the empty string
                     writer.writerow([r.timestamp, r.task_name, r.response,
                                      *[r.extra.get(e) for e in extras]])
-            elif expert.cfg['output_format'] == 'json':
+            elif self.cfg['output_format'] == 'json':
                 output = []
                 for r in resps:
                     item = {'tstamp': r.timestamp, 'task': r.task_name}
@@ -384,187 +503,14 @@ class BaseExper:
             else:
                 # XXX would probably be better to sanity-check this
                 # when the program loads
-                raise BadOutputFormatError(expert.cfg['output_format'])
-
-    def dummy_run(self):
-        while self.state != State.COMPLETE:
-            self.next_task(self.task.dummy_resp())
-
-
-class Exper(BaseExper):
-
-    # Will be True when all profiles have completed the experiment.
-    complete = False
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if expert.cfg['save_user_agent']:
-            self.pseudo_responses.append(
-                TaskResponse(
-                    'DUMMY' if self.dummy
-                    else request.headers.get('User-Agent'),
-                    'USER_AGENT'))
-        if expert.cfg['save_ip_hash']:
-            iphash = hashlib.blake2b(
-                bytes(self.clientip, 'ascii'), digest_size=10).hexdigest()
-            self.pseudo_responses.append(
-                TaskResponse(iphash, 'IPHASH'))
-        if expert.cfg['prolific_pid_param'] in self.urlargs:
-            self.prolific_pid = self.urlargs[expert.cfg['prolific_pid_param']]
-            #app.logger.info(f'PROLIFIC_PID: {self.prolific_pid}')
-            self.pseudo_responses.append(
-                TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
-
-        if self.prolific_pid:
-            self.variables['exp_prolific_completion_url'] = \
-                expert.cfg['prolific_completion_url']
-
-        self.inact_timeout_time = \
-            self.start_time + expert.cfg['inact_timeout_secs']
-        self.global_timeout_time = None
-
-    @classmethod
-    def check_for_run_complete(cls):
-        if not cls.profiles and \
-           not any(i.state == State.ACTIVE for i in cls.instances):
-            app.logger.info('--- run complete ---')
-            cls.complete = True
-            socketio.emit('run_complete')
-
-    def check_for_complete(self):
-        if not self.task.next_tasks and self.profile:
-            # (The Consent task initially has no next_tasks,
-            # because the profile hasn't been assigned yet.)
-            # We have moved onto the final task. This will
-            # typically be some sort of "thank you" page
-            # that returns the participant to mturk or wherever.
-            # No response is collected from this task.
-            # When the final task is displayed, the subject's responses
-            # are saved to disk. Their instance remains in memory
-            # so that if they reload the page, they won't lose any,
-            # e.g., mturk completion code that is displayed.
-            self.end(State.COMPLETE)
-            self.check_for_run_complete()
-
-    def next_task(self, resp):
-        self.store_resp(resp)
-        app.logger.info(
-            f'sid {self.sid[:4]} completed "{self.task.template_name}"' +
-            f' ({self.task.id})')
-        self.task = self.task.next_task(resp)
-        self.task_cursor = self.task.id
-        if isinstance(self.task, tasks.NonConsent):
-            self.end(State.CONSENT_DECLINED)
-        if self.state == State.ACTIVE:
-            self.update_timeouts()
-            # may change self.state
-            self.check_for_complete()
-        self.update_vars()
-        if self.state == State.ACTIVE:
-            socketio.emit('update_instance', self.status())
-
-    def update_timeouts(self):
-        now = time.monotonic()
-        if self.task.timeout_secs is not None:
-            if self.task.timeout_secs >= 0:
-                self.global_timeout_time = now + self.task.timeout_secs
-            else:
-                # negative value disables the timeout
-                self.global_timeout_time = None
-        self.inact_timeout_time = \
-            now + expert.cfg['inact_timeout_secs']
-
-    def check_for_timeout(self):
-        if self.state != State.ACTIVE:
-            return False
-        if self.global_timeout_time:
-            tout_time = min(self.inact_timeout_time,
-                            self.global_timeout_time)
-        else:
-            tout_time = self.inact_timeout_time
-        if tout_time and time.monotonic() >= tout_time:
-            app.logger.info(f'sid {self.sid[:4]} timed out')
-            self.task.replace_next_task(tasks.TimedOut(self))
-            self.end(State.TIMED_OUT)
-            if self.profile:
-                self.profiles.insert(0, self.profile)
-            return True
-        return False
-
-    def terminate(self):
-        if self.state != State.ACTIVE:
-            return
-        app.logger.info(f'sid {self.sid[:4]} terminated')
-        self.task.replace_next_task(tasks.Terminated(self))
-        self.end(State.TERMINATED)
-        if self.profile:
-            self.profiles.insert(0, self.profile)
-
-    def end(self, state):
-        # called for normal completion, timeout, nonconsent, or termination
-        self.end_time = time.monotonic()
-        self.state = state
-        socketio.emit('update_instance', self.status())
-        if self.profile:
-            app.logger.info(f'saving responses for sid {self.sid[:4]}')
-            self.save_responses()
-
-
-class Tool(BaseExper):
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        @socketio.on('prev_page', namespace=f'/{self.sid}')
-        def sio_prev_page(resp):
-            if self.task.prev_task:
-                self.prev_task(resp)
-            return self.task.all_vars()
-
-        @socketio.on('goto', namespace=f'/{self.sid}')
-        def sio_goto(task_label, resp):
-            self.go_to(task_label, resp)
-            return self.task.all_vars()
-
-    def assign_profile(self):
-        super().assign_profile()
-        self.variables['exp_nav_items'] = [
-            label for label, task in self.nav_items()]
-
-    def store_resp(self, resp):
-        super().store_resp(resp)
-        self.task.variables['exp_resp'] = resp
-
-    def _nav(self, resp, dest_task):
-        self.store_resp(resp)
-        self.task = dest_task
-        self.task_cursor = dest_task.id
-        self.update_vars()
-        if self.profile:
-            self.save_responses()
-        socketio.emit('update_instance', self.status())
-
-    def prev_task(self, resp):
-        self._nav(resp, self.task.prev_task)
-
-    def next_task(self, resp):
-        self._nav(resp, self.task.next_task(resp))
-
-    def go_to(self, task_label, resp):
-        dest_task = None
-        for label, task in self.nav_items():
-            if label == task_label:
-                dest_task = task
-                break
-        self._nav(resp, dest_task)
+                raise BadOutputFormatError(self.cfg['output_format'])
 
 
 class Record:
 
     def __init__(self, experclass, fromsaved=None):
         self.experclass = experclass
-        fromsaved = fromsaved or expert.run
+        fromsaved = fromsaved or experclass.run
         saved_path = experclass.runs_path / fromsaved
         md_path = saved_path / 'metadata'
         if md_path.is_file():
@@ -582,7 +528,7 @@ class Record:
         self.run_path = experclass.runs_path / self.start_time
         self.id_mapping_path = self.run_path / 'id-mapping'
 
-    def completed_profiles(self):
+    def completed_profiles(self) -> list[str]:
         # list of strings of form 'cond/prof'
         profiles = []
         bad_suffixes = resp_file_suffixes.values()
@@ -612,5 +558,3 @@ class Record:
             fields['replicate'] = self.replicate or ''
             print(strictyaml.as_document(fields).as_yaml(), file=f)
 
-
-Experiment: Type[Exper]|Type[Tool]
