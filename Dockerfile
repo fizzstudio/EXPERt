@@ -12,5 +12,4 @@ COPY expert_cfg.json expert_cfg.json
 COPY expert expert
 COPY runexp.py runexp.py
 EXPOSE 5000
-#ENTRYPOINT [ "bash", "-c", "eval \"$(pdm --pep582)\"; exec python3 runexp.py $@" ]
 ENTRYPOINT [ "/bin/bash", "docker_start.sh" ]

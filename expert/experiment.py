@@ -187,6 +187,22 @@ class BaseExper:
         cls.running = True
 
     @classmethod
+    def reload(cls):
+        expert.log.info('*** reloading experiment bundle ***')
+        # XXX Should this be allowed if there are active instances?
+        # In experiment mode, I'm inclined to say no, since even
+        # if the nstance code remains the same (the instance object
+        # doesn't get replaced), resources might change.Might be
+        # desirable in tool mode, though.
+        cls._read_config()
+        # NB: Reloading does NOT start a new run.
+        # Reloading implies the bundle has changed, so
+        # allowing resuming seems counter-intuitive. But,
+        # it's possible a bug might need fixing mid-run,
+        # so it might be useful.
+        expert.experclass = cls._load()
+
+    @classmethod
     def _add_routes(cls):
         first_request_setup_complete = False
 

@@ -116,6 +116,10 @@ def _add_sio_commands():
     def sio_terminate_inst(sid):
         pass
 
+    @expert.socketio.on('reload_exper')
+    def sio_reload_exper():
+        expert.experclass.reload()
+
 
 def _run_info():
     return {
