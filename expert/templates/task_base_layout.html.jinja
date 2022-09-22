@@ -8,9 +8,9 @@
      document.getElementById('task-wrapper').scrollTo(0, 0);
      window.scrollTo(0, 0);
 
-     import { Task } from '/{{ exp_js }}/task.js';
+     import { Task } from '{{ exp_js }}/task.js';
 
-     const exper = '{{ exp_exper }}';
+     const exper = '{{ exp_app_name }}';
      const sid = '{{ exp_sid }}';
      //const urlPrefix = '{{ exp_url_prefix }}'
      //const expertStatic = `${urlPrefix}/static`
@@ -24,11 +24,11 @@
              {% set jspath = exp_js %}
              {% set task_script = task_script[1:] %}
          {% else %}
-             {% set jspath = exp_url_prefix + '/' + exp_exper + '/js' %}
+             {% set jspath = exp_app_js %}
          {% endif %}
          try {
              const mod = await import(
-                 '/{{ jspath }}/task_{{ task_script }}.js');
+                 '{{ jspath }}/task_{{ task_script }}.js');
              var task = new mod.taskClass();
              //await task.init(mod.initTask)
          } catch (error) {
@@ -71,7 +71,7 @@
                     <button type="button" id="exp-prev-btn" class="exp-nav-btn"
                             {{ '' if exp_tool_mode else 'disabled' }}
                             autocomplete="off">
-                        <img src="/{{ exp_static }}/images/left_arrow.svg">
+                        <img src="{{ exp_img }}/left_arrow.svg">
                         Prev
                     </button>
                 </div>
@@ -82,7 +82,7 @@
                         {{ '' if exp_tool_mode else 'disabled' }}
                         autocomplete="off">
                     Next
-                    <img src="/{{ exp_static }}/images/right_arrow.svg">
+                    <img src="{{ exp_img}}/right_arrow.svg">
                 </button>
             </div>
         </div>

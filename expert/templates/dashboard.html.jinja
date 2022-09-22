@@ -11,8 +11,8 @@
 
     <script type="module">
 
-     import { Dialog, ConfirmDialog } from '/{{ exp_js }}/dialog.js';
-     import { elt, callApi } from '/{{ exp_js }}/util.js';
+     import { Dialog, ConfirmDialog } from '{{ exp_js }}/dialog.js';
+     import { elt, callApi } from '{{ exp_js }}/util.js';
 
      class RunsDialog extends Dialog {
 
@@ -125,6 +125,13 @@
              this.instDataNode.append(div);
          }
 
+         addReloadSeparator() {
+             const div = document.createElement('div');
+             div.className = 'dboard-reload-sep';
+             div.textContent = 'Experiment reloaded';
+             this.instDataNode.append(div);
+         }
+
          addEndSeparator(run) {
              const div = document.createElement('div');
              div.className = 'dboard-end-sep';
@@ -147,7 +154,7 @@
 
      }
 
-     const exper = "{{ exp_exper }}";
+     const exper = "{{ exp_app_name }}";
 
      class Controller {
 
@@ -157,6 +164,7 @@
              this.downloadIdBtn = elt('download-id-btn');
              this.deleteIdBtn = elt('delete-id-btn');
              this.newRunBtn = elt('new-run-btn');
+             this.reloadBtn = elt('reload-btn');
              this.runsDlg = new RunsDialog(this);
              this.confirmDlg = new ConfirmDialog(this);
              this.instList = new InstList();
@@ -213,6 +221,17 @@
                      this.setRunInfo(runInfo);
                      this.run = runInfo.run;
                      this.newRunBtn.disabled = false;
+                 }
+             });
+             this.reloadBtn.addEventListener('click', async () => {
+                 if (await this.confirmDlg.show(
+                     'Really reload experiment?', 'Cancel', 'Reload')) {
+                     this.reloadBtn.disabled = true;
+                     await callApi(this.socket, 'reload_exper');
+                     if (this.run) {
+                         this.instList.addReloadSeparator();
+                     }
+                     this.reloadBtn.disabled = false;
                  }
              });
 
@@ -281,7 +300,7 @@
 
         <h2>Dashboard</h2>
         <div>
-            <strong>{{ exp_exper }} ({{ num_profiles }} profiles);
+            <strong>{{ exp_app_name }} ({{ num_profiles }} profiles);
                 run <span id="run-info"></span></strong>
         </div>
         <div id="controls">
@@ -300,6 +319,9 @@
             <button type="button" id="new-run-btn"
                     {{'disabled' if exp_tool_mode else ''}}>
                 Start New Run
+            </button>
+            <button type="button" id="reload-btn">
+                Reload Experiment
             </button>
         </div>
 

@@ -79,10 +79,13 @@ body {
             background: globals.$bright-green;
         }
     }
+    #exp-nav-menu {
+        margin: 0.5rem;
+    }
     #exp-nav-controls {
         display: flex;
         align-items: center;
-        margin: 1rem;
+        margin: 0.5rem;
         .exp-nav-btn {
             font-size: 1.5rem;
             img {
@@ -297,6 +300,7 @@ body {
             color: white;
             align-self: stretch;
             text-align: center;
+            padding: 0.25rem;
             margin-bottom: 0.5rem;
         }
         &-buttons {
