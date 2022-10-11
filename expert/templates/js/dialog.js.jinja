@@ -8,7 +8,7 @@ export class Dialog extends View {
     constructor(id) {
         super(elt(id).cloneNode(true))
         this.node.id = undefined
-        this.node.classList.remove('hidden')
+        this.node.classList.remove('exp-hidden')
         //this.node.classList.add('exp-dlg')
         this.titlebarNode = this.node.querySelector(
             '.exp-dlg-elements-title')

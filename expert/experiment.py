@@ -16,6 +16,7 @@ from pathlib import Path
 from enum import Enum
 from functools import reduce
 from typing import ClassVar, Optional, Any
+from click.core import Option
 
 from flask import session, request, make_response, send_from_directory
 
@@ -45,15 +46,21 @@ resp_file_suffixes = {
 class TaskResponse:
     response: Any
     task_name: str
+    timestamp: str
+    sid: Optional[str]
+    cond: Optional[str]
     extra: dict[str, Any]
-    def __init__(self, response, task_name, **extra):
+    def __init__(self, response, task_name,
+                 ts=None, sid=None, cond=None, **extra):
         self.response = response
         self.task_name = task_name
+        self.timestamp = ts or timestamp.make_timestamp()
+        self.sid = sid
+        self.cond = cond
         # reserved for output files
         for reserved in ['tstamp', 'task', 'resp']:
             assert reserved not in extra
         self.extra = extra
-        self.timestamp = timestamp.make_timestamp()
 
 
 class NoSuchCondError(Exception):
@@ -152,6 +159,10 @@ class BaseExper:
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
         def sio_get_feedback(resp):
             return self.task.get_feedback(resp)
+
+        @socketio.on('load_template', namespace=f'/{self.sid}')
+        def sio_load_template(tplt, tplt_vars={}):
+            return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
 
         @socketio.on_error(f'/{self.sid}')
         def sio_inst_error(e):
@@ -409,6 +420,98 @@ class BaseExper:
     def profile_mod(cls):
         return importlib.import_module('.profile', cls.pkg.__package__)
 
+    @classmethod
+    def collect_responses(cls, run):
+        run_path = cls.runs_path / run
+        by_cond = {}
+        for cond in run_path.iterdir():
+            if cond.name == 'id-mapping' or not cond.is_dir():
+                continue
+            by_cond[cond.name] = {}
+            for respath in cond.iterdir():
+                if respath.stem[0] == '.':
+                    continue
+                if cls.cfg['output_format'] == 'csv':
+                    with open(respath, newline='') as f:
+                        reader = csv.reader(f, lineterminator='\n')
+                        rows = list(reader)
+                        headers = rows[0]
+                        sid = rows[1][2]
+                        by_cond[cond.name][sid] = []
+                        # skip header row
+                        for row in rows[1:]:
+                            by_cond[cond.name][sid].append(TaskResponse(
+                                row[2], row[1], row[0], sid, cond.name,
+                                **dict(zip(headers[3:], row[3:]))))
+                elif cls.cfg['output_format'] == 'json':
+                    # 'tstamp', 'task', 'resp', + extra fields
+                    with open(respath) as f:
+                        items = json.load(f)
+                    sid = items[0]['resp']
+                    by_cond[cond.name][sid] = []
+                    for item in items:
+                        extras = item.copy()
+                        extras.pop('tstamp')
+                        extras.pop('task')
+                        extras.pop('resp', None)
+                        by_cond[cond.name][sid].append(TaskResponse(
+                            item.get('resp'), item['task'], item['tstamp'],
+                            sid, cond.name, **extras))
+                else:
+                    # XXX would probably be better to sanity-check this
+                    # when the program loads
+                    raise BadOutputFormatError(cls.cfg['output_format'])
+        return sum([by_cond[c][s]
+                    for c in sorted(by_cond.keys())
+                    for s in sorted(by_cond[c].keys())], [])
+
+    @classmethod
+    def write_responses(cls, resps, dest_path):
+        if resps[0].sid:
+            all_sids = set(r.sid for r in resps)
+            min_uniq_len = 0
+            while len(set(sid[:(min_uniq_len := min_uniq_len + 1)]
+                          for sid in all_sids)) < len(all_sids):
+                pass
+            min_uniq_len = max(min_uniq_len, 4)
+
+        # newline='' must be set for the csv module
+        with open(dest_path, 'w', newline='') as f:
+            if cls.cfg['output_format'] == 'csv':
+                writer = csv.writer(f, lineterminator='\n')
+                extras = set()
+                # collect all extra response field names
+                for r in resps:
+                    for k in r.extra:
+                        extras.add(k)
+                headers = ['time', 'task', 'resp', *extras]
+                if resps[0].sid:
+                    headers = ['sid', 'cond'] + headers
+                writer.writerow(headers)
+                for r in resps:
+                    # NB: None is written as the empty string
+                    data = [r.timestamp, r.task_name, r.response,
+                            *[r.extra.get(e) for e in extras]]
+                    if r.sid:
+                        data = [r.sid[:min_uniq_len], r.cond] + data
+                    writer.writerow(data)
+            elif cls.cfg['output_format'] == 'json':
+                output = []
+                for r in resps:
+                    item = {'time': r.timestamp, 'task': r.task_name}
+                    if r.response is not None:
+                        item['resp'] = r.response
+                    item.update(r.extra)
+                    if r.sid:
+                        item['sid'] = r.sid[:min_uniq_len]
+                        item['cond'] = r.cond
+                    output.append(item)
+                json.dump(output, f, indent=2)
+            else:
+                # XXX would probably be better to sanity-check this
+                # when the program loads
+                raise BadOutputFormatError(cls.cfg['output_format'])
+
     def create_tasks(self):
         """Overridden by the bundle class to create post-consent tasks."""
         pass
@@ -478,7 +581,6 @@ class BaseExper:
         cond_path = self.record.run_path / str(self.profile.cond)
         resp_path = cond_path / (self.profile.subjid +
                                  resp_file_suffixes.get(self.state, ''))
-
         actual_resps = [self.responses[tid]
                         for tid in sorted(self.responses.keys())]
         all_resps = self.pseudo_responses + actual_resps
@@ -491,35 +593,7 @@ class BaseExper:
         pii, resps = reduce(splitter, all_resps, [[], []])
         if pii:
             self._save_pii(pii)
-
-        # newline='' must be set for the csv module
-        with open(resp_path, 'w', newline='') as f:
-            if self.cfg['output_format'] == 'csv':
-                writer = csv.writer(f, lineterminator='\n')
-                extras = set()
-                # collect all extra response field names
-                for r in resps:
-                    for k in r.extra:
-                        extras.add(k)
-                # write the header line
-                writer.writerow(['tstamp', 'task', 'resp', *extras])
-                for r in resps:
-                    # NB: None is written as the empty string
-                    writer.writerow([r.timestamp, r.task_name, r.response,
-                                     *[r.extra.get(e) for e in extras]])
-            elif self.cfg['output_format'] == 'json':
-                output = []
-                for r in resps:
-                    item = {'tstamp': r.timestamp, 'task': r.task_name}
-                    if r.response is not None:
-                        item['resp'] = r.response
-                    item.update(r.extra)
-                    output.append(item)
-                json.dump(output, f, indent=2)
-            else:
-                # XXX would probably be better to sanity-check this
-                # when the program loads
-                raise BadOutputFormatError(self.cfg['output_format'])
+        self.write_responses(resps, resp_path)
 
 
 class Record:

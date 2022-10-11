@@ -31,8 +31,15 @@
     </head>
 
     <body>
-        <div id="page-content">
-            {% block page_content %}{% endblock %}
+        <div id="exp-main-wrapper">
+            <div id="page-content">
+                {% block page_content %}{% endblock %}
+                <div id="exp-sidebar" class="exp-hidden">
+                    <div id="exp-sidebar-content">
+                        {% block exp_sidebar %}{% endblock %}
+                    </div>
+                </div>
+            </div>
         </div>
         {% set exp_dlg_id = 'message' %}
         {% include 'confirm_dialog.html.jinja' %}

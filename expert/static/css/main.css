@@ -1,11 +1,10 @@
-.hidden {
+.exp-hidden {
   display: none !important;
 }
 
 body {
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   margin: 0;
   height: 100vh;
@@ -14,7 +13,16 @@ body {
   font-size: 10pt;
 }
 
+#exp-main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 #page-content {
+  position: relative;
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -22,8 +30,8 @@ body {
   padding: 1rem;
   margin: 1rem;
   line-height: 1.5;
+  max-height: calc(100% - 4rem);
   width: calc(100% - 4rem);
-  flex: auto;
 }
 @media (min-width: 48em) {
   #page-content {
@@ -31,7 +39,7 @@ body {
     height: auto;
   }
 }
-#page-content .guide {
+#page-content .exp-guide {
   background: #77ff77;
 }
 #page-content button {
@@ -41,7 +49,6 @@ body {
 }
 
 #task-wrapper, #error-content {
-  align-self: stretch;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -76,11 +83,11 @@ body {
   align-items: center;
   margin: 0.5rem;
   /*#exp-next-btn-wrapper {
-      display: flex;
-      justify-content: center;
-      flex: auto; //initial;
-      margin: 1rem;
-  }*/
+     display: flex;
+     justify-content: center;
+     flex: auto; //initial;
+     margin: 1rem;
+     }*/
 }
 #exp-chin #exp-nav-controls .exp-nav-btn {
   font-size: 1.5rem;
@@ -97,6 +104,27 @@ body {
   background: #ffff7f;
   width: 4rem;
   text-align: center;
+}
+
+#exp-sidebar {
+  position: absolute;
+  right: -17rem;
+  top: 10rem;
+  width: 14rem;
+  bottom: 10rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: #d1d1d1;
+  padding: 1rem;
+  margin: 0;
+}
+#exp-sidebar #exp-sidebar-content {
+  flex: auto;
+  background: #F1F1F1;
+  padding: 0.5rem;
+  overflow: scroll;
+  border: solid 1px black;
 }
 
 #task, #consent, #qnaire, #soundcheck {
