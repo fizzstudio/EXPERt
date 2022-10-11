@@ -163,6 +163,7 @@ def _init_socketio():
     socketio = SocketIO(
         app, # logger=True,
         #async_handlers=False,
+        async_mode='eventlet',
         cors_allowed_origins='*')
 
     @socketio.on('connect')

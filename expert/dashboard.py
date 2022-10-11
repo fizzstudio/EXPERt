@@ -131,20 +131,26 @@ def _run_info():
 
 def _zip_results(run_id, zip_name):
     expert.log.info('building zip file')
-    run_path = expert.experclass.runs_path / run_id
+    # run_path = expert.experclass.runs_path / run_id
     root = Path(zip_name).stem
+    resps = expert.experclass.collect_responses(run_id)
+    resps_ext = expert.experclass.cfg['output_format']
+    resps_name = root + '.' + resps_ext
+    resps_path = expert.experclass.dls_path / resps_name
+    expert.experclass.write_responses(resps, resps_path)
     with zipfile.ZipFile(expert.experclass.dls_path / zip_name, 'w',
                          compression=zipfile.ZIP_DEFLATED,
                          compresslevel=9) as zf:
-        for condit in run_path.iterdir():
-            if condit.name == 'id-mapping' or not condit.is_dir():
-                continue
-            for respath in condit.iterdir():
-                if respath.stem[0] == '.':
-                    continue
-                zf.write(
-                    str(respath),
-                    root + '/' + str(respath.relative_to(run_path)))
+        zf.write(resps_path, resps_name)
+        # for cond in run_path.iterdir():
+        #     if cond.name == 'id-mapping' or not cond.is_dir():
+        #         continue
+        #     for respath in cond.iterdir():
+        #         if respath.stem[0] == '.':
+        #             continue
+        #         zf.write(
+        #             str(respath),
+        #             root + '/' + str(respath.relative_to(run_path)))
 
 
 def _zip_id_mapping(run_id, zip_name):

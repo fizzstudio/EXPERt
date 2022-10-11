@@ -14,7 +14,7 @@ export class Task {
         this.navSelect = elt('exp-nav-menu-select')
         this.content = elt('task-wrapper')
         {% if exp_progbar_enabled %}
-        elt('exp-progbar').classList.remove('hidden')
+        elt('exp-progbar').classList.remove('exp-hidden')
         {% endif %}
         //this.reset()
 
@@ -138,10 +138,10 @@ export class Task {
 
     guide(guideElt) {
         if (this.guideElt) {
-            this.guideElt.classList.remove('guide')
+            this.guideElt.classList.remove('exp-guide')
         }
         if (guideElt) {
-            guideElt.classList.add('guide')
+            guideElt.classList.add('exp-guide')
         }
         this.guideElt = guideElt
     }
@@ -150,6 +150,18 @@ export class Task {
     loadSound(sound) {
         return new Audio(
             `{{ exp_app_static }}/audio/${sound}.mp3`)
+    }
+
+    showSidebar(visible = true) {
+        if (visible) {
+            elt('exp-sidebar').classList.remove('exp-hidden')
+        } else {
+            elt('exp-sidebar').classList.add('exp-hidden')
+        }
+    }
+
+    setSidebarContent(content) {
+        elt('exp-sidebar-content').innerHTML = content
     }
 }
 
@@ -173,10 +185,18 @@ export class FSA {
     }
 
     enter(state) {
+        const willHook = this.states['willEnterState']
+        if (willHook) {
+            willHook.apply(this.states, [state])
+        }
         this.state = state
-        let f = this.states[state]
-        if (f !== undefined) {
+        const f = this.states[state]
+        if (f) {
             f.apply(this.states)
+        }
+        const didHook = this.states['didEnterState']
+        if (didHook) {
+            didHook.apply(this.states, [state])
         }
     }
 }

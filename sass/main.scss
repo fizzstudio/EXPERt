@@ -1,12 +1,12 @@
 
 @use 'globals';
 
-.hidden { display: none !important; }
+.exp-hidden { display: none !important; }
 
 body {
     display: flex;
-    flex-direction: column;
-    align-items: center;
+    //flex-direction: column;
+    align-items: stretch;
     justify-content: center;
     margin: 0;
     height: 100vh;
@@ -16,8 +16,16 @@ body {
     font-size: 10pt;
 }
 
+#exp-main-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 #page-content {
-    //position: fixed;
+    position: relative; // for sidebar positioning
+    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -25,17 +33,17 @@ body {
     padding: 1rem;
     margin: 1rem;
     line-height: 1.5;
+    max-height: calc(100% - 4rem);
     width: calc(100% - 4rem);
     // left: 0;
     //max-height: calc(100vh - 4rem); // was 85vh
-    flex: auto;
     //max-height: none;
     @media (min-width: globals.$desktop-break) {
         width: 40rem;
         height: auto;
         //max-height: 40rem;
     }
-    .guide {
+    .exp-guide {
         //outline: dashed 4px #00bfbf;
         //outline-offset: 0.25rem;
         background: globals.$bright-green;
@@ -48,16 +56,14 @@ body {
 }
 
 #task-wrapper {
-    align-self: stretch;
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    //flex: auto;
     flex: 1 1 0;
     background: globals.$very-light-gray;
     padding: 0rem;
-    //width: 30rem;
     overflow: scroll;
+    //max-height: 100%;
 }
 
 #exp-chin {
@@ -104,11 +110,33 @@ body {
             text-align: center;
         }
         /*#exp-next-btn-wrapper {
-            display: flex;
-            justify-content: center;
-            flex: auto; //initial;
-            margin: 1rem;
-        }*/
+           display: flex;
+           justify-content: center;
+           flex: auto; //initial;
+           margin: 1rem;
+           }*/
+    }
+}
+
+#exp-sidebar {
+    position: absolute;
+    right: -17rem;
+    top: 10rem;
+    width: 14rem;
+    bottom: 10rem;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    //flex: 1 1 0;
+    background: globals.$light-gray;
+    padding: 1rem;
+    margin: 0;
+    #exp-sidebar-content {
+        flex: auto;
+        background: globals.$very-light-gray;
+        padding: 0.5rem;
+        overflow: scroll;
+        border: solid 1px black;
     }
 }
 
