@@ -1,0 +1,40 @@
+
+* Docker
+** Build
+~docker build --tag jfnl/expert .~
+Or, for multi-arch:
+~docker buildx build --push --platform linux/amd64,linux/arm64 \
+                            --tag jfnl/expert:latest .~
+** Upload to Docker Hub
+~docker push jfnl/expert~
+** Run
+Notes:
+1. <path-to-bundle> has to be absolute, so it can be convenient to use a path relative to $PWD.
+2. Within the container, EXPERt is invoked with the path ~/bundle~, which is mapped to the external bundle directory. So it's currently impossible to start it without a bundle.
+
+~docker run --rm -v <path-to-bundle>:/bundle -p 5000:5000 jfnl/expert [args ...]~
+
+NB: If you want to run on a port other than 5000, use:
+~-l 0.0.0.0:new-port-number~
+If you just pass the port number, EXPERt will listen on 127.0.0.1, which won't work inside the container.
+
+* Issues
+** TODO All slots filled
+Went through CM-R in tool mode. All tasks completed and data was saved, but on the 'thank you' page, got 'all participant slots have already been filled' message.
+** TODO Repeated profile assignment in tool mode
+This can currently happen if you page back over the consent form (if there is one) multiple times.
+** DONE Sidebar
+CM2 is going to feature a sidebar (which can be shown or hidden) with always-available help. I'd like this to be able to scroll independently from the main task scroll area.
+** TODO Caching redux
+I think static files (e.g., scripts) can still get cached?
+** TODO Simplified state machine
+It may be the case that a task has a simple set of states it can toggle between, and that each one is associated with its own particular event, such that if any state receives that event, we always enter the associated state. In such a case, there's hardly any point in having a distinction between events and states, or bothering with a transition table.
+Options:
+1. If no transition table is defined, event() could simply look up 'sym' directly in the states class.
+2. More simply, just use enter() directly, passing in the state function name.
+** TODO Async FSA
+Currently, FSA state-entry functions are not treated as async. I.e., enter() is not async, and doesn't await any entry function it calls.
+** TODO Temporary param setting via command line
+It's often useful to limit the number of tasks shown during development. I've been doing this manually, just slicing, e.g., 'testing_tasks', or whatever. But this is annoying because then you've changed the code, and it's easy to mistakenly commit the change. It'd be nice to have a parameter of some type that controls how many tasks are seen, and to be able to temporarily set it via a command-line switch. Where would such variables live, though? params.py? cfg.json? Somewhere new?
+
+Currently, the E server itself only references an experiment's params.py to read 'n_profiles' (although there is a commented-out reference in __init__.py for debug mode). Maybe this should go into cfg.json?

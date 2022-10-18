@@ -61,6 +61,9 @@ class Task(view.View):
     def get_feedback(self, response):
         pass
 
+    def template_filename(self):
+        return 'task_' + super().template_filename()
+
     def render_vars(self):
         all_vars = self.inst.variables.copy()
         all_vars.update(super().render_vars())

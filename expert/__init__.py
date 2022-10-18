@@ -223,7 +223,7 @@ def _add_server_routes():
 def get_inst():
     # NB: session.new seems to be False here even if we do
     # in fact have a new, empty session
-    if 'sid' not in session:
+    if 'sid' not in session or not experclass:
         # New participant
         return None
     # NB: The presence of an existing sid with no

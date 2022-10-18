@@ -78,6 +78,12 @@ class Dashboard(view.View):
                 'runInfo': self._run_info()
             }
 
+        @expert.socketio.on('get_bundles')
+        def sio_get_bundles():
+            bundles_path = expert.expert_path / 'bundles'
+            return sorted(bundle.name for bundle in bundles_path.iterdir()
+                          if bundle.is_dir() and bundle.stem[0] != '.')
+
         @expert.socketio.on('get_runs')
         def sio_get_runs():
             runs = []

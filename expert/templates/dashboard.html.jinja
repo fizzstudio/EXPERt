@@ -66,6 +66,48 @@
          }
      }
 
+     class BundlesDialog extends Dialog {
+
+         constructor(ctrlr) {
+             super('exp-dlg-download');
+             this.ctrlr = ctrlr;
+             this.selectNode = this.node.querySelector(
+                 '.exp-dlg-download-select');
+         }
+
+         clearOptions() {
+             while (this.selectNode.options.length) {
+                 this.selectNode.remove(0);
+             }
+         }
+
+         async show(title, btnText) {
+             this.titlebar = title;
+             this.run = null;
+             this.selectNode.selectedIndex = 0;
+             const bundles = await callApi(this.ctrlr.socket, 'get_bundles');
+             this.clearOptions();
+             this.selectNode.add(new Option('Select a bundle'));
+             for (const bundle of bundles) {
+                 this.selectNode.add(new Option(bundle));
+             }
+             const selectionChanged = () => {
+                 this.bundle = null;
+                 if (this.selectNode.selectedIndex) {
+                     this.bundle = this.selectNode.value;
+                 }
+                 this.setButtonsDisabled({okay: !this.bundle});
+             }
+             this.selectNode.addEventListener('change', selectionChanged);
+             this.setButtons(
+                 [{tag: 'cancel', text: 'Cancel'},
+                  {tag: 'okay', text: btnText, disabled: true}]);
+             let tag = await super.show(() => this.buttons['okay'][0].focus());
+             this.selectNode.removeEventListener('change', selectionChanged);
+             return tag === 'okay';
+         }
+     }
+
      class InstList {
 
          constructor() {
@@ -163,8 +205,10 @@
              //this.deleteBtn = elt('delete-btn');
              this.downloadIdBtn = elt('download-id-btn');
              this.deleteIdBtn = elt('delete-id-btn');
+             this.loadBtn = elt('load-btn');
              this.newRunBtn = elt('new-run-btn');
              this.reloadBtn = elt('reload-btn');
+             this.bundlesDlg = new BundlesDialog(this);
              this.runsDlg = new RunsDialog(this);
              this.confirmDlg = new ConfirmDialog(this);
              this.instList = new InstList();
@@ -208,6 +252,15 @@
                          this.socket, 'delete_id_mappings', this.runsDlg.run);
                  }
                  this.deleteIdBtn.disabled = false;
+             });
+             this.loadBtn.addEventListener('click', async () => {
+                 this.loadBtn.disabled = true;
+                 if (await this.bundlesDlg.show(
+                     'Load Bundle', 'Load')) {
+                     this.vars = await callApi(
+                         this.socket, 'load_exper', this.bundlesDlg.bundle);
+                 }
+                 this.loadBtn.disabled = false;
              });
              this.newRunBtn.addEventListener('click', async () => {
                  if (await this.confirmDlg.show(
