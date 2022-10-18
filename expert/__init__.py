@@ -44,7 +44,8 @@ class App(Flask):
         if loader:
             return loader
         self._jinja_loader = templates.Loader(
-            experclass.templates_path, super().jinja_loader)
+            experclass.templates_path if experclass else None,
+            super().jinja_loader)
         return self._jinja_loader
 
 
@@ -85,9 +86,11 @@ def init_server():
             host = args.listen
     app.logger.info(f'listening on {host}:{port}')
 
+    templates.set_server_variables()
+
     _init_socketio()
 
-    dashboard.init()
+    dboard = dashboard.Dashboard()
 
     mode = 'new'
     obj = None
@@ -104,8 +107,8 @@ def init_server():
     _add_server_routes()
 
     if args.exper_path:
-        experiment.BaseExper.start(
-            args.exper_path, mode, obj, conds, args.tool)
+        experiment.BaseExper.load(args.exper_path, conds, args.tool)
+        experiment.BaseExper.start(mode, obj)
 
     if args.dummy:
         if not experclass:
@@ -118,7 +121,7 @@ def init_server():
 
 def _parse_args():
     allargs = [
-        [['exper_path'], {'help': 'path to experiment bundle folder'}],
+        [['-e', '--exper_path'], {'help': 'path to experiment bundle folder'}],
         [['-f', '--config'], {'help': 'path to server config file'}],
         [['-l', '--listen'], {
             'help': 'hostname/IP address (:port) for server to listen on'}],

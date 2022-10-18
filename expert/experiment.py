@@ -144,7 +144,7 @@ class BaseExper:
 
         @socketio.on('init_task', namespace=f'/{self.sid}')
         def sio_init_task():
-            return self.task.all_vars()
+            return self.all_vars()
 
         @socketio.on('next_page', namespace=f'/{self.sid}')
         def sio_next_page(resp):
@@ -154,7 +154,7 @@ class BaseExper:
                 # which shouldn't be possible ...
                 #self.handle_response(resp)
                 self._next_task(resp)
-            return self.task.all_vars()
+            return self.all_vars()
 
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
         def sio_get_feedback(resp):
@@ -169,11 +169,24 @@ class BaseExper:
             expert.log.info(f'socketio error:\n{traceback.format_exc()}')
 
     @classmethod
-    def start(cls, path, mode, obj, conds=None, tool_mode=False):
+    def load(cls, path, conds=None, tool_mode=False):
         cls.dir_path = Path(path).resolve(True)
 
         cls._read_config()
 
+        expert.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
+
+        expert.experclass = cls._load_bundle()
+        if expert.experclass is None:
+            sys.exit(f'unable to load experiment bundle "{cls.dir_path}"')
+
+        expert.experclass._setup(path, conds)
+        expert.experclass._add_routes()
+
+        templates.set_bundle_variables()
+
+    @classmethod
+    def start(cls, mode, obj):
         cls.mode = mode
         cls.target = None
         if mode == 'res':
@@ -183,17 +196,6 @@ class BaseExper:
             cls.run = timestamp.make_timestamp()
         else:
             cls.run = timestamp.make_timestamp()
-
-        expert.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
-
-        expert.experclass = cls._load()
-        if expert.experclass is None:
-            sys.exit(f'unable to load experiment "{cls.dir_path}"')
-
-        expert.experclass._setup(path, conds)
-        expert.experclass._add_routes()
-
-        templates.set_variables()
 
         cls.running = True
 
@@ -287,7 +289,7 @@ class BaseExper:
         cls.cfg.update(exper_cfg)
 
     @classmethod
-    def _load(cls):
+    def _load_bundle(cls):
         """Load the experiment in the directory at cls.dir_path.
 
         NB: The source code for the experiment must be located in
@@ -552,6 +554,12 @@ class BaseExper:
 
     def _present(self, tplt_vars={}):
         return self.task.present(tplt_vars)
+
+    def all_vars(self):
+        all_vars = templates.variables.copy()
+        all_vars.update(self.variables)
+        all_vars.update(self.task.variables)
+        return all_vars
 
     def _update_vars(self):
         self.variables['exp_task_cursor'] = self.task_cursor

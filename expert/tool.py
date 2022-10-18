@@ -12,17 +12,17 @@ class Tool(experiment.BaseExper):
         def sio_prev_page(resp):
             if self.task.prev_task:
                 self.prev_task(resp)
-            return self.task.all_vars()
+            return self.all_vars()
 
         @expert.socketio.on('goto', namespace=f'/{self.sid}')
         def sio_goto(task_label, resp):
             self.go_to(task_label, resp)
-            return self.task.all_vars()
+            return self.all_vars()
 
         @expert.socketio.on('goto_id', namespace=f'/{self.sid}')
         def sio_goto_id(task_id, resp):
             self.go_to_id(task_id, resp)
-            return self.task.all_vars()
+            return self.all_vars()
 
     def assign_profile(self):
         super().assign_profile()

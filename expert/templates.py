@@ -13,6 +13,7 @@ html_ext = '.html.jinja'
 js_ext = '.js.jinja'
 variables: dict[str, Any]
 
+
 class Loader(BaseLoader):
 
     def __init__(self, path, chain_loader):
@@ -20,8 +21,7 @@ class Loader(BaseLoader):
         self.chain_loader = chain_loader
 
     def get_source(self, environment, template):
-        path = self.path / template
-        if not path.is_file():
+        if not self.path or not (path := self.path / template).is_file():
             return self.chain_loader.get_source(environment, template)
         mtime = path.stat().st_mtime
         with open(path) as f:
@@ -29,25 +29,29 @@ class Loader(BaseLoader):
         return source, path, lambda: mtime == path.stat().st_mtime
 
 
-def set_variables():
+def set_server_variables():
     global variables
     # All predefined vars are prefixed with 'exp_'
     # to avoid clashing with vars defined by experiments.
     pfx = expert.cfg['url_prefix']
-    cls = expert.experclass
     variables = {
         'exp_tool_mode': expert.tool_mode,
-        'exp_url_prefix': pfx,
-        'exp_app_name': cls.name,
-        'exp_app_id': cls.id
+        'exp_url_prefix': pfx
     }
     variables['exp_audio'] = f'/{pfx}/audio'
     variables['exp_img'] = f'/{pfx}/img'
     variables['exp_css'] = f'/{pfx}/css'
     variables['exp_js'] = f'/{pfx}/js'
+
+
+def set_bundle_variables():
+    pfx = expert.cfg['url_prefix']
+    cls = expert.experclass
+    variables['exp_app_name'] = cls.name
+    variables['exp_app_id'] = cls.id
     variables['exp_app_static'] = f'/{pfx}/app/{variables["exp_app_id"]}'
-    variables['exp_app_img'] =  f'{variables["exp_app_static"]}/img'
-    variables['exp_app_css'] =  f'{variables["exp_app_static"]}/css'
+    variables['exp_app_img'] = f'{variables["exp_app_static"]}/img'
+    variables['exp_app_css'] = f'{variables["exp_app_static"]}/css'
     variables['exp_app_js'] = f'{variables["exp_app_static"]}/js'
     variables['exp_window_title'] = cls.window_title
     variables['exp_favicon'] = cls.cfg['favicon']

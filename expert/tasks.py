@@ -8,7 +8,7 @@ from flask import current_app as app
 
 import expert
 
-from . import templates
+from . import templates, view
 
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
@@ -26,7 +26,7 @@ class TaskDesc:
     kwargs: dict = field(default_factory=dict)
 
 
-class Task:
+class Task(view.View):
 
     template: ClassVar[str] = ''
 
@@ -41,16 +41,9 @@ class Task:
     id: int
 
     def __init__(self, inst, template=None, variables=None, timeout_secs=None):
+        super().__init__(template=template, variables=variables)
         self.inst = inst
         self.sid = inst.sid
-        self.template_name = template or self.template
-        self.template_filename = \
-            f'task_{self.template_name}{templates.html_ext}'
-        # if (exper.templates_path() / self.template_filename).is_file():
-        #     self.template_filename = \
-        #         f'{exper.name()}/{self.template_filename}'
-        self.variables = variables.copy() if variables else {}
-        #self.variables['debug'] = expert.debug
         self.variables['task_type'] = self.template_name
         self.prev_task = None
         self.next_tasks = []
@@ -68,20 +61,10 @@ class Task:
     def get_feedback(self, response):
         pass
 
-    def all_vars(self):
-        all_vars = templates.variables.copy()
-        all_vars.update(self.inst.variables)
-        all_vars.update(self.variables)
-        return all_vars
-
-    def render(self, tplt, tplt_vars={}):
+    def render_vars(self):
         all_vars = self.inst.variables.copy()
-        all_vars.update(self.variables)
-        all_vars.update(tplt_vars)
-        return templates.render(tplt, all_vars)
-
-    def present(self, tplt_vars={}):
-        return self.render(self.template_filename, tplt_vars)
+        all_vars.update(super().render_vars())
+        return all_vars
 
     def then(self, *posargs, **kwargs):
         if isinstance(posargs[0], Task):
