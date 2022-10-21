@@ -16,11 +16,10 @@ from pathlib import Path
 from enum import Enum
 from functools import reduce
 from typing import ClassVar, Optional, Any
-from click.core import Option
 
 from flask import session, request, make_response, send_from_directory
 
-import expert
+import expert as e
 from . import (
     tasks, timestamp, profile, templates
 )
@@ -90,6 +89,7 @@ class BaseExper:
     profiles: ClassVar[list[profile.Profile]] = []
     # sid: <Experiment subclass inst>
     instances: ClassVar[dict[str, BaseExper]] = {}
+    running: ClassVar[bool]
 
     ## instance vars
     sid: str
@@ -142,11 +142,11 @@ class BaseExper:
             'exp_sid': self.sid
         }
 
-        @socketio.on('init_task', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('init_task', namespace=f'/{self.sid}')
         def sio_init_task():
             return self.all_vars()
 
-        @socketio.on('next_page', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('next_page', namespace=f'/{self.sid}')
         def sio_next_page(resp):
             if self.task.next_tasks or isinstance(self.task, tasks.Consent):
                 # if we're not here, the user was somehow able
@@ -156,37 +156,49 @@ class BaseExper:
                 self._next_task(resp)
             return self.all_vars()
 
-        @socketio.on('get_feedback', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('get_feedback', namespace=f'/{self.sid}')
         def sio_get_feedback(resp):
             return self.task.get_feedback(resp)
 
-        @socketio.on('load_template', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('load_template', namespace=f'/{self.sid}')
         def sio_load_template(tplt, tplt_vars={}):
             return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
 
-        @socketio.on_error(f'/{self.sid}')
+        @e.srv.socketio.on_error(f'/{self.sid}')
         def sio_inst_error(e):
-            expert.log.info(f'socketio error:\n{traceback.format_exc()}')
+            e.log.info(f'socketio error:\n{traceback.format_exc()}')
 
     @classmethod
-    def load(cls, path, conds=None, tool_mode=False):
+    def load(cls, path, tool_mode=False):
         cls.dir_path = Path(path).resolve(True)
 
         cls._read_config()
 
-        expert.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
+        e.srv.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
 
-        expert.experclass = cls._load_bundle()
-        if expert.experclass is None:
+        experclass = cls._load_bundle()
+        if experclass is None:
             sys.exit(f'unable to load experiment bundle "{cls.dir_path}"')
 
-        expert.experclass._setup(path, conds)
-        expert.experclass._add_routes()
+        experclass._setup()
+        experclass._add_routes()
 
-        templates.set_bundle_variables()
+        templates.set_bundle_variables(experclass)
+        e.app.update_jinja_loader(experclass)
+
+        experclass.running = False
+
+        return experclass
 
     @classmethod
-    def start(cls, mode, obj):
+    def start(cls, mode, obj=None, conds=None):
+        if conds:
+            unknown_conds = [c for c in conds
+                             if c not in cls.cond_mod().conds]
+            if unknown_conds:
+                raise NoSuchCondError(', '.join(unknown_conds))
+        cls.conds = conds
+
         cls.mode = mode
         cls.target = None
         if mode == 'res':
@@ -197,11 +209,25 @@ class BaseExper:
         else:
             cls.run = timestamp.make_timestamp()
 
+        cls.replicate = None
+        cls.record = Record(cls)
+        if cls.mode == 'rep':
+            cls.record.replicate = cls.target
+            cls.record.save()
+            cls.replicate = Record(cls, cls.target)
+        elif cls.mode == 'res':
+            if cls.record.replicate:
+                cls.replicate = Record(cls, cls.record.replicate)
+        else:
+            cls.record.save()
+
+        cls._load_profiles()
+
         cls.running = True
 
     @classmethod
     def reload(cls):
-        expert.log.info('*** reloading experiment bundle ***')
+        e.log.info('*** reloading experiment bundle ***')
         # XXX Should this be allowed if there are active instances?
         # In experiment mode, I'm inclined to say no, since even
         # if the nstance code remains the same (the instance object
@@ -213,22 +239,22 @@ class BaseExper:
         # allowing resuming seems counter-intuitive. But,
         # it's possible a bug might need fixing mid-run,
         # so it might be useful.
-        expert.experclass = cls._load()
+        e.experclass = cls._load()
 
     @classmethod
     def _add_routes(cls):
         first_request_setup_complete = False
 
-        @expert.app.route('/' + expert.cfg['url_prefix'])
+        @e.app.route('/' + e.srv.cfg['url_prefix'])
         def index():
             nonlocal first_request_setup_complete
             if not first_request_setup_complete:
                 cls._first_request_setup()
                 first_request_setup_complete = True
             content = None
-            inst = expert.get_inst()
+            inst = e.srv.get_inst()
             if not inst:
-                if not expert.tool_mode and not cls.running:
+                if not e.tool_mode and not cls.running:
                     content = templates.render('norun' + templates.html_ext)
                 else:
                     ip = request.headers.get('X-Real-IP', request.remote_addr)
@@ -238,8 +264,8 @@ class BaseExper:
                         # not full yet
                         inst = cls(ip, request.args)
                         session['sid'] = inst.sid
-                        expert.log.info(f'new instance for sid {inst.sid[:4]}')
-                        socketio.emit('new_instance', inst.status())
+                        e.log.info(f'new instance for sid {inst.sid[:4]}')
+                        e.srv.socketio.emit('new_instance', inst.status())
                         inst._will_start()
                     else:
                         content = templates.render('full' + templates.html_ext)
@@ -254,24 +280,24 @@ class BaseExper:
 
             return resp
 
-        @expert.app.route(f'/{expert.cfg["url_prefix"]}/app/{cls.id}/<path:subpath>')
+        @e.app.route(f'/{e.srv.cfg["url_prefix"]}/app/{cls.id}/<path:subpath>')
         def exper_static(subpath):
             return send_from_directory(cls.static_path, subpath)
 
     @classmethod
     def _first_request_setup(cls):
         # session will expire after 24 hours
-        expert.app.permanent_session_lifetime = datetime.timedelta(hours=24)
+        e.app.permanent_session_lifetime = datetime.timedelta(hours=24)
         # session cookie will expire after app.permanent_session_lifetime
         session.permanent = True
         if request.url.startswith('https'):
-            expert.app.config['SESSION_COOKIE_SECURE'] = True
+            e.app.config['SESSION_COOKIE_SECURE'] = True
         else:
-            expert.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+            e.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
     @classmethod
     def _read_config(cls):
-        with open(expert.expert_path / 'cfg.json') as f:
+        with open(e.expert_path / 'cfg.json') as f:
             cls.cfg = json.load(f)
         exper_cfg_path = cls.dir_path / 'cfg.json'
         exper_cfg = {}
@@ -298,57 +324,36 @@ class BaseExper:
         must be located in /foo/bar/my_exper/src.
         """
         #exper_path = Path(exper_path).resolve(True)
-        expert.log.info(f'loading experiment from {cls.dir_path}')
+        e.log.info(f'loading experiment from {cls.dir_path}')
         init_path = cls.dir_path / 'src' / '__init__.py'
         spec = importlib.util.spec_from_file_location('src', init_path)
         pkg = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = pkg
-        expert.log.info(f'experiment package name: {pkg.__name__}')
+        e.log.info(f'experiment package name: {pkg.__name__}')
         spec.loader.exec_module(pkg)
         ##params = importlib.import_module('.params', pkg)
         #params = __import__('src.params', fromlist=['params'])
         # return the first subclass of Experiment found
         for k, v in pkg.__dict__.items():
-            if isinstance(v, type) and issubclass(v, expert.Experiment) and \
-               v is not expert.Experiment:
+            if isinstance(v, type) and issubclass(v, e.Experiment) and \
+               v is not e.Experiment:
                 return v
         return None
 
     @classmethod
-    def _setup(cls, path, conds):
-        global socketio
-        from . import socketio as thesocketio
-        socketio = thesocketio
+    def _setup(cls):
         cls.name = cls.__qualname__.lower()
         cls._setup_paths()
         cls.pkg = sys.modules[cls.__module__]
-        if conds:
-            unknown_conds = [c for c in conds
-                             if c not in cls.cond_mod().conds]
-            if unknown_conds:
-                raise NoSuchCondError(', '.join(unknown_conds))
         # create main experiment directories, if they don't exist
         cls.dir_path.mkdir(exist_ok=True)
         cls.runs_path.mkdir(exist_ok=True)
         cls.profiles_path.mkdir(exist_ok=True)
         cls.dls_path.mkdir(exist_ok=True)
-        cls.conds = conds
-        cls.replicate = None
-        cls.record = Record(cls)
-        if cls.mode == 'rep':
-            cls.record.replicate = cls.target
-            cls.record.save()
-            cls.replicate = Record(cls, cls.target)
-        elif cls.mode == 'res':
-            if cls.record.replicate:
-                cls.replicate = Record(cls, cls.record.replicate)
-        else:
-            cls.record.save()
-        cls._load_profiles()
 
     @classmethod
     def _setup_paths(cls):
-        expert.log.info(f'bundle path: {cls.dir_path}')
+        e.log.info(f'bundle path: {cls.dir_path}')
         cls.static_path = cls.dir_path / cls.cfg['static_dir']
         cls.profiles_path = cls.dir_path / cls.cfg['profiles_dir']
         cls.runs_path = cls.dir_path / cls.cfg['runs_dir']
@@ -371,7 +376,7 @@ class BaseExper:
             cls._make_profiles()
             cond_paths = cls._read_cond_paths()
 
-        expert.log.info('loading profiles')
+        e.log.info('loading profiles')
         cls.profiles.clear()
         for cond_path in cond_paths:
             condname = cond_path.name
@@ -399,12 +404,12 @@ class BaseExper:
 
     @classmethod
     def _make_profiles(cls):
-        expert.log.info('creating profiles')
+        e.log.info('creating profiles')
         cls.cond_size = round(
             cls.params_mod().n_profiles/len(cls.cond_mod().conds))
-        expert.log.info(f'profiles per condition: {cls.cond_size}')
+        e.log.info(f'profiles per condition: {cls.cond_size}')
         for cname, c in cls.cond_mod().conds.items():
-            expert.log.info(f'creating profiles for condition {cname}')
+            e.log.info(f'creating profiles for condition {cname}')
             (cls.profiles_path / cname).mkdir()
             for i in range(cls.cond_size):
                 p = cls.profile_mod().Profile(c)
@@ -537,7 +542,7 @@ class BaseExper:
 
     def assign_profile(self):
         self.profile = self.profiles.pop(0)
-        expert.log.info(
+        e.log.info(
             f'sid {self.sid[:4]} assigned profile: {self.profile}')
         self.create_tasks()
         self.variables['exp_num_tasks'] = self.num_tasks_created

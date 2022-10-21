@@ -1,5 +1,5 @@
 
-import expert
+import expert as e
 from . import experiment
 
 
@@ -8,18 +8,18 @@ class Tool(experiment.BaseExper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        @expert.socketio.on('prev_page', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('prev_page', namespace=f'/{self.sid}')
         def sio_prev_page(resp):
             if self.task.prev_task:
                 self.prev_task(resp)
             return self.all_vars()
 
-        @expert.socketio.on('goto', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('goto', namespace=f'/{self.sid}')
         def sio_goto(task_label, resp):
             self.go_to(task_label, resp)
             return self.all_vars()
 
-        @expert.socketio.on('goto_id', namespace=f'/{self.sid}')
+        @e.srv.socketio.on('goto_id', namespace=f'/{self.sid}')
         def sio_goto_id(task_id, resp):
             self.go_to_id(task_id, resp)
             return self.all_vars()
@@ -40,7 +40,7 @@ class Tool(experiment.BaseExper):
         self._update_vars()
         if self.profile:
             self._save_responses()
-        expert.socketio.emit('update_instance', self.status())
+        e.srv.socketio.emit('update_instance', self.status())
 
     def prev_task(self, resp):
         self._nav(resp, self.task.prev_task)

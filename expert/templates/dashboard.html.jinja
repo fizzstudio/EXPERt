@@ -201,17 +201,45 @@
      class Controller {
 
          constructor() {
+             this.uploadBtn = elt('upload-btn');
+             this.loadBtn = elt('load-btn');
+             this.newRunBtn = elt('new-run-btn');
+             this.reloadBtn = elt('reload-btn');
              this.downloadBtn = elt('download-btn');
              //this.deleteBtn = elt('delete-btn');
              this.downloadIdBtn = elt('download-id-btn');
              this.deleteIdBtn = elt('delete-id-btn');
-             this.loadBtn = elt('load-btn');
-             this.newRunBtn = elt('new-run-btn');
-             this.reloadBtn = elt('reload-btn');
              this.bundlesDlg = new BundlesDialog(this);
              this.runsDlg = new RunsDialog(this);
              this.confirmDlg = new ConfirmDialog(this);
              this.instList = new InstList();
+
+             this.uploadBtn.addEventListener('click', async () => {
+                 this.uploadBtn.disabled = true;
+                 await this.uploadBundle();
+                 this.uploadBtn.disabled = false;
+             });
+             this.loadBtn.addEventListener('click', async () => {
+                 this.loadBtn.disabled = true;
+                 await this.loadBundle();
+                 this.loadBtn.disabled = false;
+             });
+             this.newRunBtn.addEventListener('click', async () => {
+                 this.newRunBtn.disabled = true;
+                 await this.newRun();
+                 this.newRunBtn.disabled = false;
+             });
+             this.reloadBtn.addEventListener('click', async () => {
+                 if (await this.confirmDlg.show(
+                     'Really reload experiment?', 'Cancel', 'Reload')) {
+                     this.reloadBtn.disabled = true;
+                     await callApi(this.socket, 'reload_exper');
+                     if (this.run) {
+                         this.instList.addReloadSeparator();
+                     }
+                     this.reloadBtn.disabled = false;
+                 }
+             });
 
              this.downloadBtn.addEventListener('click', async () => {
                  this.downloadBtn.disabled = true;
@@ -253,49 +281,13 @@
                  }
                  this.deleteIdBtn.disabled = false;
              });
-             this.loadBtn.addEventListener('click', async () => {
-                 this.loadBtn.disabled = true;
-                 if (await this.bundlesDlg.show(
-                     'Load Bundle', 'Load')) {
-                     this.vars = await callApi(
-                         this.socket, 'load_exper', this.bundlesDlg.bundle);
-                 }
-                 this.loadBtn.disabled = false;
-             });
-             this.newRunBtn.addEventListener('click', async () => {
-                 if (await this.confirmDlg.show(
-                     'Really start a new run?', 'Cancel', 'Start')) {
-                     this.newRunBtn.disabled = true;
-                     const runInfo = await callApi(
-                         this.socket, 'start_new_run');
-                     if (this.run) {
-                         this.instList.addStopSeparator(this.run);
-                     }
-                     this.setRunInfo(runInfo);
-                     this.run = runInfo.run;
-                     this.newRunBtn.disabled = false;
-                 }
-             });
-             this.reloadBtn.addEventListener('click', async () => {
-                 if (await this.confirmDlg.show(
-                     'Really reload experiment?', 'Cancel', 'Reload')) {
-                     this.reloadBtn.disabled = true;
-                     await callApi(this.socket, 'reload_exper');
-                     if (this.run) {
-                         this.instList.addReloadSeparator();
-                     }
-                     this.reloadBtn.disabled = false;
-                 }
-             });
 
              this.socket = io();
 
              this.socket.on('connect', async () => {
                  console.log("socket connected");
                  const data = await callApi(this.socket, 'dboard_init');
-                 this.instList.update(data.insts);
-                 this.setRunInfo(data.runInfo);
-                 this.run = data.runInfo.run;
+                 this.init(data.vars, data.insts, data.run_info);
              });
 
              this.socket.on('new_instance',
@@ -307,6 +299,68 @@
                  this.setRunInfo({run: 'not running'});
                  this.run = null;
              });
+         }
+
+         init(vars, insts, runInfo) {
+             this.vars = vars;
+             elt('bundle-name').textContent =
+                 vars['exp_app_name'] ?? '<none>';
+             this.instList.update(insts);
+             this.setRunInfo(runInfo);
+             this.run = runInfo.run;
+             console.log(
+                 `initializing; bundle: ${this.vars['exp_app_name']};` +
+                 ` run: ${this.run}`);
+         }
+
+         uploadBundle() {
+             const input = elt('file-input');
+             return new Promise(resolve => {
+                 const listener = () => {
+                     const reader = new FileReader();
+                     const xhr = new XMLHttpRequest();
+                     xhr.upload.addEventListener('progress', e => {
+                         if (e.lengthComputable) {
+                             const pct = Math.round((e.loaded*100)/e.total);
+                             //self.ctrl.update(percentage);
+                         }
+                     }, false);
+                     xhr.upload.addEventListener('load', e => {
+                         //self.ctrl.update(100);
+                         //const canvas = self.ctrl.ctx.canvas;
+                         //canvas.parentNode.removeChild(canvas);
+                         resolve();
+                     }, false);
+                     xhr.open('POST', url);
+                     xhr.overrideMimeType(
+                         'text/plain; charset=x-user-defined-binary');
+                     reader.onload = evt => xhr.send(evt.target.result);
+                     reader.readAsBinaryString(file);
+                 };
+                 input.addEventListener('change', listener, false);
+                 input.click();
+             });
+         }
+
+         async loadBundle() {
+             if (await this.bundlesDlg.show('Load Bundle', 'Load')) {
+                 this.vars = await callApi(
+                     this.socket, 'load_exper', this.bundlesDlg.bundle);
+                 elt('bundle-name').textContent = this.vars['exp_app_name'];
+             }
+         }
+
+         async newRun() {
+             if (this.run === null || await this.confirmDlg.show(
+                 'Really start a new run?', 'Cancel', 'Start')) {
+                 const runInfo = await callApi(
+                     this.socket, 'start_new_run');
+                 if (this.run) {
+                     this.instList.addStopSeparator(this.run);
+                 }
+                 this.setRunInfo(runInfo);
+                 this.run = runInfo.run;
+             }
          }
 
          download(run, what) {
@@ -321,7 +375,7 @@
 
          setRunInfo(info) {
              const runInfo = elt('run-info');
-             runInfo.textContent = info.run;
+             runInfo.textContent = info.run ?? '<none>';
              if (info.mode === 'res') {
                  runInfo.textContent += ' res';
              } else if (info.mode === 'rep') {
@@ -351,12 +405,28 @@
 {% block page_content %}
     <div id="dboard">
 
-        <h2>Dashboard</h2>
-        <div>
-            <strong>{{ exp_app_name }} ({{ num_profiles }} profiles);
-                run <span id="run-info"></span></strong>
+        <h2>EXPERt Dashboard</h2>
+        <div id="status">
+            <span class="status-key">Bundle:</span>
+            <span id="bundle-name"></span>
+            <span class="status-key">Run:</span>
+            <span id="run-info"></span>
         </div>
         <div id="controls">
+            <input type="file" id="file-input" class="exp-hidden">
+            <button type="button" id="upload-btn">
+                Upload Bundle to Server
+            </button>
+            <button type="button" id="load-btn">
+                Load Bundle
+            </button>
+            <button type="button" id="new-run-btn"
+                    {{'disabled' if exp_tool_mode else ''}}>
+                Start New Run
+            </button>
+            <button type="button" id="reload-btn">
+                Reload Bundle
+            </button>
             <button type="button" id="download-btn">
                 Download Results
             </button>
@@ -368,16 +438,6 @@
             </button>
             <button type="button" id="delete-id-btn">
                 Delete ID Mapping
-            </button>
-            <button type="button" id="load-btn">
-                Load Bundle
-            </button>
-            <button type="button" id="new-run-btn"
-                    {{'disabled' if exp_tool_mode else ''}}>
-                Start New Run
-            </button>
-            <button type="button" id="reload-btn">
-                Reload Bundle
             </button>
         </div>
 

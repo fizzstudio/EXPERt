@@ -3,7 +3,7 @@ import random
 
 from functools import cached_property
 
-import expert
+import expert as e
 
 
 class Profile:
@@ -25,7 +25,7 @@ class Profile:
     def load(cls, cond_str, subjid):
         inst = super().__new__(cls)
         inst.subjid = subjid
-        inst.cond = expert.experclass.cond_mod().conds[cond_str]
+        inst.cond = e.experclass.cond_mod().conds[cond_str]
         return inst
 
     def save(self):
@@ -34,7 +34,7 @@ class Profile:
     def make_subjid(self):
         while True:
             subjid = ''
-            for _ in range(expert.experclass.cfg['subjid_length']):
-                subjid += random.choice(expert.experclass.cfg['subjid_symbols'])
-            if subjid not in [p.subjid for p in expert.experclass.profiles]:
+            for _ in range(e.experclass.cfg['subjid_length']):
+                subjid += random.choice(e.experclass.cfg['subjid_symbols'])
+            if subjid not in [p.subjid for p in e.experclass.profiles]:
                 return subjid

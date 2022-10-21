@@ -6,7 +6,7 @@ from typing import Any
 from flask import render_template
 from jinja2 import BaseLoader
 
-import expert
+import expert as e
 
 
 html_ext = '.html.jinja'
@@ -29,13 +29,13 @@ class Loader(BaseLoader):
         return source, path, lambda: mtime == path.stat().st_mtime
 
 
-def set_server_variables():
+def set_server_variables(srv):
     global variables
     # All predefined vars are prefixed with 'exp_'
     # to avoid clashing with vars defined by experiments.
-    pfx = expert.cfg['url_prefix']
+    pfx = srv.cfg['url_prefix']
     variables = {
-        'exp_tool_mode': expert.tool_mode,
+        'exp_tool_mode': e.tool_mode,
         'exp_url_prefix': pfx
     }
     variables['exp_audio'] = f'/{pfx}/audio'
@@ -44,21 +44,20 @@ def set_server_variables():
     variables['exp_js'] = f'/{pfx}/js'
 
 
-def set_bundle_variables():
-    pfx = expert.cfg['url_prefix']
-    cls = expert.experclass
-    variables['exp_app_name'] = cls.name
-    variables['exp_app_id'] = cls.id
+def set_bundle_variables(experclass):
+    pfx = e.srv.cfg['url_prefix']
+    variables['exp_app_name'] = experclass.name
+    variables['exp_app_id'] = experclass.id
     variables['exp_app_static'] = f'/{pfx}/app/{variables["exp_app_id"]}'
     variables['exp_app_img'] = f'{variables["exp_app_static"]}/img'
     variables['exp_app_css'] = f'{variables["exp_app_static"]}/css'
     variables['exp_app_js'] = f'{variables["exp_app_static"]}/js'
-    variables['exp_window_title'] = cls.window_title
-    variables['exp_favicon'] = cls.cfg['favicon']
-    variables['exp_progbar_enabled'] = cls.cfg['progbar_enabled']
-    if expert.tool_mode:
+    variables['exp_window_title'] = experclass.window_title
+    variables['exp_favicon'] = experclass.cfg['favicon']
+    variables['exp_progbar_enabled'] = experclass.cfg['progbar_enabled']
+    if e.tool_mode:
         variables['exp_tool_display_total_tasks'] = \
-            cls.cfg['tool_display_total_tasks']
+            experclass.cfg['tool_display_total_tasks']
 
 
 def render(tplt, other_vars={}):

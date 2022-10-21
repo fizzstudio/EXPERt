@@ -6,9 +6,9 @@ from typing import ClassVar, Any, Optional
 
 from flask import current_app as app
 
-import expert
+import expert as e
 
-from . import templates, view
+from . import view
 
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
@@ -30,9 +30,8 @@ class Task(view.View):
 
     template: ClassVar[str] = ''
 
-    inst: expert.Experiment
+    inst: e.Experiment
     template_name: str
-    template_filename: str
     variables: dict[str, Any]
     prev_task: Optional[Task]
     next_tasks: list[Task]
