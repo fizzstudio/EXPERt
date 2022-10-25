@@ -38,3 +38,16 @@ Currently, FSA state-entry functions are not treated as async. I.e., enter() is 
 It's often useful to limit the number of tasks shown during development. I've been doing this manually, just slicing, e.g., 'testing_tasks', or whatever. But this is annoying because then you've changed the code, and it's easy to mistakenly commit the change. It'd be nice to have a parameter of some type that controls how many tasks are seen, and to be able to temporarily set it via a command-line switch. Where would such variables live, though? params.py? cfg.json? Somewhere new?
 
 Currently, the E server itself only references an experiment's params.py to read 'n_profiles' (although there is a commented-out reference in __init__.py for debug mode). Maybe this should go into cfg.json?
+** TODO What bundle contents to upload
+A bundle directory may contain any number of extraneous things that EXPERt doesn't need to run the experiment: build files, local git repo, etc. Certain things that are needed are known, such as the src directory. But other necessary data files may be present. It's convenient to allow the user to just select the toplevel bundle folder to upload, but this may include all of the extraneous stuff. Options:
+1. Whitelist + manifest: accept (in the browser) only known things (e.g., src/), but allow a manifest file listing additional things to allow. The manifest would need to be read separately in the browser.
+   1. Pros: Can keep current bundle file layouts.
+   2. Cons: Need to create manifest files.
+2. Whitelist only: add an extra directory, e.g., 'data', to hold any extra data files.
+   1. Pros: No manifest.
+   2. Cons: Need to modify bundle code to handle new file layouts.
+Whitelist items:
+- cfg.json
+- src/
+- static/
+- templates/

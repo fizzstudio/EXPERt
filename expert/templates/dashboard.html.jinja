@@ -315,9 +315,11 @@
 
          uploadBundle() {
              const input = elt('file-input');
+             const url = `{{ dashboard_path }}/upload_bundle`;
+             const formData = new FormData();
              return new Promise(resolve => {
                  const listener = () => {
-                     const reader = new FileReader();
+                     //const reader = new FileReader();
                      const xhr = new XMLHttpRequest();
                      xhr.upload.addEventListener('progress', e => {
                          if (e.lengthComputable) {
@@ -331,11 +333,15 @@
                          //canvas.parentNode.removeChild(canvas);
                          resolve();
                      }, false);
+                     for (const file of input.files) {
+                         formData.set(file.webkitRelativePath, file);
+                     }
                      xhr.open('POST', url);
-                     xhr.overrideMimeType(
-                         'text/plain; charset=x-user-defined-binary');
-                     reader.onload = evt => xhr.send(evt.target.result);
-                     reader.readAsBinaryString(file);
+                     xhr.overrideMimeType('multipart/form-data');
+                     xhr.send(formData);
+                     //reader.addEventListener(
+                     //    'load', evt => xhr.send(evt.target.result));
+                     //reader.readAsArrayBuffer(input.files[0]);
                  };
                  input.addEventListener('change', listener, false);
                  input.click();
@@ -413,7 +419,8 @@
             <span id="run-info"></span>
         </div>
         <div id="controls">
-            <input type="file" id="file-input" class="exp-hidden">
+            <input type="file" id="file-input" class="exp-hidden"
+            webkitdirectory multiple>
             <button type="button" id="upload-btn">
                 Upload Bundle to Server
             </button>

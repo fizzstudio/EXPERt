@@ -6,7 +6,7 @@ import shutil
 
 from pathlib import Path
 
-from flask import send_file
+from flask import send_file, request
 
 import expert as e
 from . import templates, experiment, view
@@ -63,6 +63,10 @@ class Dashboard(view.View):
             e.log.info(f'download request for {dl_name}')
             self._zip_id_mapping(subpath, dl_name)
             return self._download(dl_name)
+
+        @e.app.route(f'{self._path}/upload_bundle', methods=['POST'])
+        def dashboard_ul_bundle():
+            e.log.info(f'got {request.files.keys()}')
 
     def _add_sio_commands(self, srv):
         @srv.socketio.on('dboard_init')
