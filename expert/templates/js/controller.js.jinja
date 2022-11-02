@@ -1,0 +1,38 @@
+
+import { callApi } from '{{ exp_js }}/util.js';
+
+export class Controller {
+
+    async init() {
+        this._initSocket();
+        return this;
+    }
+
+    _initSocket() {
+        const ns = '{{ exp_sid|default(authn_code) }}';
+        this._socket = io(`/${ns}`);
+        this._socket.on('connect',
+                        async () => await this._onSocketConnected());
+        this._socket.on('disconnect',
+                        async () => await this._onSocketDisconnected());
+        this._socket.on('connect_error',
+                        async () => await this._onSocketConnectError());
+    }
+
+    async _onSocketConnected() {
+        console.log("socket connected");
+    }
+
+    async _onSocketDisconnected() {
+        console.log("socket disconnected");
+    }
+
+    async _onSocketConnectError() {
+        console.log("socket connection error");
+    }
+
+    async api(...params) {
+        return await callApi(this._socket, ...params);
+    }
+
+}

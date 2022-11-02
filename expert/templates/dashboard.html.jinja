@@ -11,16 +11,22 @@
 
     <script type="module">
 
-     import { Dialog, ConfirmDialog } from '{{ exp_js }}/dialog.js';
-     import { elt, callApi } from '{{ exp_js }}/util.js';
+     import { Overlay, Dialog, ConfirmDialog } from '{{ exp_js }}/dialog.js';
+     import { elt } from '{{ exp_js }}/util.js';
+     import { Controller } from '{{ exp_js }}/controller.js'
 
-     class RunsDialog extends Dialog {
+
+     class SingleSelectorDialog extends Dialog {
 
          constructor(ctrlr) {
-             super('exp-dlg-download');
-             this.ctrlr = ctrlr;
+             super(ctrlr, 'exp-dlg-download', 'download');
+         }
+
+         async init() {
+             await super.init();
              this.selectNode = this.node.querySelector(
                  '.exp-dlg-download-select');
+             return this;
          }
 
          clearOptions() {
@@ -29,6 +35,10 @@
              }
          }
 
+     }
+
+     class RunsDialog extends SingleSelectorDialog {
+
          async show(title, btnText, includeCurrent=true, onlyHasPii=false) {
              this.titlebar = title;
              this.run = null;
@@ -36,7 +46,7 @@
              {# obj with keys:
              'id', 'num_complete', 'num_incomplete', 'has_pii'
              #}
-             const runs = await callApi(this.ctrlr.socket, 'get_runs');
+             const runs = await this.ctrlr.api('get_runs');
              this.clearOptions();
              this.selectNode.add(new Option('Select a run'));
              for (const run of runs) {
@@ -66,26 +76,13 @@
          }
      }
 
-     class BundlesDialog extends Dialog {
-
-         constructor(ctrlr) {
-             super('exp-dlg-download');
-             this.ctrlr = ctrlr;
-             this.selectNode = this.node.querySelector(
-                 '.exp-dlg-download-select');
-         }
-
-         clearOptions() {
-             while (this.selectNode.options.length) {
-                 this.selectNode.remove(0);
-             }
-         }
+     class BundlesDialog extends SingleSelectorDialog {
 
          async show(title, btnText) {
              this.titlebar = title;
              this.run = null;
              this.selectNode.selectedIndex = 0;
-             const bundles = await callApi(this.ctrlr.socket, 'get_bundles');
+             const bundles = await this.ctrlr.api('get_bundles');
              this.clearOptions();
              this.selectNode.add(new Option('Select a bundle'));
              for (const bundle of bundles) {
@@ -198,9 +195,9 @@
 
      const exper = "{{ exp_app_name }}";
 
-     class Controller {
+     class Dashboard extends Controller {
 
-         constructor() {
+         async init() {
              this.uploadBtn = elt('upload-btn');
              this.loadBtn = elt('load-btn');
              this.newRunBtn = elt('new-run-btn');
@@ -209,15 +206,36 @@
              //this.deleteBtn = elt('delete-btn');
              this.downloadIdBtn = elt('download-id-btn');
              this.deleteIdBtn = elt('delete-id-btn');
-             this.bundlesDlg = new BundlesDialog(this);
-             this.runsDlg = new RunsDialog(this);
-             this.confirmDlg = new ConfirmDialog(this);
+             await super.init();
+         }
+
+         _initSocket() {
+             super._initSocket();
+             this._socket.on('new_instance',
+                             inst => this.instList.addInst(inst));
+             this._socket.on('update_instance',
+                             inst => this.instList.updateInst(inst));
+             this._socket.on('run_complete', () => {
+                 this.instList.addEndSeparator(this.run);
+                 this.setRunInfo({run: 'not running'});
+                 this.run = null;
+             });
+         }
+
+         async _initViews() {
+             this.uploadingOverlay = await new Overlay(
+                 this, 'upload-ovl').init();
+             this.uploadingOverlay.contentNode.textContent = 'Uploading...';
+             this.bundlesDlg = await new BundlesDialog(this).init();
+             this.runsDlg = await new RunsDialog(this).init();
+             this.confirmDlg = await new ConfirmDialog(this).init();
              this.instList = new InstList();
 
              this.uploadBtn.addEventListener('click', async () => {
-                 this.uploadBtn.disabled = true;
-                 await this.uploadBundle();
-                 this.uploadBtn.disabled = false;
+                 const resp = await this.uploadBundle();
+                 if (!resp.ok) {
+                     // XXX show error dialog
+                 }
              });
              this.loadBtn.addEventListener('click', async () => {
                  this.loadBtn.disabled = true;
@@ -233,7 +251,7 @@
                  if (await this.confirmDlg.show(
                      'Really reload experiment?', 'Cancel', 'Reload')) {
                      this.reloadBtn.disabled = true;
-                     await callApi(this.socket, 'reload_exper');
+                     await this.api('reload_exper');
                      if (this.run) {
                          this.instList.addReloadSeparator();
                      }
@@ -276,38 +294,24 @@
                      await this.confirmDlg.show(
                          `Really delete ID mapping for run ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
-                     await callApi(
-                         this.socket, 'delete_id_mappings', this.runsDlg.run);
+                     await this.api('delete_id_mappißngs', this.runsDlg.run);
                  }
                  this.deleteIdBtn.disabled = false;
              });
-
-             this.socket = io();
-
-             this.socket.on('connect', async () => {
-                 console.log("socket connected");
-                 const data = await callApi(this.socket, 'dboard_init');
-                 this.init(data.vars, data.insts, data.run_info);
-             });
-
-             this.socket.on('new_instance',
-                            inst => this.instList.addInst(inst));
-             this.socket.on('update_instance',
-                            inst => this.instList.updateInst(inst));
-             this.socket.on('run_complete', () => {
-                 this.instList.addEndSeparator(this.run);
-                 this.setRunInfo({run: 'not running'});
-                 this.run = null;
-             });
          }
 
-         init(vars, insts, runInfo) {
-             this.vars = vars;
+         async _onSocketConnected() {
+             await super._onSocketConnected();
+             console.log('will init views');
+             await this._initViews();
+             console.log('did init views');
+             const data = await this.api('dboard_init');
+             this.vars = data.vars;
              elt('bundle-name').textContent =
-                 vars['exp_app_name'] ?? '<none>';
-             this.instList.update(insts);
-             this.setRunInfo(runInfo);
-             this.run = runInfo.run;
+                 this.vars['exp_app_name'] ?? '<none>';
+             this.instList.update(data.insts);
+             this.setRunInfo(data.run_info);
+             this.run = data.run_info.run;
              console.log(
                  `initializing; bundle: ${this.vars['exp_app_name']};` +
                  ` run: ${this.run}`);
@@ -317,31 +321,85 @@
              const input = elt('file-input');
              const url = `{{ dashboard_path }}/upload_bundle`;
              const formData = new FormData();
+             let whitelist = ['cfg.json', 'src/', 'static/', 'templates/'];
+             const blacklist = ['profiles/', 'runs/'];
+             function aread(f) {
+                 return new Promise(resolve => {
+                     const reader = new FileReader();
+                     const listener = () => {
+                         reader.removeEventListener('load', listener);
+                         resolve(reader.result);
+                     };
+                     reader.addEventListener('load', listener);
+                     reader.readAsText(f);
+                 });
+             }
              return new Promise(resolve => {
-                 const listener = () => {
-                     //const reader = new FileReader();
+                 const listener = async () => {
+                     this.uploadBtn.disabled = true;
+                     this.uploadingOverlay.show();
+                     input.removeEventListener('change', listener, false);
+                     const bundleName = input.files[0]
+                                             .webkitRelativePath.split('/')[0];
+                     let manifestF = null;
+                     for (const file of input.files) {
+                         const parts = file.webkitRelativePath.split('/');
+                         if (parts[1] === 'exp_manifest.txt') {
+                             manifestF = file;
+                             break;
+                         }
+                     }
+                     if (manifestF) {
+                         const manifest = await aread(manifestF);
+                         whitelist = whitelist.concat(
+                             manifest.split('\n')
+                                     .map(x => x.trim())
+                                     .filter(x => x.length &&
+                                                !blacklist.includes(x)));
+                     }
+                     const filtered = [];
+                     for (const item of whitelist) {
+                         const itemPath = `${bundleName}/${item}`;
+                         for (const file of input.files) {
+                             if (item[item.length - 1] === '/') {
+                                 if (file.webkitRelativePath.startsWith(
+                                     itemPath)) {
+                                     filtered.push(file);
+                                 }
+                             } else {
+                                 if (file.webkitRelativePath === itemPath) {
+                                     filtered.push(file);
+                                     break;
+                                 }
+                             }
+                         }
+                     }
+                     for (const file of filtered) {
+                         formData.set(file.webkitRelativePath, file);
+                     }
+
                      const xhr = new XMLHttpRequest();
                      xhr.upload.addEventListener('progress', e => {
                          if (e.lengthComputable) {
                              const pct = Math.round((e.loaded*100)/e.total);
-                             //self.ctrl.update(percentage);
+                             console.log('pct', pct);
                          }
                      }, false);
                      xhr.upload.addEventListener('load', e => {
                          //self.ctrl.update(100);
-                         //const canvas = self.ctrl.ctx.canvas;
-                         //canvas.parentNode.removeChild(canvas);
-                         resolve();
+                         console.log('upload complete');
                      }, false);
-                     for (const file of input.files) {
-                         formData.set(file.webkitRelativePath, file);
-                     }
+                     xhr.addEventListener('readystatechange', e => {
+                         if (xhr.readyState === 4) {
+                             resolve(xhr.response);
+                             this.uploadBtn.disabled = false;
+                             this.uploadingOverlay.close();
+                         }
+                     }, false);
                      xhr.open('POST', url);
+                     xhr.responseType = 'json';
                      xhr.overrideMimeType('multipart/form-data');
                      xhr.send(formData);
-                     //reader.addEventListener(
-                     //    'load', evt => xhr.send(evt.target.result));
-                     //reader.readAsArrayBuffer(input.files[0]);
                  };
                  input.addEventListener('change', listener, false);
                  input.click();
@@ -350,8 +408,8 @@
 
          async loadBundle() {
              if (await this.bundlesDlg.show('Load Bundle', 'Load')) {
-                 this.vars = await callApi(
-                     this.socket, 'load_exper', this.bundlesDlg.bundle);
+                 this.vars = await this.api('load_exper',
+                                            this.bundlesDlg.bundle);
                  elt('bundle-name').textContent = this.vars['exp_app_name'];
              }
          }
@@ -359,8 +417,7 @@
          async newRun() {
              if (this.run === null || await this.confirmDlg.show(
                  'Really start a new run?', 'Cancel', 'Start')) {
-                 const runInfo = await callApi(
-                     this.socket, 'start_new_run');
+                 const runInfo = await this.api('start_new_run');
                  if (this.run) {
                      this.instList.addStopSeparator(this.run);
                  }
@@ -391,7 +448,7 @@
 
      }
 
-     const ctrlr = new Controller();
+     const ctrlr = await new Dashboard().init();
 
      /*const dummy = [
          '0123456789abcdef0123456789abcdef',
@@ -463,8 +520,4 @@
             <div id="inst-data"></div>
         </div>
     </div>
-    {% set exp_dlg_id = 'download' %}
-    {% include 'download_dialog.html.jinja' %}
-    {% set exp_dlg_id = 'confirm' %}
-    {% include 'confirm_dialog.html.jinja' %}
 {% endblock %}

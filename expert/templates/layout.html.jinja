@@ -41,14 +41,6 @@
                 </div>
             </div>
         </div>
-        {% set exp_dlg_id = 'message' %}
-        {% include 'confirm_dialog.html.jinja' %}
-        {% if session and session.sid %}
-            {# NB: both the message and confirm dialogs use
-            the 'confirm_dialog' template #}
-            {% set exp_dlg_id = 'confirm' %}
-            {% include 'confirm_dialog.html.jinja' %}
-        {% endif %}
     </body>
 
 </html>

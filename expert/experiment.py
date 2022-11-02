@@ -80,6 +80,7 @@ class BaseExper:
     runs_path: ClassVar[Path]
     templates_path: ClassVar[Path]
     dls_path: ClassVar[Path]
+    _cond_paths: ClassVar[list[Path]]
     mode: ClassVar[str]
     target: ClassVar[Optional[str]]
     run: ClassVar[str]
@@ -142,6 +143,10 @@ class BaseExper:
             'exp_sid': self.sid
         }
 
+        @e.srv.socketio.on('soundcheck', namespace=f'/{self.sid}')
+        def sio_soundcheck(resp):
+            return resp.strip().lower() == e.soundcheck_word
+
         @e.srv.socketio.on('init_task', namespace=f'/{self.sid}')
         def sio_init_task():
             return self.all_vars()
@@ -179,7 +184,21 @@ class BaseExper:
         experclass = cls._load_bundle()
         if experclass is None:
             sys.exit(f'unable to load experiment bundle "{cls.dir_path}"')
+        e.experclass = experclass
 
+        experclass.name = experclass.__qualname__.lower()
+        experclass.pkg = sys.modules[experclass.__module__]
+        experclass._setup_paths()
+        # create main experiment directories, if they don't exist
+        experclass.dir_path.mkdir(exist_ok=True)
+        experclass.runs_path.mkdir(exist_ok=True)
+        experclass.profiles_path.mkdir(exist_ok=True)
+        experclass.dls_path.mkdir(exist_ok=True)
+
+        experclass._cond_paths = experclass._read_cond_paths()
+        if not experclass._cond_paths:
+            experclass._make_profiles()
+            experclass._cond_paths = experclass._read_cond_paths()
         experclass._setup()
         experclass._add_routes()
 
@@ -265,7 +284,9 @@ class BaseExper:
                         inst = cls(ip, request.args)
                         session['sid'] = inst.sid
                         e.log.info(f'new instance for sid {inst.sid[:4]}')
-                        e.srv.socketio.emit('new_instance', inst.status())
+                        e.srv.socketio.emit(
+                            'new_instance', inst.status(),
+                            namespace=f'/{e.srv.dboard.code}')
                         inst._will_start()
                     else:
                         content = templates.render('full' + templates.html_ext)
@@ -342,14 +363,8 @@ class BaseExper:
 
     @classmethod
     def _setup(cls):
-        cls.name = cls.__qualname__.lower()
-        cls._setup_paths()
-        cls.pkg = sys.modules[cls.__module__]
-        # create main experiment directories, if they don't exist
-        cls.dir_path.mkdir(exist_ok=True)
-        cls.runs_path.mkdir(exist_ok=True)
-        cls.profiles_path.mkdir(exist_ok=True)
-        cls.dls_path.mkdir(exist_ok=True)
+        """Overridden by bundle class"""
+        pass
 
     @classmethod
     def _setup_paths(cls):
@@ -371,14 +386,10 @@ class BaseExper:
             rep_profs = cls.replicate.completed_profiles()
         else:
             rep_profs = None
-        cond_paths = cls._read_cond_paths()
-        if not cond_paths:
-            cls._make_profiles()
-            cond_paths = cls._read_cond_paths()
 
         e.log.info('loading profiles')
         cls.profiles.clear()
-        for cond_path in cond_paths:
+        for cond_path in cls._cond_paths:
             condname = cond_path.name
             if cls.conds and condname not in cls.conds:
                 continue

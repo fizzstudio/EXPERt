@@ -1,202 +1,184 @@
 
 import { elt, callApi } from '{{ exp_js }}/util.js'
+import { Controller } from '{{ exp_js }}/controller.js'
 
-export class Task {
+
+export class Task extends Controller {
 
     constructor(debug) {
-        this.debug = debug
-        this.prevBtn = elt('exp-prev-btn')
-        this.nextBtn = elt('exp-next-btn')
-        this.nextBtnWrapper = elt('exp-next-btn-wrapper')
-        //this.debugBackBtn = elt('debug-back-btn')
-        //this.debugFwdBtn = elt('debug-fwd-btn')
-        this.taskCursor = elt('exp-task-cursor')
-        this.navSelect = elt('exp-nav-menu-select')
-        this.content = elt('task-wrapper')
+        super();
+        this.debug = debug;
+        this.prevBtn = elt('exp-prev-btn');
+        this.nextBtn = elt('exp-next-btn');
+        this.nextBtnWrapper = elt('exp-next-btn-wrapper');
+        this.taskCursor = elt('exp-task-cursor');
+        this.navSelect = elt('exp-nav-menu-select');
+        this.content = elt('task-wrapper');
         {% if exp_progbar_enabled %}
-        elt('exp-progbar').classList.remove('exp-hidden')
+            elt('exp-progbar').classList.remove('exp-hidden');
         {% endif %}
-        //this.reset()
 
-        if ('{{ exp_sid }}' !== 'None' || debug) {
-            let ns = debug ? 'debug' : '{{ exp_sid }}'
-            this.socket = io(`/${ns}`)
-            this.socket.on('connect', async () => {
-                console.log("socket connected")
-            })
-            this.socket.on('disconnect', async () => {
-                console.log("socket disconnected")
-            })
-            this.socket.on('connect_error', async () => {
-                console.log("socket connection error")
-            })
-            this.nextBtn.addEventListener('click', async () => {
-                if (this._nextHook) {
-                    await this._nextHook()
-                }
-                this.disableNext()
-                await this._nav('next_page', this.response)
-            })
-            {% if exp_tool_mode %}
+        this.nextBtn.addEventListener('click', async () => {
+            if (this._nextHook) {
+                await this._nextHook();
+            }
+            this.disableNext();
+            await this._nav('next_page', this.response);
+        });
+        {% if exp_tool_mode %}
             this.prevBtn.addEventListener('click', async () => {
-                this.prevBtn.disabled = true
-                await this._nav('prev_page', this.response)
-                this.prevBtn.disabled = false
+                this.prevBtn.disabled = true;
+                await this._nav('prev_page', this.response);
+                this.prevBtn.disabled = false;
             })
             this.navSelect.addEventListener('change', async () => {
-                const idx = this.navSelect.selectedIndex
+                const idx = this.navSelect.selectedIndex;
                 if (idx) {
-                    //this.run = this.navSelect.value
                     await this._nav(
                         'goto',
                         this.vars['exp_nav_items'][idx - 1],
-                        this.response)
+                        this.response);
                 }
             })
-            {% endif %}
-            //this.debugFwdBtn.addEventListener(
-            //    'click', async () => await this._nav('debug_fwd'))
-        }
+        {% endif %}
     }
 
     get nextHook() {
-        return this._nextHook
+        return this._nextHook;
     }
 
     set nextHook(h) {
-        this._nextHook = h
+        this._nextHook = h;
     }
 
     _updateProgress() {
-        const cursor = this.vars['exp_task_cursor']
-        const num_tasks = this.vars['exp_num_tasks']
+        const cursor = this.vars['exp_task_cursor'];
+        const num_tasks = this.vars['exp_num_tasks'];
         // The progress bar shows progress in terms of the cursor index
         // of the current task (starting at 1) divided by the
         // total number, so it will show a small value on
         // the first task, and 100% on the final task
-        const progress_pct = 100*cursor/num_tasks
-        elt('exp-progbar').firstElementChild.style.width = `${progress_pct}%`
+        const progress_pct = 100*cursor/num_tasks;
+        elt('exp-progbar').firstElementChild.style.width = `${progress_pct}%`;
         {% if exp_tool_mode %}
             {% if exp_tool_display_total_tasks%}
-                this.taskCursor.textContent = `${cursor}/${num_tasks}`
+                this.taskCursor.textContent = `${cursor}/${num_tasks}`;
             {% else %}
-                this.taskCursor.textContent = cursor
+                this.taskCursor.textContent = cursor;
             {% endif %}
-            const state = this.vars['exp_state']
-            this.prevBtn.disabled = cursor < 2
-            this.nextBtn.disabled = cursor === num_tasks
+            const state = this.vars['exp_state'];
+            this.prevBtn.disabled = cursor < 2;
+            this.nextBtn.disabled = cursor === num_tasks;
         {% endif %}
     }
 
     async _nav(...apiParams) {
-        let vars = await this.api(...apiParams)
-        if (vars['task_type'] === this.vars['task_type']) {
-            this.vars = vars
-            await this.reset()
-            //this.initFunc(this)
+        let vars = await this.api(...apiParams);
+        if (vars['task_type'] === this.vars['task_type'] &&
+            vars['task_script'] === this.vars['task_script']) {
+            this.vars = vars;
+            await this.reset();
         } else {
             // moving on to a new task type
-            location.reload()
+            location.reload();
         }
     }
 
     async init() {
-        this.vars = await this.api('init_task')
+        await super.init();
+        this.vars = await this.api('init_task');
     }
 
     defaultResponse() {
-        return null
+        return null;
     }
 
     async reset() {
-        this.guide(null)
-        this.response = this.defaultResponse()
-        this.content.scrollTo(0, 0)
-        window.scrollTo(0, 0)
-        this._updateProgress()
-    }
-
-    async api(...params) {
-        return await callApi(this.socket, ...params)
+        this.guide(null);
+        this.response = this.defaultResponse();
+        this.content.scrollTo(0, 0);
+        window.scrollTo(0, 0);
+        this._updateProgress();
     }
 
     enableNext() {
-        this.nextBtn.disabled = false
-        this.guide(this.nextBtn)
+        this.nextBtn.disabled = false;
+        this.guide(this.nextBtn);
     }
 
     disableNext() {
         {% if not exp_tool_mode %}
-        this.nextBtn.disabled = true
-        this.guide(null)
+            this.nextBtn.disabled = true;
+            this.guide(null);
         {% endif %}
     }
 
     setResponse(response) {
-        this.response = response
+        this.response = response;
     }
 
     guide(guideElt) {
         if (this.guideElt) {
-            this.guideElt.classList.remove('exp-guide')
+            this.guideElt.classList.remove('exp-guide');
         }
         if (guideElt) {
-            guideElt.classList.add('exp-guide')
+            guideElt.classList.add('exp-guide');
         }
-        this.guideElt = guideElt
+        this.guideElt = guideElt;
     }
 
     // Pre-load a sound
     loadSound(sound) {
         return new Audio(
-            `{{ exp_app_static }}/audio/${sound}.mp3`)
+            `{{ exp_app_static }}/audio/${sound}.mp3`);
     }
 
     showSidebar(visible = true) {
         if (visible) {
-            elt('exp-sidebar').classList.remove('exp-hidden')
+            elt('exp-sidebar').classList.remove('exp-hidden');
         } else {
-            elt('exp-sidebar').classList.add('exp-hidden')
+            elt('exp-sidebar').classList.add('exp-hidden');
         }
     }
 
     setSidebarContent(content) {
-        elt('exp-sidebar-content').innerHTML = content
+        elt('exp-sidebar-content').innerHTML = content;
     }
 }
 
 export class FSA {
+
     constructor(states) {
-        this.states = states
-        this.states.fsa = this
-        this.state = null
+        this.states = states;
+        this.states.fsa = this;
+        this.state = null;
     }
 
     event(sym) {
-        const transits = this.states.transits[this.state]
+        const transits = this.states.transits[this.state];
         if (transits === undefined) {
-            return
+            return;
         }
-        const destState = transits[sym]
+        const destState = transits[sym];
         // symbols without transitions are treated as loops
         if (destState !== undefined) {
-            this.enter(destState)
+            this.enter(destState);
         }
     }
 
     enter(state) {
-        const willHook = this.states['willEnterState']
+        const willHook = this.states['willEnterState'];
         if (willHook) {
-            willHook.apply(this.states, [state])
+            willHook.apply(this.states, [state]);
         }
-        this.state = state
-        const f = this.states[state]
+        this.state = state;
+        const f = this.states[state];
         if (f) {
-            f.apply(this.states)
+            f.apply(this.states);
         }
-        const didHook = this.states['didEnterState']
+        const didHook = this.states['didEnterState'];
         if (didHook) {
-            didHook.apply(this.states, [state])
+            didHook.apply(this.states, [state]);
         }
     }
 }

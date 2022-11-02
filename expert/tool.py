@@ -40,7 +40,8 @@ class Tool(experiment.BaseExper):
         self._update_vars()
         if self.profile:
             self._save_responses()
-        e.srv.socketio.emit('update_instance', self.status())
+        e.srv.socketio.emit('update_instance', self.status(),
+                            namespace=f'/{e.srv.dboard.code}')
 
     def prev_task(self, resp):
         self._nav(resp, self.task.prev_task)

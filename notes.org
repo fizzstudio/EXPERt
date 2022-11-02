@@ -51,3 +51,37 @@ Whitelist items:
 - src/
 - static/
 - templates/
+** TODO Large uploads
+With the current upload mechanism, the browser literally reads all files in the selected directory, and sends a single, giant POST request to the server containing all the data. This could get unwieldy if one were running an experiment using large, e.g., video or audio files.
+** DONE Overwriting profiles and runs
+Replacing a bundle directory would also replace any profiles and runs within it. Seems like a good way to accidentally delete important data! Maybe just overwrite files, but explicitly leave profiles and runs alone?
+This also implies that it shouldn't be possible to include any local profiles and runs directories in the manifest.
+** DONE If the user selects nothing to upload
+It doesn't look like there's any way to receive an event if an open file selector window has simply been closed without selecting anything. So it's not a good idea to gray out the upload button, since we can't un-gray it in that case.
+** DONE Can the user select a directory they're inside?
+And if so, will the uploaded file relative paths still have the directory name prepended?
+UPDATE: Yep, it works just fine.
+** TODO Mandatory bundle content
+Might be a good idea to make sure any to-be-uploaded bundle actually is an EXPERt bundle, i.e., contains 'src', 'templates', etc.
+** TODO Remove bundle button
+Should just make a 'manage bundles' dialog.
+** TODO Rebuild profiles button?
+When you replace the contents of a bundle, you may want to create new profiles.
+** TODO Show a page when an experiment isn't running
+Even when no bundle has been loaded, or one has but no run has been started.
+** DONE Protect dangerous API calls
+Normal users (i.e., participants) shouldn't be able to make global API calls, generally. However, template loading recently became a global command.
+The current global API commands are:
+- soundcheck: just compares user input to the soundcheck word
+- load_template: renders the specified template, with variables set
+- dboard_init: returns global variables, status of all insts, and run info
+- get_bundles: returns list of installed bundles
+- get_runs: returns list of runs for current bundle
+- start_new_run
+- delete_id_mappings
+- load_exper
+- reload_exper
+UPDATE: The dashboard now simply uses its authn code as its socketio namespace, making all the API commands it defines secure. I moved the soundcheck command into experiment.py (where it belongs), and added load_template to both experiment.py and the dashboard.
+** DONE Dboard is not getting updated when new insts are created
+Probably need to emit on the correct namespace.
+** TODO Can we upload a bundle that replaces the currently-running one?

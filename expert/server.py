@@ -96,8 +96,7 @@ class Server:
         self._add_server_routes()
 
         if args.exper_path:
-            e.experclass = experiment.BaseExper.load(
-                args.exper_path, args.tool)
+            experiment.BaseExper.load(args.exper_path, args.tool)
             e.experclass.start(mode, obj, conds)
 
     def start(self):
@@ -138,10 +137,6 @@ class Server:
         def sio_error(e):
             e.log.info(f'socketio error: {e}')
 
-        @self.socketio.on('soundcheck')
-        def sio_soundcheck(resp):
-            return resp.strip().lower() == e.soundcheck_word
-
     def _add_server_routes(self):
         @e.app.route(f'/{self.cfg["url_prefix"]}/js/<path:subpath>')
         def js(subpath):
@@ -154,7 +149,7 @@ class Server:
             if inst := self.get_inst():
                 body = inst.task.render(f'js/{subpath}.jinja')
             else:
-                # probably the dashboard
+                # something other than a task or the dashboard
                 body = templates.render(f'js/{subpath}.jinja')
             resp = make_response(body)
             resp.cache_control.no_store = True

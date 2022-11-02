@@ -19,7 +19,9 @@ def _monitor():
             inst = cast(Exper, inst)
             if not inst.check_for_timeout():
                 # Exper.end() sends the update if the inst has timed out
-                e.srv.socketio.emit('update_instance', inst.status())
+                e.srv.socketio.emit(
+                    'update_instance', inst.status(),
+                    namespace=f'/{e.srv.dboard.code}')
 
 
 class Exper(BaseExper):
@@ -103,7 +105,8 @@ class Exper(BaseExper):
            not any(i.state == State.ACTIVE for i in cls.instances.values()):
             e.log.info('--- run complete ---')
             cls.running = False
-            e.srv.socketio.emit('run_complete')
+            e.srv.socketio.emit('run_complete',
+                                namespace=f'/{e.srv.dboard.code}')
 
     def check_for_complete(self):
         if not self.task.next_tasks and self.profile:
@@ -161,7 +164,8 @@ class Exper(BaseExper):
         # called for normal completion, timeout, nonconsent, or termination
         self.end_time = time.monotonic()
         self.state = state
-        e.srv.socketio.emit('update_instance', self.status())
+        e.srv.socketio.emit('update_instance', self.status(),
+                            namespace=f'/{e.srv.dboard.code}')
         if self.profile:
             e.log.info(f'saving responses for sid {self.sid[:4]}')
             self._save_responses()
@@ -181,7 +185,8 @@ class Exper(BaseExper):
             self.check_for_complete()
         self._update_vars()
         if self.state == State.ACTIVE:
-            e.srv.socketio.emit('update_instance', self.status())
+            e.srv.socketio.emit('update_instance', self.status(),
+                                namespace=f'/{e.srv.dboard.code}')
 
     def _elapsed_time(self):
         if self.state == State.ACTIVE:

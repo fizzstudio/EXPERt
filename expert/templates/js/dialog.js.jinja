@@ -1,159 +1,195 @@
 
 
-import { View } from '{{ exp_js }}/view.js'
-import { elt } from '{{ exp_js }}/util.js'
+import { View } from '{{ exp_js }}/view.js';
+import { elt } from '{{ exp_js }}/util.js';
 
-export class Dialog extends View {
 
-    constructor(id) {
-        super(elt(id).cloneNode(true))
-        this.node.id = undefined
-        this.node.classList.remove('exp-hidden')
-        //this.node.classList.add('exp-dlg')
-        this.titlebarNode = this.node.querySelector(
-            '.exp-dlg-elements-title')
-        // darkens background when a dialog is visible
-        //this.dlgFilter = el('dlg-filter')
-        this.keymap = {}
-        // NB: this has a class instead of an ID bc
-        // multiple dialogs may be present in the DOM
-        this.btnsWrapper = this.node.querySelector(
-            '.exp-dlg-elements-buttons')
+export class Overlay extends View {
+
+    constructor(ctrlr, id, template = 'overlay') {
+        const div = document.createElement('div');
+        super(div, ctrlr);
+        div.id = id;
+        div.classList.add('exp-overlay');
+        this.template = template;
         this.visible = false;
     }
 
+    async init() {
+        const content = await this.ctrlr.api('load_template', this.template);
+        this.node.innerHTML = content;
+        this.contentNode = this.node.querySelector('.exp-overlay-content');
+        {# Returning this for convenience #}
+        return this;
+    }
+
+    show(afterFunc) {
+        document.querySelector('body').lastChild.after(this.node);
+        this.visible = true;
+        return new Promise(resolve => {
+            this._resolve = resolve;
+            if (afterFunc) {
+                afterFunc();
+            }
+        });
+    }
+
+    close(value = null) {
+        this.node.remove()
+        this.visible = false;
+        this._resolve(value);
+    }
+
+
+}
+
+export class Dialog extends Overlay {
+
+    constructor(ctrlr, id, template) {
+        super(ctrlr, id, `${template}_dialog`);
+        this.node.classList.add('exp-dlg');
+        this.keymap = {};
+        this.visible = false;
+    }
+
+    async init() {
+        await super.init();
+        this.titlebarNode = this.node.querySelector('.exp-dlg-title');
+        this.btnsWrapper = this.node.querySelector('.exp-dlg-buttons');
+        return this;
+    }
+
     set titlebar(t) {
-        this.titlebarNode.textContent = t
+        this.titlebarNode.textContent = t;
     }
 
     setButtons(buttons) {
-        this.buttons = {}
+        this.buttons = {};
         while (this.btnsWrapper.firstChild) {
-            this.btnsWrapper.removeChild(this.btnsWrapper.firstChild)
+            this.btnsWrapper.removeChild(this.btnsWrapper.firstChild);
         }
-        for (let {tag, text, hook, disabled} of buttons) {
-            let btn = document.createElement('button')
-            btn.append(text)
+        for (const {tag, text, hook, disabled} of buttons) {
+            const btn = document.createElement('button');
+            btn.append(text);
             if (disabled) {
-                btn.disabled = true
+                btn.disabled = true;
             }
-            this.btnsWrapper.append(btn)
-            this.buttons[tag] = [btn, hook, disabled]
+            this.btnsWrapper.append(btn);
+            this.buttons[tag] = [btn, hook, disabled];
         }
     }
 
     getButtonsDisabled() {
-        let state = {}
-        for (let [tag, [btn, hook, disabled]] of
+        const state = {};
+        for (const [tag, [btn, hook, disabled]] of
             Object.entries(this.buttons)) {
-            state[tag] = btn.disabled
+            state[tag] = btn.disabled;
         }
-        return state
+        return state;
     }
 
     setButtonsDisabled(state) {
         if (state) {
-            for (let [tag, disabled] of Object.entries(state)) {
-                this.buttons[tag][0].disabled = disabled
+            for (const [tag, disabled] of Object.entries(state)) {
+                this.buttons[tag][0].disabled = disabled;
             }
         } else {
-            let curState = this.getButtonsDisabled()
-            for (let [tag, [btn, hook, disabled]] of
+            const curState = this.getButtonsDisabled()
+            for (const [tag, [btn, hook, disabled]] of
                 Object.entries(this.buttons)) {
-                btn.disabled = true
+                btn.disabled = true;
             }
-            return curState
+            return curState;
         }
     }
 
     show(afterFunc) {
-        for (let [tag, [btn, hook, disabled]] of
+        for (const [tag, [btn, hook, disabled]] of
             Object.entries(this.buttons)) {
-            btn.disabled = disabled
+            btn.disabled = disabled;
         }
-        document.querySelector('body').lastChild.after(this.node)
-        this.visible = true;
-        //this.dlgFilter.style.display = 'block'
-        //this.node.style.display = 'flex'
-        if (afterFunc) {
-            afterFunc()
-        }
-        return new Promise(resolve => {
-            for (let [tag, [btn, hook]] of Object.entries(this.buttons)) {
-                btn.addEventListener('click', async () => {
-                    let btnState = this.setButtonsDisabled()
-                    let shouldClose = hook ? await hook(tag) : true
-                    if (shouldClose) {
-                        this.close()
-                        resolve(tag)
-                    }
-                    this.setButtonsDisabled(btnState)
-                })
+        return super.show(() => {
+            if (afterFunc) {
+                afterFunc();
             }
-            this.oldOnkeydown = document.onkeydown
-            document.onkeydown = async (ev) => {
-                if (ev.code === 'Escape' && this.buttons.cancel) {
-                    let hook = this.buttons.cancel[1]
-                    let shouldClose = hook ? await hook('cancel') : true
+            for (const [tag, [btn, hook]] of Object.entries(this.buttons)) {
+                btn.addEventListener('click', async () => {
+                    const btnState = this.setButtonsDisabled();
+                    const shouldClose = hook ? await hook(tag) : true;
                     if (shouldClose) {
-                        this.close()
-                        resolve('cancel')
+                        this.close(tag);
+                    }
+                    this.setButtonsDisabled(btnState);
+                });
+            }
+            this.oldOnkeydown = document.onkeydown;
+            document.onkeydown = async ev => {
+                if (ev.code === 'Escape' && this.buttons.cancel) {
+                    const hook = this.buttons.cancel[1];
+                    const shouldClose = hook ? await hook('cancel') : true;
+                    if (shouldClose) {
+                        this.close('cancel');
                     }
                 } else {
-                    let handler = this.keymap[ev.code]
+                    const handler = this.keymap[ev.code];
                     if (handler) {
-                        handler()
+                        handler();
                     }
                 }
-            }
-        })
+            };
+        });
     }
 
-    close() {
+    close(value = null) {
         // XXX it might be a good idea to call a hook method here
         // that removes the onclick handlers, thus deleting
         // references from the DOM to the instance. Subclasses
         // could override it to remove any other handlers.
-        document.onkeydown = this.oldOnkeydown
-        //this.node.style.display = 'none'
-        this.node.remove()
-        this.visible = false;
-        //this.dlgFilter.style.display = 'none'
+        document.onkeydown = this.oldOnkeydown;
+        super.close(value);
     }
 }
 
 export class MessageDialog extends Dialog {
 
-    constructor() {
+    constructor(ctrlr, id) {
         // same template as ConfirmDialog
-        super('exp-dlg-message')
-        this.titlebar = 'Message'
-        this.messageNode = this.node.querySelector(
-            '.exp-dlg-elements-message')
-        this.setButtons([{tag: 'cancel', text: 'Okay'}])
+        super(ctrlr, id, 'confirm');
+    }
+
+    async init() {
+        await super.init();
+        this.titlebar = 'Message';
+        this.messageNode = this.node.querySelector('.exp-dlg-message');
+        this.setButtons([{tag: 'cancel', text: 'Okay'}]);
+        return this;
     }
 
     async show(text) {
-        this.messageNode.textContent = text
-        await super.show(() => this.buttons['cancel'][0].focus())
+        this.messageNode.textContent = text;
+        await super.show(() => this.buttons['cancel'][0].focus());
     }
 }
 
 export class ConfirmDialog extends Dialog {
 
-    constructor() {
-        super('exp-dlg-confirm')
-        this.titlebar = 'Confirm'
+    constructor(ctrlr, id) {
+        super(ctrlr, id, 'confirm');
         //this.keymap['Enter'] = () => this.close()
-        this.messageNode = this.node.querySelector(
-            '.exp-dlg-elements-message')
+    }
+
+    async init() {
+        await super.init();
+        this.titlebar = 'Confirm';
+        this.messageNode = this.node.querySelector('.exp-dlg-message');
+        return this;
     }
 
     async show(text, cancelLabel, okayLabel) {
-        this.messageNode.innerHTML = text
+        this.messageNode.innerHTML = text;
         this.setButtons([{tag: 'cancel', text: cancelLabel},
-                         {tag: 'okay', text: okayLabel}])
-        let tag = await super.show(() => this.buttons['okay'][0].focus())
-        return tag === 'okay'
+                         {tag: 'okay', text: okayLabel}]);
+        let tag = await super.show(() => this.buttons['okay'][0].focus());
+        return tag === 'okay';
     }
 }
