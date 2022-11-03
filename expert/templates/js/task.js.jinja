@@ -18,6 +18,16 @@ export class Task {
         {% endif %}
         //this.reset()
 
+        document.addEventListener('keydown', async ev => {
+            if (ev.code === 'Enter' && !this.nextBtn.disabled) {
+                this.nextBtn.click()
+                // Don't allow any other focused element to
+                // do anything
+                ev.preventDefault()
+                ev.stopPropagation()
+            }
+        }, true)
+
         if ('{{ exp_sid }}' !== 'None' || debug) {
             let ns = debug ? 'debug' : '{{ exp_sid }}'
             this.socket = io(`/${ns}`)
