@@ -40,7 +40,7 @@ body {
   }
 }
 #page-content .exp-guide {
-  background: #77ff77;
+  background: #77ff77 !important;
 }
 #page-content button {
   display: inline-flex;
@@ -164,44 +164,45 @@ body {
 #soundcheck {
   align-items: center;
 }
-#soundcheck-controls {
+#soundcheck #controls {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-#soundcheck-player {
-  width: 10rem;
+#soundcheck #play-btn {
+  margin: 0.5rem;
 }
-#soundcheck-response-wrapper {
+#soundcheck #response-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: #767676;
-  color: white;
+  background: white;
+  color: black;
+  border: solid 1px black;
   padding: 0.5rem;
   margin-top: 1rem;
 }
-#soundcheck-input {
+#soundcheck #response-input-wrapper {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
   padding: 0.5rem;
 }
-#soundcheck-prompt {
+#soundcheck #response-prompt {
   flex: auto;
   text-align: center;
   padding: 0 0.5rem;
 }
-#soundcheck-submit-btn-wrapper {
+#soundcheck #submit-btn-wrapper {
   padding: 0.5rem;
 }
-#soundcheck-correct-msg {
+#soundcheck #correct-msg {
   display: none;
   background: #77ff77;
   color: black;
   padding: 0.5rem;
 }
-#soundcheck-format-error {
+#soundcheck #format-error {
   display: none;
   background: red;
   color: white;
