@@ -156,6 +156,10 @@ class BaseExper:
                 self._next_task(resp)
             return self.task.all_vars()
 
+        @socketio.on('soundcheck', namespace=f'/{self.sid}')
+        def sio_soundcheck(resp):
+            return resp.strip().lower() == expert.soundcheck_word
+
         @socketio.on('get_feedback', namespace=f'/{self.sid}')
         def sio_get_feedback(resp):
             return self.task.get_feedback(resp)

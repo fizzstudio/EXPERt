@@ -178,10 +178,6 @@ def _init_socketio():
     def sio_error(e):
         app.logger.info(f'socketio error: {e}')
 
-    @socketio.on('soundcheck')
-    def sio_soundcheck(resp):
-        return resp.strip().lower() == soundcheck_word
-
 
 def _add_server_routes():
     @app.route(f'/{cfg["url_prefix"]}/js/<path:subpath>')

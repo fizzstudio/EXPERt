@@ -16,34 +16,38 @@
             When you are ready to start, please listen to this audio
             clip, and type the word you hear.
         </p>
-        <div id="soundcheck-controls">
-            <div id="soundcheck-player-wrapper">
-                <audio id="soundcheck-player" controls preload="auto"
-                       src="{{ exp_static }}/audio/_soundcheck.mp3">
-                </audio>
+        <div id="controls">
+            <div id="player-wrapper">
+                <!-- <audio id="soundcheck-player" controls preload="auto"
+                       src="{{ exp_audio }}/_soundcheck.mp3">
+                </audio> -->
+                <button type="button" id="play-btn" class="play-btn">
+                    <span id="play-btn-label">Play</span>
+                    <img src="{{ exp_img }}/play.svg">
+                </button>
             </div>
-            <div id="soundcheck-response-wrapper">
-                <div id="soundcheck-input">
-                    <div id="soundcheck-prompt">
+            <div id="response-wrapper">
+                <div id="response-input-wrapper">
+                    <div id="response-prompt">
                         What word did you hear?
                     </div>
                     <div>
-                        <input id="soundcheck-response" type="text" size="12"
+                        <input id="response-input" type="text" size="12"
                                value="" disabled>
                     </div>
                 </div>
-                <div id="soundcheck-submit-btn-wrapper">
-                    <button id="soundcheck-submit-btn" type="button"
+                <div id="submit-btn-wrapper">
+                    <button id="submit-btn" type="button"
                             disabled autocomplete="off">
                         Submit answer
                     </button>
                 </div>
-                <div id="soundcheck-correct-msg">
+                <div id="correct-msg">
                     Correct! Click <b>Next</b> to continue.
                 </div>
             </div>
         </div>
-        <p id="soundcheck-format-error">
+        <p id="format-error">
             <b>ERROR:</b> The experiment will not work in
             this browser, because the browser cannot play audio of
             type <b>MP3</b>.  Please use a different browser.
