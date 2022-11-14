@@ -51,6 +51,7 @@ class Exper(BaseExper):
                 TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
 
         if self.prolific_pid:
+            self.variables['exp_prolific_pid'] = self.prolific_pid
             self.variables['exp_prolific_completion_url'] = \
                 self.cfg['prolific_completion_url']
 
