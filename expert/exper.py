@@ -29,7 +29,6 @@ class Exper(BaseExper):
     # Will be True when all profiles have completed the experiment.
     complete: ClassVar[bool] = False
 
-    end_time: float
     global_timeout_time: Optional[float]
 
     def __init__(self, *args, **kwargs):
@@ -65,11 +64,6 @@ class Exper(BaseExper):
         super()._setup(*args)
         cls.monitor_task = e.srv.socketio.start_background_task(
             _monitor)
-
-    @classmethod
-    def all_active(cls):
-        return [cast(Exper, inst) for inst in cls.instances.values()
-                if inst.state == State.ACTIVE]
 
     # @classmethod
     # def start_new_run(cls):
@@ -151,25 +145,6 @@ class Exper(BaseExper):
             return True
         return False
 
-    def terminate(self):
-        if self.state != State.ACTIVE:
-            return
-        e.log.info(f'sid {self.sid[:4]} terminated')
-        self.task.replace_next_task(tasks.Terminated(self))
-        self.end(State.TERMINATED)
-        if self.profile:
-            self.profiles.insert(0, self.profile)
-
-    def end(self, state):
-        # called for normal completion, timeout, nonconsent, or termination
-        self.end_time = time.monotonic()
-        self.state = state
-        e.srv.socketio.emit('update_instance', self.status(),
-                            namespace=f'/{e.srv.dboard.code}')
-        if self.profile:
-            e.log.info(f'saving responses for sid {self.sid[:4]}')
-            self._save_responses()
-
     def _next_task(self, resp):
         self._store_resp(resp)
         e.log.info(
@@ -187,12 +162,6 @@ class Exper(BaseExper):
         if self.state == State.ACTIVE:
             e.srv.socketio.emit('update_instance', self.status(),
                                 namespace=f'/{e.srv.dboard.code}')
-
-    def _elapsed_time(self):
-        if self.state == State.ACTIVE:
-            return super()._elapsed_time()
-        else:
-            return self.end_time - self.start_time
 
     def _dummy_do_tasks(self):
         while self.state != State.COMPLETE:

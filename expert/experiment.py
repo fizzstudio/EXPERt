@@ -5,7 +5,6 @@ import random
 import sys
 import traceback
 import time
-import datetime
 import importlib
 import importlib.util
 import csv
@@ -74,6 +73,7 @@ class BadOutputFormatError(Exception):
 
 class BaseExper:
 
+    cfg: ClassVar[dict]
     dir_path: ClassVar[Path]
     static_path: ClassVar[Path]
     profiles_path: ClassVar[Path]
@@ -81,10 +81,10 @@ class BaseExper:
     templates_path: ClassVar[Path]
     dls_path: ClassVar[Path]
     _cond_paths: ClassVar[list[Path]]
-    mode: ClassVar[str]
-    target: ClassVar[Optional[str]]
-    run: ClassVar[str]
-    record: ClassVar[Record]
+    mode: ClassVar[Optional[str]] = None
+    target: ClassVar[Optional[str]] = None
+    run: ClassVar[Optional[str]] = None
+    record: ClassVar[Optional[Record]] = None
     replicate: ClassVar[Optional[Record]]
     name: ClassVar[str]
     profiles: ClassVar[list[profile.Profile]] = []
@@ -97,6 +97,7 @@ class BaseExper:
     profile: Optional[profile.Profile]
     start_time: float
     start_timestamp: str
+    end_time: float
     task: tasks.Task
     last_task: tasks.Task
     tasks_by_id: dict[int, tasks.Task]
@@ -170,44 +171,60 @@ class BaseExper:
             return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
 
         @e.srv.socketio.on_error(f'/{self.sid}')
-        def sio_inst_error(e):
+        def sio_inst_error(err):
             e.log.info(f'socketio error:\n{traceback.format_exc()}')
 
+    # @classmethod
+    # def load(cls, path, tool_mode=False, is_reloading=False):
+    #     cls.dir_path = Path(path).resolve(True)
+
+    #     cls._read_config()
+
+    #     e.srv.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
+
+    #     experclass = cls._load_bundle(is_reloading)
+    #     if experclass is None:
+    #         sys.exit(f'unable to load experiment bundle "{cls.dir_path}"')
+    #     e.experclass = experclass
+
+    #     experclass.name = experclass.__qualname__.lower()
+    #     experclass.pkg = sys.modules[experclass.__module__]
+    #     experclass._setup_paths()
+    #     # create main experiment directories, if they don't exist
+    #     experclass.dir_path.mkdir(exist_ok=True)
+    #     experclass.runs_path.mkdir(exist_ok=True)
+    #     experclass.profiles_path.mkdir(exist_ok=True)
+    #     experclass.dls_path.mkdir(exist_ok=True)
+
+    #     experclass._cond_paths = experclass._read_cond_paths()
+    #     if not experclass._cond_paths:
+    #         experclass._make_profiles()
+    #         experclass._cond_paths = experclass._read_cond_paths()
+    #     experclass._setup()
+
+    #     templates.set_bundle_variables(experclass)
+    #     e.app.update_jinja_loader(experclass)
+
+    #     experclass.running = False
+
     @classmethod
-    def load(cls, path, tool_mode=False):
-        cls.dir_path = Path(path).resolve(True)
-
-        cls._read_config()
-
-        e.srv.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
-
-        experclass = cls._load_bundle()
-        if experclass is None:
-            sys.exit(f'unable to load experiment bundle "{cls.dir_path}"')
-        e.experclass = experclass
-
-        experclass.name = experclass.__qualname__.lower()
-        experclass.pkg = sys.modules[experclass.__module__]
-        experclass._setup_paths()
+    def init(cls, path):
+        cls.dir_path = path
+        cls.name = cls.__qualname__.lower()
+        cls.pkg = sys.modules[cls.__module__]
+        cls._setup_paths()
         # create main experiment directories, if they don't exist
-        experclass.dir_path.mkdir(exist_ok=True)
-        experclass.runs_path.mkdir(exist_ok=True)
-        experclass.profiles_path.mkdir(exist_ok=True)
-        experclass.dls_path.mkdir(exist_ok=True)
+        cls.dir_path.mkdir(exist_ok=True)
+        cls.runs_path.mkdir(exist_ok=True)
+        cls.profiles_path.mkdir(exist_ok=True)
+        cls.dls_path.mkdir(exist_ok=True)
 
-        experclass._cond_paths = experclass._read_cond_paths()
-        if not experclass._cond_paths:
-            experclass._make_profiles()
-            experclass._cond_paths = experclass._read_cond_paths()
-        experclass._setup()
-        experclass._add_routes()
-
-        templates.set_bundle_variables(experclass)
-        e.app.update_jinja_loader(experclass)
-
-        experclass.running = False
-
-        return experclass
+        cls._cond_paths = cls._read_cond_paths()
+        if not cls._cond_paths:
+            cls._make_profiles()
+            cls._cond_paths = cls._read_cond_paths()
+        cls.running = False
+        cls._setup()
 
     @classmethod
     def start(cls, mode, obj=None, conds=None):
@@ -244,122 +261,31 @@ class BaseExper:
 
         cls.running = True
 
-    @classmethod
-    def reload(cls):
-        e.log.info('*** reloading experiment bundle ***')
-        # XXX Should this be allowed if there are active instances?
-        # In experiment mode, I'm inclined to say no, since even
-        # if the nstance code remains the same (the instance object
-        # doesn't get replaced), resources might change.Might be
-        # desirable in tool mode, though.
-        cls._read_config()
-        # NB: Reloading does NOT start a new run.
-        # Reloading implies the bundle has changed, so
-        # allowing resuming seems counter-intuitive. But,
-        # it's possible a bug might need fixing mid-run,
-        # so it might be useful.
-        e.experclass = cls._load()
+    # @classmethod
+    # def _load_bundle(cls, is_reloading=False):
+    #     """Load the bundle in the directory at cls.dir_path.
 
-    @classmethod
-    def _add_routes(cls):
-        first_request_setup_complete = False
-
-        @e.app.route('/' + e.srv.cfg['url_prefix'])
-        def index():
-            nonlocal first_request_setup_complete
-            if not first_request_setup_complete:
-                cls._first_request_setup()
-                first_request_setup_complete = True
-            content = None
-            inst = e.srv.get_inst()
-            if not inst:
-                if not e.tool_mode and not cls.running:
-                    content = templates.render('norun' + templates.html_ext)
-                else:
-                    ip = request.headers.get('X-Real-IP', request.remote_addr)
-                    if ',' in ip:
-                        ip = ip.split(',')[0]
-                    if cls.profiles:
-                        # not full yet
-                        inst = cls(ip, request.args)
-                        session['sid'] = inst.sid
-                        e.log.info(f'new instance for sid {inst.sid[:4]}')
-                        e.srv.socketio.emit(
-                            'new_instance', inst.status(),
-                            namespace=f'/{e.srv.dboard.code}')
-                        inst._will_start()
-                    else:
-                        content = templates.render('full' + templates.html_ext)
-
-            if content is None:
-                content = inst._present()
-
-            resp = make_response(content)
-            # Caching is disabled entirely to ensure that
-            # users always get fresh content
-            resp.cache_control.no_store = True
-
-            return resp
-
-        @e.app.route(f'/{e.srv.cfg["url_prefix"]}/app/{cls.id}/<path:subpath>')
-        def exper_static(subpath):
-            return send_from_directory(cls.static_path, subpath)
-
-    @classmethod
-    def _first_request_setup(cls):
-        # session will expire after 24 hours
-        e.app.permanent_session_lifetime = datetime.timedelta(hours=24)
-        # session cookie will expire after app.permanent_session_lifetime
-        session.permanent = True
-        if request.url.startswith('https'):
-            e.app.config['SESSION_COOKIE_SECURE'] = True
-        else:
-            e.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-
-    @classmethod
-    def _read_config(cls):
-        with open(e.expert_path / 'cfg.json') as f:
-            cls.cfg = json.load(f)
-        exper_cfg_path = cls.dir_path / 'cfg.json'
-        exper_cfg = {}
-        if exper_cfg_path.is_file():
-            with open(exper_cfg_path) as f:
-                exper_cfg = json.load(f)
-
-        exper_id = exper_cfg.get('id')
-        cls.id = exper_id or secrets.token_urlsafe(8)
-        if not exper_id:
-            exper_cfg['id'] = cls.id
-            with open(exper_cfg_path, 'w') as f:
-                json.dump(exper_cfg, f, indent=2)
-
-        cls.cfg.update(exper_cfg)
-
-    @classmethod
-    def _load_bundle(cls):
-        """Load the experiment in the directory at cls.dir_path.
-
-        NB: The source code for the experiment must be located in
-        the 'src' subfolder of the experiment bundle directory.
-        E.g., if exper_path == '/foo/bar/my_exper', the source code
-        must be located in /foo/bar/my_exper/src.
-        """
-        #exper_path = Path(exper_path).resolve(True)
-        e.log.info(f'loading experiment from {cls.dir_path}')
-        init_path = cls.dir_path / 'src' / '__init__.py'
-        spec = importlib.util.spec_from_file_location('src', init_path)
-        pkg = importlib.util.module_from_spec(spec)
-        sys.modules[spec.name] = pkg
-        e.log.info(f'experiment package name: {pkg.__name__}')
-        spec.loader.exec_module(pkg)
-        ##params = importlib.import_module('.params', pkg)
-        #params = __import__('src.params', fromlist=['params'])
-        # return the first subclass of Experiment found
-        for k, v in pkg.__dict__.items():
-            if isinstance(v, type) and issubclass(v, e.Experiment) and \
-               v is not e.Experiment:
-                return v
-        return None
+    #     NB: The source code for the bundle must be located in
+    #     the 'src' subfolder of the bundle directory.
+    #     E.g., if exper_path == '/foo/bar/my_exper', the source code
+    #     must be located in /foo/bar/my_exper/src.
+    #     """
+    #     #exper_path = Path(exper_path).resolve(True)
+    #     e.log.info(f'loading bundle from {cls.dir_path}')
+    #     init_path = cls.dir_path / 'src' / '__init__.py'
+    #     spec = importlib.util.spec_from_file_location('src', init_path)
+    #     pkg = importlib.util.module_from_spec(spec)
+    #     sys.modules[spec.name] = pkg
+    #     e.log.info(f'experiment package name: {pkg.__name__}')
+    #     spec.loader.exec_module(pkg)
+    #     ##params = importlib.import_module('.params', pkg)
+    #     #params = __import__('src.params', fromlist=['params'])
+    #     # return the first subclass of Experiment found
+    #     for k, v in pkg.__dict__.items():
+    #         if isinstance(v, type) and issubclass(v, e.Experiment) and \
+    #            v is not e.Experiment:
+    #             return v
+    #     return None
 
     @classmethod
     def _setup(cls):
@@ -437,6 +363,22 @@ class BaseExper:
     @classmethod
     def profile_mod(cls):
         return importlib.import_module('.profile', cls.pkg.__package__)
+
+    @classmethod
+    def all_active(cls):
+        return [inst for inst in cls.instances.values()
+                if inst.state == State.ACTIVE]
+
+    @classmethod
+    def new_inst(cls, ip, args):
+        inst = cls(ip, args)
+        session['sid'] = inst.sid
+        e.log.info(f'new instance for sid {inst.sid[:4]}')
+        e.srv.socketio.emit(
+            'new_instance', inst.status(),
+            namespace=f'/{e.srv.dboard.code}')
+        inst._will_start()
+        return inst
 
     @classmethod
     def collect_responses(cls, run):
@@ -588,7 +530,10 @@ class BaseExper:
         #self.task.did_store_resp(resp)
 
     def _elapsed_time(self):
-        return time.monotonic() - self.start_time
+        if self.state == State.ACTIVE:
+            return time.monotonic() - self.start_time
+        else:
+            return self.end_time - self.start_time
 
     def _save_pii(self, pii):
         # dir might exist if resuming
@@ -618,6 +563,25 @@ class BaseExper:
         if pii:
             self._save_pii(pii)
         self.write_responses(resps, resp_path)
+
+    def terminate(self):
+        if self.state != State.ACTIVE:
+            return
+        e.log.info(f'sid {self.sid[:4]} terminated')
+        self.task.replace_next_task(tasks.Terminated(self))
+        self.end(State.TERMINATED)
+        if self.profile:
+            self.profiles.insert(0, self.profile)
+
+    def end(self, state):
+        # called for normal completion, timeout, nonconsent, or termination
+        self.end_time = time.monotonic()
+        self.state = state
+        e.srv.socketio.emit('update_instance', self.status(),
+                            namespace=f'/{e.srv.dboard.code}')
+        if self.profile:
+            e.log.info(f'saving responses for sid {self.sid[:4]}')
+            self._save_responses()
 
 
 class Record:

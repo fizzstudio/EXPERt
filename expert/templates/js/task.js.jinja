@@ -108,8 +108,10 @@ export class Task extends Controller {
 
     disableNext() {
         {% if not exp_tool_mode %}
-            this.nextBtn.disabled = true;
+        this.nextBtn.disabled = true;
+        if (this.guideElt === this.nextBtn) {
             this.guide(null);
+        }
         {% endif %}
     }
 

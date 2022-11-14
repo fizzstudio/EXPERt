@@ -3,6 +3,7 @@ import secrets
 import json
 import zipfile
 import shutil
+import importlib
 
 from pathlib import Path
 
@@ -110,6 +111,7 @@ class Dashboard(view.View):
                 except FileExistsError:
                     return {'ok': False, 'err': 'Unable to write file'}
                 f.save(path)
+            importlib.invalidate_caches()
             e.log.info(f'installed bundle \'{bundle_name}\'')
             return {'ok':True, 'err': None}
 
@@ -184,15 +186,26 @@ class Dashboard(view.View):
         def sio_terminate_inst(sid):
             pass
 
-        @srv.socketio.on('load_exper', namespace=f'/{self.code}')
-        def sio_load_exper(name):
-            experiment.BaseExper.load(e.expert_path / 'bundles' / name)
+        @srv.socketio.on('load_bundle', namespace=f'/{self.code}')
+        def sio_load_bundle(name, tool_mode):
+            e.log.info(f'loading in tool mode: {tool_mode}')
+            path = e.expert_path / 'bundles' / name
+            e.srv.load_bundle(path, tool_mode=tool_mode)
             #self.variables['num_profiles'] = e.experclass.num_profiles
             return self.all_vars()
 
         @srv.socketio.on('reload_exper', namespace=f'/{self.code}')
         def sio_reload_exper():
-            e.experclass.reload()
+            e.log.info('*** reloading bundle ***')
+            for inst in e.experclass.all_active():
+                inst.terminate()
+            e.srv.load_bundle(
+                e.experclass.dir_path, e.tool_mode, is_reloading=True)
+            # NB: Reloading does NOT start a new run.
+            # Reloading implies the bundle has changed, so
+            # allowing resuming seems counter-intuitive. But,
+            # it's possible a bug might need fixing mid-run,
+            # so it might be useful.
 
         @srv.socketio.on('load_template', namespace=f'/{self.code}')
         def sio_load_template(tplt, tplt_vars={}):

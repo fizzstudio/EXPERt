@@ -19,6 +19,67 @@ NB: If you want to run on a port other than 5000, use:
 If you just pass the port number, EXPERt will listen on 127.0.0.1, which won't work inside the container.
 
 * Issues
+** TODO Make conditions optional?
+Currently, the notion of conditions is mandatory, even if there's only 1.
+** TODO Caching like minik
+HTML responses now all have ~Cache-Control: no-store~, which prevents any cache from storing the content. This seems necessary so that when the page is reloaded (which will use cached content) when moving to a new task type, we get the new content even though the URL stays the same. However, I'm not entirely sure this is necessary, given that Flask also sets ~Vary: Cookie~, which should allow cookie contents to also get used in the cache key. It may be sufficient to use ~Cache-Control: private~ to allow caching, but not in shared caches.
+UPDATE: Actually, the session cookie actually doesn't keep track of the user's progress; this is done strictly on the server. So ~no-store~ is probably the way to go.
+It's important to note that, since the URL never changes, EXPERt uses ~location.reload()~ when moving to a new task type. This causes the browser to set ~Cache-Control: max-age=0~ on the request (with *force reloading*, browsers instead use ~no-cache~, which forces caches to re-validate any cached response they have). ~max-age=0~ means don't reuse any response older than 0 seconds. So technically, with regard to moving between task types, ~no-store~ isn't really needed.
+What's the real concern here, then? Cases:
+1. User completes the experiment, gets the mturk code page. It's desirable that if they leave and return later, they can still see the code. Seeing cached content in this case is not an issue. Do they still see the code if they hit reload? Or the "already participated" screen?
+   1. I think they should still get the code, since the instance is still in memory.
+2. User stops midway, experiment times out, they click the link to return later. Seeing the cached experiment content here would not be desirable.
+***** Weird behavior on mac FF
+If I use EXPERt, then stop and restart the server, and return without a reload (hit enter in the address bar), the request never even gets to the EXPERt server, but instead gets a ~403 Forbidden~ from server software that identifies itself as AirTunes. I'm guessing that this happens because the request doesn't include a ~Cache-Control~ header.
+UPDATE: I turned off 'AirPlay Receiver' under Sharing in System Prefs. Seems to have fixed the problem.
+** TODO Rollup support
+An EXPERt session currently involves downloading various separate pieces of JS:
+- script in task_base_layout (includes jinja code)
+- various built-in scripts (task.js, etc.)
+- any task-specific scripts (built-in or in the experiment bundle)
+Chartmob currently uses rollup to generate its segmentation task script.
+Rollup has the capability to treat specific imports as external, i.e., leaving them out of the rolled-up module. The question is, with all of EXPERt's built-in scripts rolled up into a single file, is it possible for imports from another rollup bundle to still reference them?
+** TODO Share built-in sass globals with experiments
+Mostly important for $desktop-break, but also useful for matching the default colors.
+** TODO Globalparams startup sanity check
+** TODO Save partial responses?
+If you navigate away from a task where a change has been made (e.g., some input) but the response hasn't been submitted yet, then navigate back, the task is reset to its initial state (would the timer get reset as well?). Technically, the bfcache should prevent this (if they just hit back then forward), but it can get disabled in certain instances, IIRC.
+** DONE Are we genuinely single-threaded?
+If async_handlers=True (the default), events should get handled using eventlet coroutines. AFAIK, this doesn't involve multiple system threads, or have any possibility of memory races.
+** TODO Unknown socketio events
+It would be lovely to be able to throw an error if an unknown message is received. Not sure how to do this, though...
+** TODO Old dashboard persistence
+It's currently possible to leave a dashboard window open, restart the server for a new run, and have entries for the new run get added to the existing dashboard. Maybe the old dashboard should fail to reconnect with the server because of the different dashboard code? This is all basically security-through-obscurity anyway...
+** DONE Making the URL prefix customizable
+A trickier problem than expected. The main issue here is scripts: they don't get served as templates, so I can't just pass in the prefix.
+The prefix itself should be specified by the experiment as an EXPERt config setting. This means that rollup (if I were to use it in EXPERt proper) wouldn't see it (rollup for EXPERt itself should happen once, not per-experiment). So somehow, the experiment sets the value for the prefix, and the built-in scripts can see this value.
+Minik has a templated script that dynamically imports per-page scripts, then calls an init function they export with an object containing the values of template variables (as well as a reference to the custom import function itself, so imported scripts can import others in the same fashion). I could use the same approach in EXPERt.
+This is almost a "module-in-a-module" style... Would it be simpler just to serve scripts as jinja templates?
+UPDATE: Script templates would be great, but wouldn't play well with rollup in the experiment bundle. So back to the minik approach...
+Yet another approach might be to serve the built-in scripts as templates, but serve experiment-bundle scripts as ordinary modules. Built-ins could use the URL prefix directly, while experiment scripts could either access it via the task instance, or simply let rollup read in the config json file.
+** TODO Show timeout immediately
+Currently, if a participant times out, the timed-out screen shows up where the next task would have been. E.g., you might load the site (seeing the welcome page), close the window, come back an hour later, reload it (still seeing the welcome page), then get "timed-out" after clicking next.
+** TODO Profile reuse
+There may be times when we want to do some experiment-like pseudo-task, but actually have all "participants" do the exact same thing (perhaps even with an unspecified number of people). In such cases, it might be nice to simply have one profile, and allow it to be used by all comers. Or possible one profile per condition. Or even make it more general, and be able to specify the number of participants to be assigned the same profile. (It only makes sense to have a single profile if reuse is unlimited; this would basically be a "no-profiles" mode, in effect.)
+** TODO Run dir naming
+Currently, run folders are named with timestamps with precision to the second. Typing them in is awkward, and it's a lot to look at, too. Maybe something more like: ~2022.05.07-01~, where the last component is simply an increasing number.
+** TODO Tie runs to profiles (and config)?
+It occurs to me (much later than it should've) that replicating a run would require access to the same profiles as the original run, but that EXPERt isn't currently designed to guarantee that those profiles will still be around; a different run of the experiment might've involved changed params, with a new set of profiles.
+A change in params may result in a new set of profiles, but it's also possible for a new set to be generated using the identical params as another set.
+So maybe we introduce the notion of profile sets, stored in timestamped folders. Generating a new set of profiles would be a manual operation generally, although making a params change might force a new set to be generated. (Well, profile generation doesn't have to be tied to params at all, so maybe not the latter.) The experiment record would now include both a copy of the params used to run the experiment, and the timestamp of the profile set used.
+With this change, replication (and resumption, I suppose) would need to make use of the stored params and profiles.
+** TODO Config var and param types
+So, we have config vars, which control aspects of how EXPERt functions, e.g., 'url_prefix', 'output_format', etc. Then, we have params, which are meant to be used only within an experiment, and not by EXPERt itself; e.g., 'translate_neg_y_charts'. But there's also a third class: experiment params that are required by EXPERt; the only one at the moment may be 'n_profiles'.
+- Should there be a formal check that it's present?
+- Should it instead be a config var?
+- Should config vars be copied to runs along with params?
+** TODO Task socket disconnect/reconnect
+If the server is restarted, the task socket will actually be able to reconnect, even though its sid is old. But this establishes a namespace on which the server is no longer listening. Calls to api() do seem to resolve, but with an ~undefined~ result.
+We can hook into the 'disconnect' event, but reconnection does occur without error. It would be nice to display some sort of sensible error message when we get the ~undefined~ result.
+** DONE Results download file caching
+If we download results multiple times during a run, we only get the original cached file, not including later results.
+UPDATE: Download files are still saved in the 'dl' folder, but we create a new one on each request, overwriting any older file.
+
 ** TODO All slots filled
 Went through CM-R in tool mode. All tasks completed and data was saved, but on the 'thank you' page, got 'all participant slots have already been filled' message.
 ** TODO Repeated profile assignment in tool mode
@@ -85,3 +146,17 @@ UPDATE: The dashboard now simply uses its authn code as its socketio namespace, 
 ** DONE Dboard is not getting updated when new insts are created
 Probably need to emit on the correct namespace.
 ** TODO Can we upload a bundle that replaces the currently-running one?
+** TODO Maintain task state across page reload?
+This would go beyond the tool-mode feature to read a stored response, allowing the task to set its state to reflect the response. This would allow for saving arbitrary task state.
+** DONE Reloading tool-mode bundles
+Currently doesn't work bc Tool instances don't have a terminate() method, nor do they have any concept of "ending".
+** TODO Dashboard separators don't persist across page reload
+** TODO Index route
+This used to be defined in BaseExper, and the experiment class was referenced as 'cls'. 'cls' here was a reference to the class object loaded from the first bundle loaded. Loading new bundles or reloading a loaded bundle wouldn't call _add_routes() again. So, referencing, e.g., cls.running, would refer to the value in the first-loaded class, which wouldn't match the state for the newly-loaded class. Not to mention that we'd be creating instances of the original class!
+Also, if we only call _add_routes() once, we can't set up new static file routes for bundles with different IDs! Not to mention that without any way to delete routes, we'd essentially have a memory leak.
+Solution: moved the route definition into the server, which is the more logical place, and removed the bundle ID from the bundle static URL.
+** TODO Terminated insts after bundle reload
+If an inst was terminated mid-experiment, they can still reload and see the task they were on.
+** DONE Bundles not actually getting reloaded
+Pretty sure python caches imports, so I may need to remove the imported module from the cache before re-importing it.
+UPDATE: The way I'm doing things now may not be entirely proper, but it works.

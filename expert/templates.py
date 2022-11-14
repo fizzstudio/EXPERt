@@ -35,7 +35,6 @@ def set_server_variables(srv):
     # to avoid clashing with vars defined by experiments.
     pfx = srv.cfg['url_prefix']
     variables = {
-        'exp_tool_mode': e.tool_mode,
         'exp_url_prefix': pfx
     }
     variables['exp_audio'] = f'/{pfx}/audio'
@@ -46,9 +45,10 @@ def set_server_variables(srv):
 
 def set_bundle_variables(experclass):
     pfx = e.srv.cfg['url_prefix']
+    variables['exp_tool_mode'] = e.tool_mode
     variables['exp_app_name'] = experclass.name
-    variables['exp_app_id'] = experclass.id
-    variables['exp_app_static'] = f'/{pfx}/app/{variables["exp_app_id"]}'
+    #variables['exp_app_id'] = experclass.id
+    variables['exp_app_static'] = f'/{pfx}/app'
     variables['exp_app_img'] = f'{variables["exp_app_static"]}/img'
     variables['exp_app_css'] = f'{variables["exp_app_static"]}/css'
     variables['exp_app_js'] = f'{variables["exp_app_static"]}/js'

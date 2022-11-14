@@ -18,8 +18,8 @@
 
      class SingleSelectorDialog extends Dialog {
 
-         constructor(ctrlr) {
-             super(ctrlr, 'exp-dlg-download', 'download');
+         constructor(ctrlr, id = 'exp-dlg-download', template = 'download') {
+             super(ctrlr, id, template);
          }
 
          async init() {
@@ -78,6 +78,18 @@
 
      class BundlesDialog extends SingleSelectorDialog {
 
+         constructor(ctrlr) {
+             super(ctrlr, 'exp-dlg-load', 'load_bundle');
+         }
+
+         async init() {
+             await super.init();
+             // Can't use elt() here bc we're not added to the document yet
+             this.toolCboxNode = this.node.querySelector(
+                 '#exp-dlg-load-tool-cbox');
+             return this;
+         }
+
          async show(title, btnText) {
              this.titlebar = title;
              this.run = null;
@@ -101,6 +113,7 @@
                   {tag: 'okay', text: btnText, disabled: true}]);
              let tag = await super.show(() => this.buttons['okay'][0].focus());
              this.selectNode.removeEventListener('change', selectionChanged);
+             this.toolMode = this.toolCboxNode.checked;
              return tag === 'okay';
          }
      }
@@ -164,10 +177,10 @@
              this.instDataNode.append(div);
          }
 
-         addReloadSeparator() {
+         addReloadSeparator(bundleName) {
              const div = document.createElement('div');
              div.className = 'dboard-reload-sep';
-             div.textContent = 'Experiment reloaded';
+             div.textContent = `Bundle '${bundleName}' reloaded`;
              this.instDataNode.append(div);
          }
 
@@ -248,15 +261,9 @@
                  this.newRunBtn.disabled = false;
              });
              this.reloadBtn.addEventListener('click', async () => {
-                 if (await this.confirmDlg.show(
-                     'Really reload experiment?', 'Cancel', 'Reload')) {
-                     this.reloadBtn.disabled = true;
-                     await this.api('reload_exper');
-                     if (this.run) {
-                         this.instList.addReloadSeparator();
-                     }
-                     this.reloadBtn.disabled = false;
-                 }
+                 this.reloadBtn.disabled = true;
+                 await this.reloadBundle();
+                 this.reloadBtn.disabled = false;
              });
 
              this.downloadBtn.addEventListener('click', async () => {
@@ -307,14 +314,27 @@
              console.log('did init views');
              const data = await this.api('dboard_init');
              this.vars = data.vars;
-             elt('bundle-name').textContent =
-                 this.vars['exp_app_name'] ?? '<none>';
+             this._onBundleUpdate();
              this.instList.update(data.insts);
              this.setRunInfo(data.run_info);
              this.run = data.run_info.run;
              console.log(
                  `initializing; bundle: ${this.vars['exp_app_name']};` +
                  ` run: ${this.run}`);
+         }
+
+         /**
+            Called when a bundle has been loaded.
+         */
+         _onBundleUpdate() {
+             if (this.vars['exp_app_name']) {
+                 elt('bundle-name').textContent = this.vars['exp_app_name'];
+                 this.newRunBtn.disabled = false;
+                 this.reloadBtn.disabled = false;
+                 this.downloadBtn.disabled = false;
+                 this.downloadIdBtn.disabled = false;
+                 this.deleteIdBtn.disabled = false;
+             }
          }
 
          uploadBundle() {
@@ -408,9 +428,11 @@
 
          async loadBundle() {
              if (await this.bundlesDlg.show('Load Bundle', 'Load')) {
-                 this.vars = await this.api('load_exper',
-                                            this.bundlesDlg.bundle);
+                 this.vars = await this.api(
+                     'load_bundle', this.bundlesDlg.bundle,
+                     this.bundlesDlg.toolMode);
                  elt('bundle-name').textContent = this.vars['exp_app_name'];
+                 this._onBundleUpdate();
              }
          }
 
@@ -426,6 +448,20 @@
              }
          }
 
+         async reloadBundle() {
+             if (await this.confirmDlg.show(
+                 `Really reload '${this.vars['exp_app_name']}'?`,
+                 'Cancel', 'Reload')) {
+                 await this.api('reload_exper');
+                 if (this.run) {
+                     this.instList.addReloadSeparator(
+                         this.vars['exp_app_name']);
+                 }
+                 this.setRunInfo({});
+                 this.run = null;
+             }
+         }
+
          download(run, what) {
              const anchor = document.createElement('a');
              anchor.href = `{{ dashboard_path }}/download/${run}/${what}`;
@@ -438,7 +474,7 @@
 
          setRunInfo(info) {
              const runInfo = elt('run-info');
-             runInfo.textContent = info.run ?? '<none>';
+             runInfo.textContent = info.run ?? '<None>';
              if (info.mode === 'res') {
                  runInfo.textContent += ' res';
              } else if (info.mode === 'rep') {
@@ -465,13 +501,13 @@
     </script>
 {% endblock %}
 
-{% block page_content %}
+{% block exp_page_content %}
     <div id="dboard">
 
         <h2>EXPERt Dashboard</h2>
         <div id="status">
             <span class="status-key">Bundle:</span>
-            <span id="bundle-name"></span>
+            <span id="bundle-name">&lt;None&gt;</span>
             <span class="status-key">Run:</span>
             <span id="run-info"></span>
         </div>
@@ -484,23 +520,23 @@
             <button type="button" id="load-btn">
                 Load Bundle
             </button>
-            <button type="button" id="new-run-btn"
-                    {{'disabled' if exp_tool_mode else ''}}>
+            <button type="button" id="new-run-btn" disabled>
+                    {# {{'disabled' if exp_tool_mode else ''}}> #}
                 Start New Run
             </button>
-            <button type="button" id="reload-btn">
+            <button type="button" id="reload-btn" disabled>
                 Reload Bundle
             </button>
-            <button type="button" id="download-btn">
+            <button type="button" id="download-btn" disabled>
                 Download Results
             </button>
             {#<button type="button" id="delete-btn">
                 Delete Results
             </button>#}
-            <button type="button" id="download-id-btn">
+            <button type="button" id="download-id-btn" disabled>
                 Download ID Mapping
             </button>
-            <button type="button" id="delete-id-btn">
+            <button type="button" id="delete-id-btn" disabled>
                 Delete ID Mapping
             </button>
         </div>

@@ -63,6 +63,12 @@ body {
   color: white;
   text-align: center;
 }
+#dboard #inst-list #inst-data .dboard-reload-sep {
+  grid-column: 1/-1;
+  background: black;
+  color: white;
+  text-align: center;
+}
 #dboard #inst-list #inst-data .dboard-end-sep {
   grid-column: 1/-1;
   background: #77ff77;

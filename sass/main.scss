@@ -23,13 +23,14 @@ body {
     align-items: center;
 }
 
-#page-content {
+#exp-page-content {
     position: relative; // for sidebar positioning
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
     background: globals.$light-gray;
+    border-radius: 0.5rem;
     padding: 1rem;
     margin: 1rem;
     line-height: 1.5;
@@ -94,6 +95,10 @@ body {
         margin: 0.5rem;
         .exp-nav-btn {
             font-size: 1.5rem;
+            border-radius: 1rem;
+            border: solid black 1px;
+            background: globals.$very-light-gray;
+            padding: 0.25rem 1rem;
             img {
                 height: 1.5rem;
                 vertical-align: text-bottom;
@@ -129,6 +134,7 @@ body {
     align-items: stretch;
     //flex: 1 1 0;
     background: globals.$light-gray;
+    border-radius: 0.5rem;
     padding: 1rem;
     margin: 0;
     #exp-sidebar-content {
@@ -334,6 +340,12 @@ body {
     padding: 0.25rem;
     margin-bottom: 0.5rem;
 }
-.exp-dlg--buttons {
+.exp-dlg-message {
+    padding: 0.5rem;
+}
+.exp-dlg-download-select-wrapper {
+    padding: 0.5rem;
+}
+.exp-dlg-buttons {
     padding: 0.5rem;
 }

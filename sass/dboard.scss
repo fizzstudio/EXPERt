@@ -63,6 +63,12 @@ body {
                 color: white;
                 text-align: center;
             }
+            .dboard-reload-sep {
+                grid-column: 1 / -1;
+                background: black;
+                color: white;
+                text-align: center;
+            }
             .dboard-end-sep {
                 grid-column: 1 / -1;
                 background: globals.$bright-green;

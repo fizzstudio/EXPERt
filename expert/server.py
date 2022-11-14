@@ -1,8 +1,10 @@
 
 import argparse
+import importlib
 import json
 import sys
 import logging
+import datetime
 
 
 from typing import Type, Any, Optional
@@ -10,7 +12,7 @@ from pathlib import Path
 
 from flask import (
     Flask, session, make_response,
-    send_from_directory
+    send_from_directory, request
 )
 
 from flask_socketio import SocketIO
@@ -93,10 +95,10 @@ class Server:
         else:
             conds = args.conditions.split(',') if args.conditions else None
 
-        self._add_server_routes()
+        self._add_routes()
 
         if args.exper_path:
-            experiment.BaseExper.load(args.exper_path, args.tool)
+            self.load_bundle(args.exper_path, args.tool)
             e.experclass.start(mode, obj, conds)
 
     def start(self):
@@ -137,7 +139,9 @@ class Server:
         def sio_error(e):
             e.log.info(f'socketio error: {e}')
 
-    def _add_server_routes(self):
+    def _add_routes(self):
+        first_request_setup_complete = False
+
         @e.app.route(f'/{self.cfg["url_prefix"]}/js/<path:subpath>')
         def js(subpath):
             # NB:
@@ -171,6 +175,127 @@ class Server:
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'images', subpath)
 
+        @e.app.route('/' + self.cfg['url_prefix'])
+        def index():
+            nonlocal first_request_setup_complete
+            content = None
+
+            if e.experclass:
+                if not first_request_setup_complete:
+                    self._first_request_setup()
+                    first_request_setup_complete = True
+                # Even if we aren't running, there may still be completed
+                # instances in memory that can serve up completion codes
+                inst = e.experclass.instances.get(session.get('sid'))
+                if inst:
+                    content = inst._present()
+                else:
+                    if e.experclass.running:
+                        if e.experclass.profiles:
+                            inst = e.experclass.new_inst(
+                                self._get_ip(), request.args)
+                            content = inst._present()
+                        else:
+                            content = templates.render(
+                                'full' + templates.html_ext)
+                    else:
+                        content = templates.render('norun' + templates.html_ext)
+            else:
+                content = templates.render('norun' + templates.html_ext)
+
+            resp = make_response(content)
+            # Caching is disabled entirely to ensure that
+            # users always get fresh content
+            resp.cache_control.no_store = True
+
+            return resp
+
+        @e.app.route(f'/{self.cfg["url_prefix"]}/app/<path:subpath>')
+        def exper_static(subpath):
+            return send_from_directory(e.experclass.static_path, subpath)
+
+    def _get_ip(self):
+        ip = request.headers.get('X-Real-IP', request.remote_addr)
+        if ',' in ip:
+            ip = ip.split(',')[0]
+        return ip
+
+    def _first_request_setup(self):
+        # session will expire after 24 hours
+        e.app.permanent_session_lifetime = datetime.timedelta(hours=24)
+        # session cookie will expire after app.permanent_session_lifetime
+        session.permanent = True
+        if request.url.startswith('https'):
+            e.app.config['SESSION_COOKIE_SECURE'] = True
+        else:
+            e.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+    def load_bundle(self, path, tool_mode=False, is_reloading=False):
+        bundle_path = Path(path).resolve(True)
+
+        bundle_cfg = self._read_bundle_config(bundle_path)
+
+        self.enable_tool_mode(tool_mode or bundle_cfg['tool_mode'])
+
+        e.experclass = self._load_bundle_src(bundle_path, is_reloading)
+        if e.experclass is None:
+            sys.exit(f'unable to load experiment bundle "{bundle_path}"')
+
+        e.experclass.cfg = bundle_cfg
+        e.experclass.init(bundle_path)
+
+        templates.set_bundle_variables(e.experclass)
+        e.app.update_jinja_loader(e.experclass)
+
+        e.experclass.running = False
+
+    def _read_bundle_config(self, bundle_path):
+        # read default bundle config
+        with open(e.expert_path / 'cfg.json') as f:
+            cfg = json.load(f)
+        bundle_cfg_path = bundle_path / 'cfg.json'
+        bundle_cfg = {}
+        if bundle_cfg_path.is_file():
+            with open(bundle_cfg_path) as f:
+                bundle_cfg = json.load(f)
+
+        # bundle_id = bundle_cfg.get('id')
+        # cls.id = bundle_id or secrets.token_urlsafe(8)
+        # if not bundle_id:
+        #     bundle_cfg['id'] = cls.id
+        #     with open(bundle_cfg_path, 'w') as f:
+        #         json.dump(bundle_cfg, f, indent=2)
+
+        cfg.update(bundle_cfg)
+        return cfg
+
+    def _load_bundle_src(self, path, is_reloading=False):
+        """Load the bundle in the directory at 'path'.
+
+        NB: The source code for the bundle must be located in
+        the 'src' subfolder of the bundle directory.
+        E.g., if exper_path == '/foo/bar/my_exper', the source code
+        must be located in /foo/bar/my_exper/src.
+        """
+        if is_reloading:
+            #e.log.info(f'spec: {e.experclass.pkg.__spec__}')
+            #pkg = importlib.reload(e.experclass.pkg)
+            importlib.invalidate_caches()
+
+        e.log.info(f'loading bundle from {path}')
+        init_path = path / 'src' / '__init__.py'
+        spec = importlib.util.spec_from_file_location('src', init_path)
+        pkg = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = pkg
+        e.log.info(f'bundle package name: {pkg.__name__}')
+        spec.loader.exec_module(pkg)
+        # return the first subclass of Experiment found
+        for k, v in pkg.__dict__.items():
+            if isinstance(v, type) and issubclass(v, e.Experiment) and \
+               v is not e.Experiment:
+                return v
+        return None
+
     def get_inst(self):
         # NB: session.new seems to be False here even if we do
         # in fact have a new, empty session
@@ -184,5 +309,6 @@ class Server:
 
     def enable_tool_mode(self, enabled):
         e.tool_mode = enabled
+        e.log.info(f'tool mode enabled: {enabled}')
         if e.tool_mode:
             e.Experiment = tool.Tool
