@@ -104,7 +104,8 @@ body {
                 vertical-align: text-bottom;
             }
             &:disabled {
-                img { opacity: 0.5; }
+                opacity: 0.35;
+                //img { opacity: 0.25; }
             }
         }
         #exp-task-cursor {

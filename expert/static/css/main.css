@@ -101,8 +101,8 @@ body {
   height: 1.5rem;
   vertical-align: text-bottom;
 }
-#exp-chin #exp-nav-controls .exp-nav-btn:disabled img {
-  opacity: 0.5;
+#exp-chin #exp-nav-controls .exp-nav-btn:disabled {
+  opacity: 0.35;
 }
 #exp-chin #exp-nav-controls #exp-task-cursor {
   margin: 0 0.5rem;

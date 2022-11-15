@@ -260,6 +260,17 @@ class BaseExper:
         cls._load_profiles()
 
         cls.running = True
+        e.log.info(f'--- starting new run {cls.run} ---')
+
+    @classmethod
+    def stop(cls):
+        e.log.info(f'--- stopping run {cls.run} ---')
+        cls.mode = None
+        cls.target = None
+        cls.run = None
+        cls.replicate = None
+        cls.record = None
+        cls.running = False
 
     # @classmethod
     # def _load_bundle(cls, is_reloading=False):

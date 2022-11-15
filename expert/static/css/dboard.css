@@ -3,7 +3,7 @@ body {
 }
 
 @media (min-width: 48em) {
-  #page-content {
+  #exp-page-content {
     flex: auto;
     max-height: none;
     width: unset;

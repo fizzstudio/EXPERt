@@ -99,10 +99,15 @@ class Dashboard(view.View):
         def dashboard_ul_bundle():
             bundles_path = e.expert_path / 'bundles'
             bundle_name = next(iter(request.files)).split('/')[0]
+
+            if e.experclass and bundle_name == e.experclass.name:
+                self._end_run()
+
             bundle_path = bundles_path / bundle_name
             try:
                 bundle_path.mkdir(exist_ok=True)
             except FileExistsError:
+                # bundle_path already exists as a non-directory
                 return {'ok': False, 'err': 'Unable to write file'}
             for relpath, f in request.files.items():
                 path = bundles_path / relpath
@@ -164,9 +169,7 @@ class Dashboard(view.View):
 
         @srv.socketio.on('start_new_run', namespace=f'/{self.code}')
         def sio_start_new_run():
-            e.log.info('--- starting new run ---')
-            for inst in e.experclass.all_active():
-                inst.terminate()
+            self._end_run()
             e.experclass.start('new')
             return self._run_info()
 
@@ -196,9 +199,8 @@ class Dashboard(view.View):
 
         @srv.socketio.on('reload_exper', namespace=f'/{self.code}')
         def sio_reload_exper():
+            self._end_run()
             e.log.info('*** reloading bundle ***')
-            for inst in e.experclass.all_active():
-                inst.terminate()
             e.srv.load_bundle(
                 e.experclass.dir_path, e.tool_mode, is_reloading=True)
             # NB: Reloading does NOT start a new run.
@@ -224,6 +226,16 @@ class Dashboard(view.View):
                 'mode': None,
                 'target': None
             }
+
+    def _end_run(self):
+        if not e.experclass.running:
+            return
+        active = e.experclass.all_active()
+        if active:
+            e.log.info('--- ending current run ---')
+            for inst in active:
+                inst.terminate()
+        e.experclass.stop()
 
     def _zip_results(self, run_id, zip_name):
         e.log.info('building zip file')

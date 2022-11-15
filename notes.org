@@ -160,3 +160,5 @@ If an inst was terminated mid-experiment, they can still reload and see the task
 ** DONE Bundles not actually getting reloaded
 Pretty sure python caches imports, so I may need to remove the imported module from the cache before re-importing it.
 UPDATE: The way I'm doing things now may not be entirely proper, but it works.
+** TODO Trap bundle load errors
+It would be lovely if, when attempting to load a bundle throws an exception, we could get a dialog with a traceback.

@@ -208,6 +208,122 @@
 
      const exper = "{{ exp_app_name }}";
 
+     class Uploader {
+
+         constructor(ctrlr) {
+             this.ctrlr = ctrlr;
+             this.input = elt('file-input');
+             this.whitelist = ['cfg.json', 'src/', 'static/', 'templates/'];
+             this.blacklist = ['profiles/', 'runs/'];
+         }
+
+         _aread(f) {
+             return new Promise(resolve => {
+                 const reader = new FileReader();
+                 const listener = () => {
+                     reader.removeEventListener('load', listener);
+                     resolve(reader.result);
+                 };
+                 reader.addEventListener('load', listener);
+                 reader.readAsText(f);
+             });
+         }
+
+         async _getFiles(bundleName) {
+             let manifestF = null;
+             for (const file of this.input.files) {
+                 const parts = file.webkitRelativePath.split('/');
+                 if (parts[1] === 'exp_manifest.txt') {
+                     manifestF = file;
+                     break;
+                 }
+             }
+             let whitelist = this.whitelist;
+             if (manifestF) {
+                 const manifest = await this._aread(manifestF);
+                 whitelist = whitelist.concat(
+                     manifest.split('\n')
+                             .map(x => x.trim())
+                             .filter(x => x.length &&
+                                        !this.blacklist.includes(x)));
+             }
+             const files = [];
+             for (const item of whitelist) {
+                 const itemPath = `${bundleName}/${item}`;
+                 for (const file of this.input.files) {
+                     if (item[item.length - 1] === '/') {
+                         if (file.webkitRelativePath.startsWith(
+                             itemPath)) {
+                             files.push(file);
+                         }
+                     } else {
+                         if (file.webkitRelativePath === itemPath) {
+                             files.push(file);
+                             break;
+                         }
+                     }
+                 }
+             }
+             return files;
+         }
+
+         _sendRequest(formData, resolve) {
+             const url = `{{ dashboard_path }}/upload_bundle`;
+             const xhr = new XMLHttpRequest();
+             xhr.upload.addEventListener('progress', e => {
+                 if (e.lengthComputable) {
+                     const pct = Math.round((e.loaded*100)/e.total);
+                     console.log('pct', pct);
+                 }
+             }, false);
+             xhr.upload.addEventListener('load', e => {
+                 //self.ctrl.update(100);
+                 console.log('upload complete');
+             }, false);
+             xhr.addEventListener('readystatechange', e => {
+                 if (xhr.readyState === 4) {
+                     resolve(xhr.response);
+                     this.ctrlr.uploadBtn.disabled = false;
+                     this.ctrlr.uploadingOverlay.close();
+                 }
+             }, false);
+             xhr.open('POST', url);
+             xhr.responseType = 'json';
+             xhr.overrideMimeType('multipart/form-data');
+             xhr.send(formData);
+         }
+
+         upload() {
+             return new Promise(resolve => {
+                 const listener = async () => {
+                     this.ctrlr.uploadBtn.disabled = true;
+                     this.input.removeEventListener('change', listener, false);
+                     const bundleName = this.input.files[0]
+                                            .webkitRelativePath.split('/')[0];
+                     if (bundleName === this.ctrlr.vars['exp_app_name'] &&
+                         !await this.ctrlr.confirmDlg.show(
+                             `Really replace current bundle '${bundleName}'?
+                             Any current run will end.`,
+                             'Cancel', 'Replace')) {
+                         resolve({ok: true});
+                         this.ctrlr.uploadBtn.disabled = false;
+                         return;
+                     }
+                     const formData = new FormData();
+                     this.ctrlr.uploadingOverlay.show();
+                     const files = await this._getFiles(bundleName);
+                     for (const file of files) {
+                         formData.set(file.webkitRelativePath, file);
+                     }
+                     this._sendRequest(formData, resolve);
+                 };
+                 this.input.addEventListener('change', listener, false);
+                 this.input.click();
+             });
+         }
+
+     }
+
      class Dashboard extends Controller {
 
          async init() {
@@ -219,6 +335,9 @@
              //this.deleteBtn = elt('delete-btn');
              this.downloadIdBtn = elt('download-id-btn');
              this.deleteIdBtn = elt('delete-id-btn');
+
+             this.uploader = new Uploader(this);
+
              await super.init();
          }
 
@@ -245,7 +364,7 @@
              this.instList = new InstList();
 
              this.uploadBtn.addEventListener('click', async () => {
-                 const resp = await this.uploadBundle();
+                 const resp = await this.uploader.upload();
                  if (!resp.ok) {
                      // XXX show error dialog
                  }
@@ -335,95 +454,6 @@
                  this.downloadIdBtn.disabled = false;
                  this.deleteIdBtn.disabled = false;
              }
-         }
-
-         uploadBundle() {
-             const input = elt('file-input');
-             const url = `{{ dashboard_path }}/upload_bundle`;
-             const formData = new FormData();
-             let whitelist = ['cfg.json', 'src/', 'static/', 'templates/'];
-             const blacklist = ['profiles/', 'runs/'];
-             function aread(f) {
-                 return new Promise(resolve => {
-                     const reader = new FileReader();
-                     const listener = () => {
-                         reader.removeEventListener('load', listener);
-                         resolve(reader.result);
-                     };
-                     reader.addEventListener('load', listener);
-                     reader.readAsText(f);
-                 });
-             }
-             return new Promise(resolve => {
-                 const listener = async () => {
-                     this.uploadBtn.disabled = true;
-                     this.uploadingOverlay.show();
-                     input.removeEventListener('change', listener, false);
-                     const bundleName = input.files[0]
-                                             .webkitRelativePath.split('/')[0];
-                     let manifestF = null;
-                     for (const file of input.files) {
-                         const parts = file.webkitRelativePath.split('/');
-                         if (parts[1] === 'exp_manifest.txt') {
-                             manifestF = file;
-                             break;
-                         }
-                     }
-                     if (manifestF) {
-                         const manifest = await aread(manifestF);
-                         whitelist = whitelist.concat(
-                             manifest.split('\n')
-                                     .map(x => x.trim())
-                                     .filter(x => x.length &&
-                                                !blacklist.includes(x)));
-                     }
-                     const filtered = [];
-                     for (const item of whitelist) {
-                         const itemPath = `${bundleName}/${item}`;
-                         for (const file of input.files) {
-                             if (item[item.length - 1] === '/') {
-                                 if (file.webkitRelativePath.startsWith(
-                                     itemPath)) {
-                                     filtered.push(file);
-                                 }
-                             } else {
-                                 if (file.webkitRelativePath === itemPath) {
-                                     filtered.push(file);
-                                     break;
-                                 }
-                             }
-                         }
-                     }
-                     for (const file of filtered) {
-                         formData.set(file.webkitRelativePath, file);
-                     }
-
-                     const xhr = new XMLHttpRequest();
-                     xhr.upload.addEventListener('progress', e => {
-                         if (e.lengthComputable) {
-                             const pct = Math.round((e.loaded*100)/e.total);
-                             console.log('pct', pct);
-                         }
-                     }, false);
-                     xhr.upload.addEventListener('load', e => {
-                         //self.ctrl.update(100);
-                         console.log('upload complete');
-                     }, false);
-                     xhr.addEventListener('readystatechange', e => {
-                         if (xhr.readyState === 4) {
-                             resolve(xhr.response);
-                             this.uploadBtn.disabled = false;
-                             this.uploadingOverlay.close();
-                         }
-                     }, false);
-                     xhr.open('POST', url);
-                     xhr.responseType = 'json';
-                     xhr.overrideMimeType('multipart/form-data');
-                     xhr.send(formData);
-                 };
-                 input.addEventListener('change', listener, false);
-                 input.click();
-             });
          }
 
          async loadBundle() {
