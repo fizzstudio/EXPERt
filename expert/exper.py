@@ -76,7 +76,6 @@ class Exper(BaseExper):
         for inst in cls.all_active():
             inst.terminate()
         #cls.instances.clear()
-        cls._load_profiles()
         cls.run = timestamp.make_timestamp()
         cls.record = Record(cls)
         if cls.mode == 'rep':
@@ -88,6 +87,7 @@ class Exper(BaseExper):
             else:
                 cls.mode = 'new'
         cls.record.save()
+        cls._load_profiles()
         cls.running = True
 
     @classmethod
