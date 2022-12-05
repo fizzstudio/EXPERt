@@ -28,7 +28,7 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    align-items: stretch;
     background: globals.$light-gray;
     border-radius: 0.5rem;
     padding: 1rem;
@@ -47,7 +47,7 @@ body {
     .exp-guide {
         //outline: dashed 4px #00bfbf;
         //outline-offset: 0.25rem;
-        background: globals.$bright-green;
+        background: globals.$bright-green !important;
     }
     button {
         display: inline-flex;
@@ -56,7 +56,7 @@ body {
     }
 }
 
-#task-wrapper {
+#exp-task-wrapper {
     display: flex;
     flex-direction: column;
     align-items: stretch;
@@ -147,7 +147,7 @@ body {
     }
 }
 
-#task {
+#exp-task {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
@@ -176,8 +176,8 @@ body {
     }
 }
 
-#soundcheck {
-    @extend #task;
+#exp-soundcheck {
+    @extend #exp-task;
     align-items: center;
     //background: white;
     &-controls {
@@ -224,32 +224,32 @@ body {
     }
 }
 
-#qnaire {
-    @extend #task;
+#exp-qnaire {
+    @extend #exp-task;
     &-header {
         padding: 0.5rem;
     }
     &-items {
         padding: 0.5rem;
-        .qnaire-item {
+        .exp-qnaire-item {
             align-self: flex-start;
             margin-bottom: 0.5rem;
-            .qnaire-q-num { font-weight: bold; }
-            .qnaire-q-optional {
+            .exp-qnaire-q-num { font-weight: bold; }
+            .exp-qnaire-q-optional {
                 font-weight: bold;
                 font-style: italic;
             }
-            .qnaire-a { margin-left: 0.5rem; }
+            .exp-qnaire-a { margin-left: 0.5rem; }
         }
     }
 }
 
-#consent {
-    @extend #task;
+#exp-consent {
+    @extend #exp-task;
 
     &-form {
-        #header {
-            .field { font-weight: bold; }
+        #exp-consent-header {
+            .exp-consent-field { font-weight: bold; }
         }
     }
 
@@ -260,7 +260,7 @@ body {
         margin-top: 1rem;
         margin-bottom: 1rem;
         font-weight: bold;
-        .agree-radio-wrapper {
+        .exp-consent-agree-radio-wrapper {
             display: flex;
             padding: 0.5rem;
             flex: auto;
@@ -268,38 +268,12 @@ body {
     }
 }
 
-#pfic-redir-btn-wrapper {
+#exp-pfic-redir-btn-wrapper {
     text-align: center;
 }
 
-#error-content {
-    @extend #task-wrapper;
-}
-
-#exp-dboard {
-    overflow: scroll;
-
-    &-subjids {
-        display: grid;
-        grid-template-columns: 1fr 2fr 2fr 2fr 2fr 2fr 2fr 2fr;
-        div {
-            margin: 0 0.25rem;
-        }
-        .exp-dboard-header {
-            font-weight: bold;
-            text-align: center;
-        }
-        .exp-dboard-item {
-            padding: 0 0.25rem;
-            background: white;
-        }
-        .dboard-id, .dboard-clientip, .dboard-profile, .dboard-state, .dboard-started {
-            text-align: center;
-        }
-        .dboard-num, .dboard-comp, .dboard-elapsed {
-            text-align: right;
-        }
-    }
+#exp-error-content {
+    @extend #exp-task-wrapper;
 }
 
 .exp-overlay {
@@ -349,4 +323,11 @@ body {
 }
 .exp-dlg-buttons {
     padding: 0.5rem;
+}
+.exp-dlg-traceback-text {
+    max-height: 10rem;
+    background: white;
+    padding: 0.5rem;
+    //white-space: pre-wrap;
+    overflow: scroll;
 }

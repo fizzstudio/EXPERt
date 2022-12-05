@@ -1,7 +1,11 @@
 
-import { elt, callApi } from '{{ exp_js }}/util.js'
-import { Controller } from '{{ exp_js }}/controller.js'
+import { elt, callApi } from '{{ exp_js }}/util.js';
+import { Controller } from '{{ exp_js }}/controller.js';
+import { Overlay } from '{{ exp_js }}/dialog.js';
 
+
+class APIError extends Error {
+}
 
 export class Task extends Controller {
 
@@ -13,9 +17,10 @@ export class Task extends Controller {
         this.nextBtnWrapper = elt('exp-next-btn-wrapper');
         this.taskCursor = elt('exp-task-cursor');
         this.navSelect = elt('exp-nav-menu-select');
-        this.content = elt('task-wrapper');
+        this.content = elt('exp-task-wrapper');
+
         {% if exp_progbar_enabled %}
-            elt('exp-progbar').classList.remove('exp-hidden');
+        elt('exp-progbar').classList.remove('exp-hidden');
         {% endif %}
 
         this.nextBtn.addEventListener('click', async () => {
@@ -51,6 +56,22 @@ export class Task extends Controller {
         this._nextHook = h;
     }
 
+    async api(...params) {
+        const {val, err} = await super.api(...params);
+        if (err) {
+            // If an error occurs during the API call that happens
+            // when the overlay is created, obviously
+            // it won't exist yet!
+            if (this.errorOverlay) {
+                this.errorOverlay.show();
+            }
+            throw new APIError(
+                `Error in API call '${params[0]}': ${err}`);
+        } else {
+            return val;
+        }
+    }
+
     _updateProgress() {
         const cursor = this.vars['exp_task_cursor'];
         const num_tasks = this.vars['exp_num_tasks'];
@@ -73,6 +94,7 @@ export class Task extends Controller {
     }
 
     async _nav(...apiParams) {
+        console.log('_nav', ...apiParams);
         let vars = await this.api(...apiParams);
         if (vars['task_type'] === this.vars['task_type'] &&
             vars['task_script'] === this.vars['task_script']) {
@@ -86,6 +108,9 @@ export class Task extends Controller {
 
     async init() {
         await super.init();
+        this.errorOverlay = await new Overlay(this, 'error-ovl').init();
+        this.errorOverlay.contentNode.textContent =
+            'System error. Please contact the administrator.';
         this.vars = await this.api('init_task');
     }
 

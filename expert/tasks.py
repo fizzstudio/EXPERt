@@ -39,6 +39,19 @@ class Task(view.View):
     resp_extra: dict[str, Any]
     id: int
 
+    @classmethod
+    def new(cls, inst, *posargs, **kwargs):
+        if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
+            cls = posargs[0]
+            posargs = posargs[1:]
+        else:
+            cls = Task
+        return cls(inst, *posargs, **kwargs)
+
+    @classmethod
+    def reify(cls, inst, desc):
+        return cls.new(inst, *desc.args, **desc.kwargs)
+
     def __init__(self, inst, template=None, variables=None, timeout_secs=None):
         super().__init__(template=template, variables=variables)
         self.inst = inst
@@ -72,12 +85,7 @@ class Task(view.View):
         if isinstance(posargs[0], Task):
             task = posargs[0]
         else:
-            if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
-                cls = posargs[0]
-                posargs = posargs[1:]
-            else:
-                cls = Task
-            task = cls(self.inst, *posargs, **kwargs)
+            task = self.new(self.inst, *posargs, **kwargs)
         task.prev_task = self
         self.next_tasks.append(task)
         if len(self.next_tasks) > 1:

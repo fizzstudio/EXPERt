@@ -48,7 +48,7 @@ If you navigate away from a task where a change has been made (e.g., some input)
 If async_handlers=True (the default), events should get handled using eventlet coroutines. AFAIK, this doesn't involve multiple system threads, or have any possibility of memory races.
 ** TODO Unknown socketio events
 It would be lovely to be able to throw an error if an unknown message is received. Not sure how to do this, though...
-** TODO Old dashboard persistence
+** DONE Old dashboard persistence
 It's currently possible to leave a dashboard window open, restart the server for a new run, and have entries for the new run get added to the existing dashboard. Maybe the old dashboard should fail to reconnect with the server because of the different dashboard code? This is all basically security-through-obscurity anyway...
 ** DONE Making the URL prefix customizable
 A trickier problem than expected. The main issue here is scripts: they don't get served as templates, so I can't just pass in the prefix.
@@ -150,7 +150,7 @@ Probably need to emit on the correct namespace.
 This would go beyond the tool-mode feature to read a stored response, allowing the task to set its state to reflect the response. This would allow for saving arbitrary task state.
 ** DONE Reloading tool-mode bundles
 Currently doesn't work bc Tool instances don't have a terminate() method, nor do they have any concept of "ending".
-** TODO Dashboard separators don't persist across page reload
+** DONE Dashboard separators don't persist across page reload
 ** TODO Index route
 This used to be defined in BaseExper, and the experiment class was referenced as 'cls'. 'cls' here was a reference to the class object loaded from the first bundle loaded. Loading new bundles or reloading a loaded bundle wouldn't call _add_routes() again. So, referencing, e.g., cls.running, would refer to the value in the first-loaded class, which wouldn't match the state for the newly-loaded class. Not to mention that we'd be creating instances of the original class!
 Also, if we only call _add_routes() once, we can't set up new static file routes for bundles with different IDs! Not to mention that without any way to delete routes, we'd essentially have a memory leak.
@@ -160,5 +160,38 @@ If an inst was terminated mid-experiment, they can still reload and see the task
 ** DONE Bundles not actually getting reloaded
 Pretty sure python caches imports, so I may need to remove the imported module from the cache before re-importing it.
 UPDATE: The way I'm doing things now may not be entirely proper, but it works.
-** TODO Trap bundle load errors
+** DONE Trap bundle load errors
 It would be lovely if, when attempting to load a bundle throws an exception, we could get a dialog with a traceback.
+** TODO Bundle version numbers
+Bundles ought to have some sort of version number, or at least a hash that can distinguish different versions of the same bundle. Would be nice to show this on the dashboard. This is relevant to the whole git commits idea.
+** DONE Old bundle module remnants
+When loading a new bundle, it's possible the previous module may hang around somewhere. Previously, the loaded package always had the name 'src'. I would assign it so sys.modules, but importlib.import_module() (called in, e.g., profile_mod()) wanted to load from the old package anyway. Now, the bundle package always has the name of the bundle, which at least prevents issues with loading different packages in succession, but 1) I'm not currently deleting the old package from sys.modules, so there's at least 1 leak, and 2) some subtle issue could remain when reloading.
+UPDATE:
+Still ran into a bug going from chart-gallery to CM2. Even reloading a bundle shows this bug!
+UPDATE:
+Maybe got this licked. When a bundle package is loaded, we make a note of all modules inside of it. Then, they get removed from sys.modules if we reload or load another bundle. Seems to be working. There could still potentially be issues with sub-modules, since this fix doesn't take those into account.
+UPDATE:
+Okay, still another issue when moving between different bundles...
+Loaded chart-gallery after CM2, and if I don't start a run, I get a blank page (i.e., just a gray box where it should give me 'nothing to see here').
+UPDATE: Just a template issue.
+** TODO Cached resources when switching bundles
+Different bundles may serve up different resources (e.g., stylesheets) with the same name, but very different contents. If these get cached, we can have problems.
+** TODO Dashboard should scroll new events onscreen
+** TODO Event separators need timestamps too (on the dashboard)
+** TODO Module loading needs to take potential sub-modules into account
+** TODO Delete profiles button
+** DONE Catch and show errors when starting a new run
+** TODO Rework adding tasks
+The first task (self.task) currently must be a Task instance, and can't be a TaskDesc.
+** DONE Restart monitor thread when loading bundles
+NB: For the record, the python-engineio eventlet driver imports a Thread class from the eventlet.green.threading package, which is why starting the monitor thread returns a 'threading.Thread' object (which seems to mimic the stdlib API). In fact, looking at the eventlet source, it is exactly that. So no worries! We're green!
+
+NB: The monitor thread is left running across bundle reloads.
+** DONE Handle runtime errors
+** TODO Dashboard events after bundle unload
+What to do with dashboard events that refer to instances from unloaded bundles?
+Any 'inst' events will have a data field referencing what is essentially a broken instance (now that its class has been unloaded). Weak references?
+** TODO Ask before loading a new bundle that stops a run
+** DONE Old bundle remnants
+After loading a new bundle, I was able to hit the URL and retrieve an instance from the previous bundle! Even though experclass had been re-assigned to!
+The answer, of course, is that 'instances' is an attribute of BaseExper, not the newly-loaded subclass. This actually applies to a number of class attributes ...

@@ -13,7 +13,7 @@ export function elts(...ids) {
 
 export async function callApi(socket, ...params) {
     const p = new Promise(resolve => {
-        socket.emit(...params, resp => {
+        socket.emit('call_api', ...params, resp => {
             resolve(resp);
         });
     })

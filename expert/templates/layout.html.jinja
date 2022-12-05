@@ -18,16 +18,16 @@
         <title>{{ exp_window_title }}</title>
 
         <link rel="stylesheet" href="{{ exp_css }}/main.css">
-        {% if dashboard_path is defined %}
+        {% if exp_dashboard_path is defined %}
             <link rel="stylesheet" href="{{ exp_css}}/dboard.css">
-        {% else %}
+        {% elif exp_app_name and exp_app_is_running %}
             <link rel="stylesheet" href="{{ exp_app_css }}/main.css">
         {% endif %}
         {% if exp_favicon is defined %}
             <link rel="icon" href="{{ exp_favicon }}">
         {% endif %}
 
-        {% block script %}{% endblock %}
+        {% block exp_script %}{% endblock %}
     </head>
 
     <body>

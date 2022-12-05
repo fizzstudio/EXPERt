@@ -14,7 +14,7 @@ import secrets
 from pathlib import Path
 from enum import Enum
 from functools import reduce
-from typing import ClassVar, Optional, Any
+from typing import ClassVar, Optional, Any, Type
 
 from flask import session, request, make_response, send_from_directory
 
@@ -71,6 +71,34 @@ class BadOutputFormatError(Exception):
         super().__init__(f'unknown output format "{fmt}"')
 
 
+class API:
+
+    def __init__(self, inst):
+        self._inst = inst
+
+    def soundcheck(self, resp):
+        return resp.strip().lower() == e.soundcheck_word
+
+    def init_task(self):
+        return self._inst.all_vars()
+
+    def next_page(self, resp):
+        if self._inst.task.next_tasks or \
+           isinstance(self._inst.task, tasks.Consent):
+            # if we're not here, the user was somehow able
+            # to hit 'Next' on the final task screen,
+            # which shouldn't be possible ...
+            #self.handle_response(resp)
+            self._inst._next_task(resp)
+        return self._inst.all_vars()
+
+    def get_feedback(self, resp):
+        return self._inst.task.get_feedback(resp)
+
+    def load_template(self, tplt, tplt_vars={}):
+        return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
+
+
 class BaseExper:
 
     cfg: ClassVar[dict]
@@ -81,16 +109,17 @@ class BaseExper:
     templates_path: ClassVar[Path]
     dls_path: ClassVar[Path]
     _cond_paths: ClassVar[list[Path]]
-    mode: ClassVar[Optional[str]] = None
-    target: ClassVar[Optional[str]] = None
-    run: ClassVar[Optional[str]] = None
-    record: ClassVar[Optional[Record]] = None
+    mode: ClassVar[Optional[str]] = None        # set on subclass
+    target: ClassVar[Optional[str]] = None      # set on subclass
+    run: ClassVar[Optional[str]] = None         # set on subclass
+    record: ClassVar[Optional[Record]] = None   # set on subclass
     replicate: ClassVar[Optional[Record]]
     name: ClassVar[str]
-    profiles: ClassVar[list[profile.Profile]] = []
+    profiles: ClassVar[list[profile.Profile]] = [] # mutated by subclass
     # sid: <Experiment subclass inst>
-    instances: ClassVar[dict[str, BaseExper]] = {}
+    instances: ClassVar[dict[str, BaseExper]] = {} # mutated by subclass
     running: ClassVar[bool]
+    api_class: ClassVar[Type[API]] = API
 
     ## instance vars
     sid: str
@@ -108,7 +137,6 @@ class BaseExper:
 
         self.profile = None
 
-        self.instances[self.sid] = self
         self.start_time = time.monotonic()
         self.start_timestamp = timestamp.make_timestamp()
 
@@ -144,31 +172,45 @@ class BaseExper:
             'exp_sid': self.sid
         }
 
-        @e.srv.socketio.on('soundcheck', namespace=f'/{self.sid}')
-        def sio_soundcheck(resp):
-            return resp.strip().lower() == e.soundcheck_word
+        self._api = self.api_class(self)
 
-        @e.srv.socketio.on('init_task', namespace=f'/{self.sid}')
-        def sio_init_task():
-            return self.all_vars()
+        @e.srv.socketio.on('call_api', namespace=f'/{self.sid}')
+        def sio_call(cmd, *args):
+            try:
+                f = getattr(self._api, cmd)
+                val = f(*args)
+            except:
+                e.log.info(f'SID {self.sid[:4]} API error: {cmd}')
+                tback = traceback.format_exc()
+                e.srv.dboard.api_error(tback)
+                return {'err': tback}
+            return {'val': val}
 
-        @e.srv.socketio.on('next_page', namespace=f'/{self.sid}')
-        def sio_next_page(resp):
-            if self.task.next_tasks or isinstance(self.task, tasks.Consent):
-                # if we're not here, the user was somehow able
-                # to hit 'Next' on the final task screen,
-                # which shouldn't be possible ...
-                #self.handle_response(resp)
-                self._next_task(resp)
-            return self.all_vars()
+        # @e.srv.socketio.on('soundcheck', namespace=f'/{self.sid}')
+        # def sio_soundcheck(resp):
+        #     return resp.strip().lower() == e.soundcheck_word
 
-        @e.srv.socketio.on('get_feedback', namespace=f'/{self.sid}')
-        def sio_get_feedback(resp):
-            return self.task.get_feedback(resp)
+        # @e.srv.socketio.on('init_task', namespace=f'/{self.sid}')
+        # def sio_init_task():
+        #     return self.all_vars()
 
-        @e.srv.socketio.on('load_template', namespace=f'/{self.sid}')
-        def sio_load_template(tplt, tplt_vars={}):
-            return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
+        # @e.srv.socketio.on('next_page', namespace=f'/{self.sid}')
+        # def sio_next_page(resp):
+        #     if self.task.next_tasks or isinstance(self.task, tasks.Consent):
+        #         # if we're not here, the user was somehow able
+        #         # to hit 'Next' on the final task screen,
+        #         # which shouldn't be possible ...
+        #         #self.handle_response(resp)
+        #         self._next_task(resp)
+        #     return self.all_vars()
+
+        # @e.srv.socketio.on('get_feedback', namespace=f'/{self.sid}')
+        # def sio_get_feedback(resp):
+        #     return self.task.get_feedback(resp)
+
+        # @e.srv.socketio.on('load_template', namespace=f'/{self.sid}')
+        # def sio_load_template(tplt, tplt_vars={}):
+        #     return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
 
         @e.srv.socketio.on_error(f'/{self.sid}')
         def sio_inst_error(err):
@@ -208,9 +250,10 @@ class BaseExper:
     #     experclass.running = False
 
     @classmethod
-    def init(cls, path):
-        cls.dir_path = path
+    def init(cls, path, is_reloading):
         cls.name = cls.__qualname__.lower()
+        e.log.info(f'initializing class {cls.__qualname__}')
+        cls.dir_path = path
         cls.pkg = sys.modules[cls.__module__]
         cls._setup_paths()
         # create main experiment directories, if they don't exist
@@ -224,7 +267,7 @@ class BaseExper:
             cls._make_profiles()
             cls._cond_paths = cls._read_cond_paths()
         cls.running = False
-        cls._setup()
+        cls._setup(is_reloading)
 
     @classmethod
     def start(cls, mode, obj=None, conds=None):
@@ -299,7 +342,7 @@ class BaseExper:
     #     return None
 
     @classmethod
-    def _setup(cls):
+    def _setup(cls, is_reloading):
         """Overridden by bundle class"""
         pass
 
@@ -373,7 +416,8 @@ class BaseExper:
 
     @classmethod
     def profile_mod(cls):
-        return importlib.import_module('.profile', cls.pkg.__package__)
+        imported = importlib.import_module('.profile', cls.pkg.__package__)
+        return imported
 
     @classmethod
     def all_active(cls):
@@ -383,12 +427,11 @@ class BaseExper:
     @classmethod
     def new_inst(cls, ip, args):
         inst = cls(ip, args)
-        session['sid'] = inst.sid
-        e.log.info(f'new instance for sid {inst.sid[:4]}')
-        e.srv.socketio.emit(
-            'new_instance', inst.status(),
-            namespace=f'/{e.srv.dboard.code}')
         inst._will_start()
+        session['sid'] = inst.sid
+        cls.instances[inst.sid] = inst
+        e.log.info(f'new instance for sid {inst.sid[:4]}')
+        e.srv.dboard.inst_created(inst)
         return inst
 
     @classmethod
@@ -521,7 +564,7 @@ class BaseExper:
     def _next_task(self, resp):
         pass
 
-    def _present(self, tplt_vars={}):
+    def present(self, tplt_vars={}):
         return self.task.present(tplt_vars)
 
     def all_vars(self):
@@ -588,8 +631,7 @@ class BaseExper:
         # called for normal completion, timeout, nonconsent, or termination
         self.end_time = time.monotonic()
         self.state = state
-        e.srv.socketio.emit('update_instance', self.status(),
-                            namespace=f'/{e.srv.dboard.code}')
+        e.srv.dboard.inst_updated(self)
         if self.profile:
             e.log.info(f'saving responses for sid {self.sid[:4]}')
             self._save_responses()

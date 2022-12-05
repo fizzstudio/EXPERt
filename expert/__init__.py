@@ -20,3 +20,6 @@ experclass: Optional[Type[Experiment]] = None
 
 # path to the EXPERt directory (remove 'expert/')
 expert_path = Path(__file__).parent.parent.absolute()
+
+bundle_name: Optional[str] = None
+bundle_mods: list[str] = []

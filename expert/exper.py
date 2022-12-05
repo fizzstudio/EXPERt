@@ -13,15 +13,17 @@ from . import tasks, timestamp
 
 def _monitor():
     e.log.info('starting monitor task')
-    while e.experclass:
+    while True:
         e.srv.socketio.sleep(e.srv.cfg['monitor_check_interval'])
-        for inst in e.experclass.instances.values():
-            inst = cast(Exper, inst)
-            if not inst.check_for_timeout():
-                # Exper.end() sends the update if the inst has timed out
-                e.srv.socketio.emit(
-                    'update_instance', inst.status(),
-                    namespace=f'/{e.srv.dboard.code}')
+        if e.experclass:
+            for inst in e.experclass.instances.values():
+                #inst = cast(Exper, inst)
+                if not (isinstance(inst, Exper) and inst.check_for_timeout()):
+                    # Exper.end() sends the update if the inst has timed out
+                    e.srv.dboard.inst_updated(inst)
+        else:
+            e.log.info('monitor task shutting down')
+            break
 
 
 class Exper(BaseExper):
@@ -60,10 +62,10 @@ class Exper(BaseExper):
         self.global_timeout_time = None
 
     @classmethod
-    def _setup(cls, *args):
-        super()._setup(*args)
-        cls.monitor_task = e.srv.socketio.start_background_task(
-            _monitor)
+    def _setup(cls, is_reloading):
+        super()._setup(is_reloading)
+        if not is_reloading:
+            cls.monitor_task = e.srv.socketio.start_background_task(_monitor)
 
     # @classmethod
     # def start_new_run(cls):
@@ -99,8 +101,7 @@ class Exper(BaseExper):
            not any(i.state == State.ACTIVE for i in cls.instances.values()):
             e.log.info('--- run complete ---')
             cls.running = False
-            e.srv.socketio.emit('run_complete',
-                                namespace=f'/{e.srv.dboard.code}')
+            e.srv.dboard.run_complete(cls.run)
 
     def check_for_complete(self):
         if not self.task.next_tasks and self.profile:
@@ -160,8 +161,7 @@ class Exper(BaseExper):
             self.check_for_complete()
         self._update_vars()
         if self.state == State.ACTIVE:
-            e.srv.socketio.emit('update_instance', self.status(),
-                                namespace=f'/{e.srv.dboard.code}')
+            e.srv.dboard.inst_updated(self)
 
     def _dummy_do_tasks(self):
         while self.state != State.COMPLETE:

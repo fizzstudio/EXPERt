@@ -1,10 +1,12 @@
 
 import argparse
 import importlib
+import importlib.util
 import json
 import sys
 import logging
 import datetime
+import traceback
 
 
 from typing import Type, Any, Optional
@@ -20,6 +22,10 @@ from flask_socketio import SocketIO
 import expert as e
 
 from . import experiment, tool, dashboard, templates
+
+
+class BundleLoadError(Exception):
+    pass
 
 
 class App(Flask):
@@ -124,7 +130,7 @@ class Server:
         self.socketio = SocketIO(
             e.app, # logger=True,
             #async_handlers=False,
-            async_mode='eventlet',
+            #async_mode='eventlet',
             cors_allowed_origins='*')
 
         @self.socketio.on('connect')
@@ -187,20 +193,28 @@ class Server:
                 # Even if we aren't running, there may still be completed
                 # instances in memory that can serve up completion codes
                 inst = e.experclass.instances.get(session.get('sid'))
-                if inst:
-                    content = inst._present()
-                else:
+                if not inst:
                     if e.experclass.running:
                         if e.experclass.profiles:
-                            inst = e.experclass.new_inst(
-                                self._get_ip(), request.args)
-                            content = inst._present()
+                            try:
+                                inst = e.experclass.new_inst(
+                                    self._get_ip(), request.args)
+                            except:
+                                content = self._page_load_error(
+                                    traceback.format_exc())
                         else:
                             content = templates.render(
                                 'full' + templates.html_ext)
                     else:
+                        e.log.info('no inst, not running')
                         content = templates.render('norun' + templates.html_ext)
+                if not content:
+                    try:
+                        content = inst.present()
+                    except:
+                        content = self._page_load_error(traceback.format_exc())
             else:
+                e.log.info('no experclass')
                 content = templates.render('norun' + templates.html_ext)
 
             resp = make_response(content)
@@ -230,24 +244,58 @@ class Server:
         else:
             e.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
+    def _page_load_error(self, tback):
+        e.srv.dboard.page_load_error(tback)
+        return templates.render('error' + templates.html_ext, {
+            'msg': 'System error. Please contact the administrator.'
+        })
+
     def load_bundle(self, path, tool_mode=False, is_reloading=False):
         bundle_path = Path(path).resolve(True)
 
         bundle_cfg = self._read_bundle_config(bundle_path)
 
-        self.enable_tool_mode(tool_mode or bundle_cfg['tool_mode'])
-
-        e.experclass = self._load_bundle_src(bundle_path, is_reloading)
-        if e.experclass is None:
-            sys.exit(f'unable to load experiment bundle "{bundle_path}"')
-
-        e.experclass.cfg = bundle_cfg
-        e.experclass.init(bundle_path)
+        bundle_name = bundle_path.name
+        bundle_mods = self._bundle_mods(bundle_path)
+        try:
+            e.experclass = self._load_bundle_src(bundle_path, is_reloading)
+            e.log.info(f'bundle modules: {" ".join(sorted(bundle_mods))}')
+            self.enable_tool_mode(tool_mode or bundle_cfg['tool_mode'])
+            e.bundle_name = bundle_name
+            e.bundle_mods = bundle_mods
+            e.experclass.cfg = bundle_cfg
+            e.experclass.init(bundle_path, is_reloading)
+        except:
+            self._unload_bundle(bundle_name, bundle_mods)
+            e.experclass = None
+            templates.set_bundle_variables(None)
+            e.app.update_jinja_loader(None)
+            raise
 
         templates.set_bundle_variables(e.experclass)
         e.app.update_jinja_loader(e.experclass)
 
-        e.experclass.running = False
+    def _bundle_mods(self, path: Path):
+        srcpath = path / 'src'
+        return [p.stem for p in srcpath.iterdir()
+                if p.suffix == '.py'
+                and p.stem != '__init__'
+                and not p.stem.startswith('.')]
+
+    def _unload_bundle(self, name, mods):
+        for m in mods:
+            qualmod = f'{name}.{m}'
+            if qualmod in sys.modules:
+                e.log.info(f'unloading module {qualmod}')
+                del sys.modules[qualmod]
+        if name in sys.modules:
+            e.log.info(f'unloading module {name}')
+            del sys.modules[name]
+            # NB: instances is an attribute of BaseExper that experclass
+            # mutates
+            experiment.BaseExper.instances.clear()
+        e.bundle_name = None
+        e.bundle_mods = []
 
     def _read_bundle_config(self, bundle_path):
         # read default bundle config
@@ -277,24 +325,44 @@ class Server:
         E.g., if exper_path == '/foo/bar/my_exper', the source code
         must be located in /foo/bar/my_exper/src.
         """
-        if is_reloading:
+        #if is_reloading:
             #e.log.info(f'spec: {e.experclass.pkg.__spec__}')
             #pkg = importlib.reload(e.experclass.pkg)
-            importlib.invalidate_caches()
+        #    importlib.invalidate_caches()
 
         e.log.info(f'loading bundle from {path}')
-        init_path = path / 'src' / '__init__.py'
-        spec = importlib.util.spec_from_file_location('src', init_path)
-        pkg = importlib.util.module_from_spec(spec)
+        srcpath = path / 'src'
+        #bundle_mods = [p.stem for p in srcpath.iterdir()
+        #                    if p.suffix == '.py'
+        #                    and p.stem != '__init__'
+        #                    and not p.stem.startswith('.')]
+        #e.log.info(f'bundle modules: {" ".join(sorted(bundle_mods))}')
+        self._unload_bundle(e.bundle_name, e.bundle_mods)
+        init_path = srcpath / '__init__.py'
+        spec = importlib.util.spec_from_file_location(path.name, init_path)
+        if not spec:
+            raise BundleLoadError(
+                f'unable to create module spec for bundle \'{path.name}\'')
+        try:
+            pkg = importlib.util.module_from_spec(spec)
+        except:
+            raise BundleLoadError(
+                f'unable to create module for bundle \'{path.name}\'')
         sys.modules[spec.name] = pkg
+        #e.bundle_mods = bundle_mods
         e.log.info(f'bundle package name: {pkg.__name__}')
-        spec.loader.exec_module(pkg)
+        try:
+            spec.loader.exec_module(pkg)
+        except:
+            raise BundleLoadError(
+                f'unable to exec module for bundle \'{path.name}\'')
         # return the first subclass of Experiment found
         for k, v in pkg.__dict__.items():
             if isinstance(v, type) and issubclass(v, e.Experiment) and \
                v is not e.Experiment:
                 return v
-        return None
+        raise BundleLoadError(
+            f'no Experiment subclass found in bundle \'{path.name}\'')
 
     def get_inst(self):
         # NB: session.new seems to be False here even if we do

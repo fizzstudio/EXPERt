@@ -151,16 +151,16 @@ export class Dialog extends Overlay {
 
 export class MessageDialog extends Dialog {
 
-    constructor(ctrlr, id) {
+    constructor(ctrlr, id, template = 'confirm') {
         // same template as ConfirmDialog
-        super(ctrlr, id, 'confirm');
+        super(ctrlr, id, template);
     }
 
-    async init() {
+    async init(btnText = 'Okay') {
         await super.init();
         this.titlebar = 'Message';
         this.messageNode = this.node.querySelector('.exp-dlg-message');
-        this.setButtons([{tag: 'cancel', text: 'Okay'}]);
+        this.setButtons([{tag: 'cancel', text: btnText}]);
         return this;
     }
 
@@ -172,8 +172,8 @@ export class MessageDialog extends Dialog {
 
 export class ConfirmDialog extends Dialog {
 
-    constructor(ctrlr, id) {
-        super(ctrlr, id, 'confirm');
+    constructor(ctrlr, id, template = 'confirm') {
+        super(ctrlr, id, template);
         //this.keymap['Enter'] = () => this.close()
     }
 
@@ -190,5 +190,25 @@ export class ConfirmDialog extends Dialog {
                          {tag: 'okay', text: okayLabel}]);
         let tag = await super.show(() => this.buttons['okay'][0].focus());
         return tag === 'okay';
+    }
+}
+
+export class TracebackDialog extends MessageDialog {
+
+    constructor(ctrlr, id) {
+        super(ctrlr, id, 'traceback');
+    }
+
+    async init() {
+        await super.init('Close');
+        this.titlebar = 'Server Error';
+        this.tracebackNode = this.node.querySelector('.exp-dlg-traceback-text');
+        return this;
+    }
+
+    async show(text) {
+        this.tracebackNode.textContent = text;
+        await super.show('Error received from server:',
+                         () => this.buttons['cancel'][0].focus());
     }
 }

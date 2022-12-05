@@ -42,22 +42,30 @@ def set_server_variables(srv):
     variables['exp_css'] = f'/{pfx}/css'
     variables['exp_js'] = f'/{pfx}/js'
 
-
 def set_bundle_variables(experclass):
     pfx = e.srv.cfg['url_prefix']
     variables['exp_tool_mode'] = e.tool_mode
-    variables['exp_app_name'] = experclass.name
+    if experclass:
+        variables['exp_app_name'] = experclass.name
+        variables['exp_app_is_running'] = experclass.running
+        variables['exp_window_title'] = experclass.window_title
+        variables['exp_favicon'] = experclass.cfg['favicon']
+        variables['exp_progbar_enabled'] = experclass.cfg['progbar_enabled']
+        if e.tool_mode:
+            variables['exp_tool_display_total_tasks'] = \
+                experclass.cfg['tool_display_total_tasks']
+    else:
+        variables['exp_app_name'] = None
+        variables['exp_window_title'] = None
+        variables['exp_favicon'] = None
+        variables['exp_progbar_enabled'] = False
+        if e.tool_mode:
+            variables['exp_tool_display_total_tasks'] = False
     #variables['exp_app_id'] = experclass.id
     variables['exp_app_static'] = f'/{pfx}/app'
     variables['exp_app_img'] = f'{variables["exp_app_static"]}/img'
     variables['exp_app_css'] = f'{variables["exp_app_static"]}/css'
     variables['exp_app_js'] = f'{variables["exp_app_static"]}/js'
-    variables['exp_window_title'] = experclass.window_title
-    variables['exp_favicon'] = experclass.cfg['favicon']
-    variables['exp_progbar_enabled'] = experclass.cfg['progbar_enabled']
-    if e.tool_mode:
-        variables['exp_tool_display_total_tasks'] = \
-            experclass.cfg['tool_display_total_tasks']
 
 
 def render(tplt, other_vars={}):

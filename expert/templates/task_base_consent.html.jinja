@@ -3,21 +3,21 @@
 
 {% set task_script = '_consent' %}
 
-{% block task_content %}
-    <div id="consent">
-        <div id="consent-form">
-            {% block consent_form %}{% endblock %}
+{% block exp_task_content %}
+    <div id="exp-consent">
+        <div id="exp-consent-form">
+            {% block exp_consent_form %}{% endblock %}
         </div>
-        <div id="consent-agree-box">
-            <div class="agree-radio-wrapper">
-                <input type="radio" name="radio" id="radio1"
+        <div id="exp-consent-agree-box">
+            <div class="exp-consent-agree-radio-wrapper">
+                <input type="radio" name="radio" id="exp-consent-radio1"
                        autocomplete="off">
-                <label for="radio1">I agree</label>
+                <label for="exp-consent-radio1">I agree</label>
             </div>
-            <div class="agree-radio-wrapper">
-                <input type="radio" name="radio" id="radio2"
+            <div class="exp-consent-agree-radio-wrapper">
+                <input type="radio" name="radio" id="exp-consent-radio2"
                        autocomplete="off">
-                <label for="radio2">I do not agree</label>
+                <label for="exp-consent-radio2">I do not agree</label>
             </div>
         </div>
     </div>

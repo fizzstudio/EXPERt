@@ -9,7 +9,7 @@ export class Controller {
     }
 
     _initSocket() {
-        const ns = '{{ exp_sid|default(authn_code) }}';
+        const ns = '{{ exp_sid|default(exp_authn_code) }}';
         this._socket = io(`/${ns}`);
         this._socket.on('connect',
                         async () => await this._onSocketConnected());
