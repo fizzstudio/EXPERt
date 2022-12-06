@@ -194,7 +194,7 @@ class BaseExper:
         if expert.experclass is None:
             sys.exit(f'unable to load experiment "{cls.dir_path}"')
 
-        conds = conds or cls.cfg['conditions']
+        conds = conds or cls.cfg.get('conditions')
         expert.experclass._setup(path, conds)
         expert.experclass._add_routes()
 
