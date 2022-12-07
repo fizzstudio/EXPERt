@@ -99,7 +99,7 @@ Currently, FSA state-entry functions are not treated as async. I.e., enter() is 
 It's often useful to limit the number of tasks shown during development. I've been doing this manually, just slicing, e.g., 'testing_tasks', or whatever. But this is annoying because then you've changed the code, and it's easy to mistakenly commit the change. It'd be nice to have a parameter of some type that controls how many tasks are seen, and to be able to temporarily set it via a command-line switch. Where would such variables live, though? params.py? cfg.json? Somewhere new?
 
 Currently, the E server itself only references an experiment's params.py to read 'n_profiles' (although there is a commented-out reference in __init__.py for debug mode). Maybe this should go into cfg.json?
-** TODO What bundle contents to upload
+** DONE What bundle contents to upload
 A bundle directory may contain any number of extraneous things that EXPERt doesn't need to run the experiment: build files, local git repo, etc. Certain things that are needed are known, such as the src directory. But other necessary data files may be present. It's convenient to allow the user to just select the toplevel bundle folder to upload, but this may include all of the extraneous stuff. Options:
 1. Whitelist + manifest: accept (in the browser) only known things (e.g., src/), but allow a manifest file listing additional things to allow. The manifest would need to be read separately in the browser.
    1. Pros: Can keep current bundle file layouts.
@@ -126,9 +126,9 @@ UPDATE: Yep, it works just fine.
 Might be a good idea to make sure any to-be-uploaded bundle actually is an EXPERt bundle, i.e., contains 'src', 'templates', etc.
 ** TODO Remove bundle button
 Should just make a 'manage bundles' dialog.
-** TODO Rebuild profiles button?
+** DONE Rebuild profiles button
 When you replace the contents of a bundle, you may want to create new profiles.
-** TODO Show a page when an experiment isn't running
+** DONE Show a page when an experiment isn't running
 Even when no bundle has been loaded, or one has but no run has been started.
 ** DONE Protect dangerous API calls
 Normal users (i.e., participants) shouldn't be able to make global API calls, generally. However, template loading recently became a global command.
@@ -145,7 +145,7 @@ The current global API commands are:
 UPDATE: The dashboard now simply uses its authn code as its socketio namespace, making all the API commands it defines secure. I moved the soundcheck command into experiment.py (where it belongs), and added load_template to both experiment.py and the dashboard.
 ** DONE Dboard is not getting updated when new insts are created
 Probably need to emit on the correct namespace.
-** TODO Can we upload a bundle that replaces the currently-running one?
+** DONE Can we upload a bundle that replaces the currently-running one?
 ** TODO Maintain task state across page reload?
 This would go beyond the tool-mode feature to read a stored response, allowing the task to set its state to reflect the response. This would allow for saving arbitrary task state.
 ** DONE Reloading tool-mode bundles
@@ -191,7 +191,11 @@ NB: The monitor thread is left running across bundle reloads.
 ** TODO Dashboard events after bundle unload
 What to do with dashboard events that refer to instances from unloaded bundles?
 Any 'inst' events will have a data field referencing what is essentially a broken instance (now that its class has been unloaded). Weak references?
+UPDATE:
+Am using weak refs now, and GCing after removing all old instances, but the old insts seem to remain alive. I assume they're referenced from socketio or something. Unfortunately, it doesn't look like there's any convenient way to remove socketio event handlers. Probably the best way to deal with this is to make the 'call_api' handler global, and have it accept the sid of the inst as an argument.
 ** TODO Ask before loading a new bundle that stops a run
 ** DONE Old bundle remnants
 After loading a new bundle, I was able to hit the URL and retrieve an instance from the previous bundle! Even though experclass had been re-assigned to!
 The answer, of course, is that 'instances' is an attribute of BaseExper, not the newly-loaded subclass. This actually applies to a number of class attributes ...
+** TODO Reloading a bundle is not always a useful operation
+It only is if the bundle can be modified without being re-uploaded. So it's really basically a debug tool.

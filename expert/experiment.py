@@ -116,6 +116,7 @@ class BaseExper:
     replicate: ClassVar[Optional[Record]]
     name: ClassVar[str]
     profiles: ClassVar[list[profile.Profile]] = [] # mutated by subclass
+    num_profiles: ClassVar[int]                 # set on subclass
     # sid: <Experiment subclass inst>
     instances: ClassVar[dict[str, BaseExper]] = {} # mutated by subclass
     running: ClassVar[bool]
@@ -180,74 +181,15 @@ class BaseExper:
                 f = getattr(self._api, cmd)
                 val = f(*args)
             except:
-                e.log.info(f'SID {self.sid[:4]} API error: {cmd}')
                 tback = traceback.format_exc()
+                e.log.error(f'SID {self.sid[:4]} API \'{cmd}\' error: {tback}')
                 e.srv.dboard.api_error(tback)
                 return {'err': tback}
             return {'val': val}
 
-        # @e.srv.socketio.on('soundcheck', namespace=f'/{self.sid}')
-        # def sio_soundcheck(resp):
-        #     return resp.strip().lower() == e.soundcheck_word
-
-        # @e.srv.socketio.on('init_task', namespace=f'/{self.sid}')
-        # def sio_init_task():
-        #     return self.all_vars()
-
-        # @e.srv.socketio.on('next_page', namespace=f'/{self.sid}')
-        # def sio_next_page(resp):
-        #     if self.task.next_tasks or isinstance(self.task, tasks.Consent):
-        #         # if we're not here, the user was somehow able
-        #         # to hit 'Next' on the final task screen,
-        #         # which shouldn't be possible ...
-        #         #self.handle_response(resp)
-        #         self._next_task(resp)
-        #     return self.all_vars()
-
-        # @e.srv.socketio.on('get_feedback', namespace=f'/{self.sid}')
-        # def sio_get_feedback(resp):
-        #     return self.task.get_feedback(resp)
-
-        # @e.srv.socketio.on('load_template', namespace=f'/{self.sid}')
-        # def sio_load_template(tplt, tplt_vars={}):
-        #     return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
-
         @e.srv.socketio.on_error(f'/{self.sid}')
         def sio_inst_error(err):
-            e.log.info(f'socketio error:\n{traceback.format_exc()}')
-
-    # @classmethod
-    # def load(cls, path, tool_mode=False, is_reloading=False):
-    #     cls.dir_path = Path(path).resolve(True)
-
-    #     cls._read_config()
-
-    #     e.srv.enable_tool_mode(tool_mode or cls.cfg['tool_mode'])
-
-    #     experclass = cls._load_bundle(is_reloading)
-    #     if experclass is None:
-    #         sys.exit(f'unable to load experiment bundle "{cls.dir_path}"')
-    #     e.experclass = experclass
-
-    #     experclass.name = experclass.__qualname__.lower()
-    #     experclass.pkg = sys.modules[experclass.__module__]
-    #     experclass._setup_paths()
-    #     # create main experiment directories, if they don't exist
-    #     experclass.dir_path.mkdir(exist_ok=True)
-    #     experclass.runs_path.mkdir(exist_ok=True)
-    #     experclass.profiles_path.mkdir(exist_ok=True)
-    #     experclass.dls_path.mkdir(exist_ok=True)
-
-    #     experclass._cond_paths = experclass._read_cond_paths()
-    #     if not experclass._cond_paths:
-    #         experclass._make_profiles()
-    #         experclass._cond_paths = experclass._read_cond_paths()
-    #     experclass._setup()
-
-    #     templates.set_bundle_variables(experclass)
-    #     e.app.update_jinja_loader(experclass)
-
-    #     experclass.running = False
+            e.log.error(f'socketio error:\n{traceback.format_exc()}')
 
     @classmethod
     def init(cls, path, is_reloading):
@@ -263,8 +205,17 @@ class BaseExper:
         cls.dls_path.mkdir(exist_ok=True)
 
         cls._cond_paths = cls._read_cond_paths()
+        num_conds = len(cls.cond_mod().conds)
+        cls.cond_size = round(cls.params_mod().n_profiles/num_conds)
+        # We set this early (rather than when they get loaded) so that
+        # the dashboard can have this information.
+        # NB! This is the total number, not how many get loaded
+        # (which may vary due to resumption)
+        cls.num_profiles = num_conds*cls.cond_size
+        e.log.info(f'profiles per condition: {cls.cond_size}')
+        e.log.info(f'total profiles: {cls.num_profiles}')
         if not cls._cond_paths:
-            cls._make_profiles()
+            cls.make_profiles()
             cls._cond_paths = cls._read_cond_paths()
         cls.running = False
         cls._setup(is_reloading)
@@ -314,32 +265,6 @@ class BaseExper:
         cls.replicate = None
         cls.record = None
         cls.running = False
-
-    # @classmethod
-    # def _load_bundle(cls, is_reloading=False):
-    #     """Load the bundle in the directory at cls.dir_path.
-
-    #     NB: The source code for the bundle must be located in
-    #     the 'src' subfolder of the bundle directory.
-    #     E.g., if exper_path == '/foo/bar/my_exper', the source code
-    #     must be located in /foo/bar/my_exper/src.
-    #     """
-    #     #exper_path = Path(exper_path).resolve(True)
-    #     e.log.info(f'loading bundle from {cls.dir_path}')
-    #     init_path = cls.dir_path / 'src' / '__init__.py'
-    #     spec = importlib.util.spec_from_file_location('src', init_path)
-    #     pkg = importlib.util.module_from_spec(spec)
-    #     sys.modules[spec.name] = pkg
-    #     e.log.info(f'experiment package name: {pkg.__name__}')
-    #     spec.loader.exec_module(pkg)
-    #     ##params = importlib.import_module('.params', pkg)
-    #     #params = __import__('src.params', fromlist=['params'])
-    #     # return the first subclass of Experiment found
-    #     for k, v in pkg.__dict__.items():
-    #         if isinstance(v, type) and issubclass(v, e.Experiment) and \
-    #            v is not e.Experiment:
-    #             return v
-    #     return None
 
     @classmethod
     def _setup(cls, is_reloading):
@@ -394,11 +319,10 @@ class BaseExper:
         cls.num_profiles = len(cls.profiles)
 
     @classmethod
-    def _make_profiles(cls):
+    def make_profiles(cls):
         e.log.info('creating profiles')
-        cls.cond_size = round(
-            cls.params_mod().n_profiles/len(cls.cond_mod().conds))
-        e.log.info(f'profiles per condition: {cls.cond_size}')
+        # profiles dir may have been deleted, so we make sure it's here
+        cls.profiles_path.mkdir(exist_ok=True)
         for cname, c in cls.cond_mod().conds.items():
             e.log.info(f'creating profiles for condition {cname}')
             (cls.profiles_path / cname).mkdir()
@@ -539,13 +463,14 @@ class BaseExper:
 
     def status(self):
         y, mo, d, h, mi, s = self.start_timestamp.split('.')
-        return [
-            self.sid, self.clientip,
-            str(self.profile) if self.profile else 'unassigned',
-            self.state.name, self.task_cursor,
+        return {
+            'sid': self.sid, 'ip': self.clientip,
+            'profile': str(self.profile) if self.profile else 'unassigned',
+            'state': self.state.name, 'task': self.task_cursor,
             #self.start_timestamp[11:].replace('.', ':'),
-            f'{mo}/{d}/{y} {h}:{mi}:{s}',
-            f'{self._elapsed_time()/60:.1f}']
+            'time': f'{mo}/{d}/{y} {h}:{mi}:{s}',
+            'elapsed': f'{self._elapsed_time()/60:.1f}'
+        }
 
     def assign_profile(self):
         self.profile = self.profiles.pop(0)

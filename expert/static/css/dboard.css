@@ -31,16 +31,20 @@ body {
 }
 #dboard #inst-list {
   flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
   background: #F1F1F1;
   margin: 0.5rem 0;
   overflow: scroll;
 }
 #dboard #inst-list #inst-data {
+  flex: 1 1 auto;
   display: grid;
   grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
-}
-#dboard #inst-list #inst-data div {
-  margin: 0 0.25rem;
+  grid-auto-rows: min-content;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: solid 1px black;
 }
 #dboard #inst-list #inst-data .dboard-header {
   font-weight: bold;
@@ -60,47 +64,25 @@ body {
 #dboard #inst-list #inst-data .dboard-num, #dboard #inst-list #inst-data .dboard-task, #dboard #inst-list #inst-data .dboard-elapsed {
   text-align: right;
 }
-#dboard #inst-list #inst-data .dboard-start-sep {
+#dboard #inst-list #inst-data .dboard-sep, #dboard #inst-list #inst-data .dboard-error-sep, #dboard #inst-list #inst-data .dboard-end-sep, #dboard #inst-list #inst-data .dboard-warn-sep, #dboard #inst-list #inst-data .dboard-stop-sep, #dboard #inst-list #inst-data .dboard-unload-sep, #dboard #inst-list #inst-data .dboard-info-sep, #dboard #inst-list #inst-data .dboard-profiles-sep, #dboard #inst-list #inst-data .dboard-reload-sep, #dboard #inst-list #inst-data .dboard-load-sep, #dboard #inst-list #inst-data .dboard-start-sep {
   grid-column: 1/-1;
-  background: blue;
-  color: white;
   text-align: center;
 }
-#dboard #inst-list #inst-data .dboard-load-sep {
-  grid-column: 1/-1;
-  background: blue;
-  color: white;
-  text-align: center;
+#dboard #inst-list #inst-data .dboard-info-sep, #dboard #inst-list #inst-data .dboard-profiles-sep, #dboard #inst-list #inst-data .dboard-reload-sep, #dboard #inst-list #inst-data .dboard-load-sep, #dboard #inst-list #inst-data .dboard-start-sep {
+  background: lightblue;
+  color: black;
 }
-#dboard #inst-list #inst-data .dboard-unload-sep {
-  grid-column: 1/-1;
-  background: blue;
-  color: white;
-  text-align: center;
-}
-#dboard #inst-list #inst-data .dboard-stop-sep {
-  grid-column: 1/-1;
-  background: black;
-  color: white;
-  text-align: center;
-}
-#dboard #inst-list #inst-data .dboard-reload-sep {
-  grid-column: 1/-1;
-  background: black;
-  color: white;
-  text-align: center;
+#dboard #inst-list #inst-data .dboard-warn-sep, #dboard #inst-list #inst-data .dboard-stop-sep, #dboard #inst-list #inst-data .dboard-unload-sep {
+  background: sandybrown;
+  color: black;
 }
 #dboard #inst-list #inst-data .dboard-end-sep {
-  grid-column: 1/-1;
   background: #77ff77;
   color: black;
-  text-align: center;
 }
 #dboard #inst-list #inst-data .dboard-error-sep {
-  grid-column: 1/-1;
   background: red;
   color: white;
-  text-align: center;
 }
 
 .exp-dlg {

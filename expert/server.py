@@ -7,6 +7,7 @@ import sys
 import logging
 import datetime
 import traceback
+import gc
 
 
 from typing import Type, Any, Optional
@@ -255,21 +256,20 @@ class Server:
 
         bundle_cfg = self._read_bundle_config(bundle_path)
 
-        bundle_name = bundle_path.name
-        bundle_mods = self._bundle_mods(bundle_path)
+        if e.experclass:
+            self.unload_bundle()
+
+        e.bundle_name = bundle_path.name
+        e.bundle_mods = self._bundle_mods(bundle_path)
+
         try:
             e.experclass = self._load_bundle_src(bundle_path, is_reloading)
-            e.log.info(f'bundle modules: {" ".join(sorted(bundle_mods))}')
+            e.log.info(f'bundle modules: {" ".join(sorted(e.bundle_mods))}')
             self.enable_tool_mode(tool_mode or bundle_cfg['tool_mode'])
-            e.bundle_name = bundle_name
-            e.bundle_mods = bundle_mods
             e.experclass.cfg = bundle_cfg
             e.experclass.init(bundle_path, is_reloading)
         except:
-            self._unload_bundle(bundle_name, bundle_mods)
-            e.experclass = None
-            templates.set_bundle_variables(None)
-            e.app.update_jinja_loader(None)
+            self.unload_bundle()
             raise
 
         templates.set_bundle_variables(e.experclass)
@@ -282,20 +282,24 @@ class Server:
                 and p.stem != '__init__'
                 and not p.stem.startswith('.')]
 
-    def _unload_bundle(self, name, mods):
-        for m in mods:
-            qualmod = f'{name}.{m}'
+    def unload_bundle(self):
+        for m in e.bundle_mods:
+            qualmod = f'{e.bundle_name}.{m}'
             if qualmod in sys.modules:
                 e.log.info(f'unloading module {qualmod}')
                 del sys.modules[qualmod]
-        if name in sys.modules:
-            e.log.info(f'unloading module {name}')
-            del sys.modules[name]
+        if e.bundle_name in sys.modules:
+            e.log.info(f'unloading module {e.bundle_name}')
+            del sys.modules[e.bundle_name]
             # NB: instances is an attribute of BaseExper that experclass
             # mutates
             experiment.BaseExper.instances.clear()
         e.bundle_name = None
         e.bundle_mods = []
+        e.experclass = None
+        templates.set_bundle_variables(None)
+        e.app.update_jinja_loader(None)
+        gc.collect()
 
     def _read_bundle_config(self, bundle_path):
         # read default bundle config
@@ -337,7 +341,7 @@ class Server:
         #                    and p.stem != '__init__'
         #                    and not p.stem.startswith('.')]
         #e.log.info(f'bundle modules: {" ".join(sorted(bundle_mods))}')
-        self._unload_bundle(e.bundle_name, e.bundle_mods)
+        #self._unload_bundle(e.bundle_name, e.bundle_mods)
         init_path = srcpath / '__init__.py'
         spec = importlib.util.spec_from_file_location(path.name, init_path)
         if not spec:

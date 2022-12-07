@@ -6,6 +6,7 @@ import shutil
 import importlib
 import time
 import traceback
+import weakref
 
 from pathlib import Path
 from typing import Any
@@ -39,7 +40,10 @@ class Event:
         d = {'tag': self.tag}
         if self.tag == 'inst':
         #if isinstance(self.data, experiment.BaseExper):
-            d['data'] = self.data.status()
+            d['data'] = self.data().status() if self.data() else {
+                'sid': '---', 'ip': '---', 'profile': '---', 'state': '---',
+                'task': '---', 'time': '---', 'elapsed': '---'
+            }
         else:
             d['data'] = self.data
         return d
@@ -51,10 +55,8 @@ class API:
         self._dboard = dboard
 
     def dboard_init(self):
-        list_items = []
-        if e.experclass:
-            list_items = [item.to_client()
-                          for item in self._dboard._events]
+        list_items = [item.to_client()
+                      for item in self._dboard._events]
         return {
             'vars': self._dboard.all_vars(),
             'list_items': list_items,
@@ -97,7 +99,9 @@ class API:
         try:
             e.experclass.start('new')
         except:
-            return {'err': traceback.format_exc()}
+            err = traceback.format_exc()
+            e.log.error(f'error starting run: {err}')
+            return {'err': err}
         self._dboard._events.append(Event('new_run', e.experclass.run))
         templates.variables['exp_app_is_running'] = True
         return {'info': self._dboard._run_info()}
@@ -127,12 +131,14 @@ class API:
         try:
             e.srv.load_bundle(path, tool_mode=tool_mode)
         except:
+            err = traceback.format_exc()
+            e.log.error(f'error loading bundle \'{name}\': {err}')
             return {
-                'err': traceback.format_exc(),
+                'err': err,
                 'vars': self._dboard.all_vars()
             }
         self._dboard._events.append(Event('bundle_load', name))
-        #self.variables['num_profiles'] = e.experclass.num_profiles
+        self._dboard.update_vars()
         return {'vars': self._dboard.all_vars()}
 
     def reload_bundle(self):
@@ -145,12 +151,35 @@ class API:
                 'err': traceback.format_exc(),
                 'vars': self._dboard.all_vars()
             }
-        self._dboard._events.append(Event('bundle_reload', e.experclass.name))
+        self._dboard._events.append(Event('bundle_reload', e.bundle_name))
         # NB: Reloading does NOT start a new run.
         # Reloading implies the bundle has changed, so
         # allowing resuming seems counter-intuitive. But,
         # it's possible a bug might need fixing mid-run,
         # so it might be useful.
+        return {'vars': self._dboard.all_vars()}
+
+    def unload_bundle(self):
+        e.log.info('*** unloading bundle ***')
+        self._dboard._events.append(Event('bundle_unload', e.bundle_name))
+        e.srv.unload_bundle()
+        return {'vars': self._dboard.all_vars()}
+
+    def rebuild_profiles(self):
+        e.log.info('rebuilding profiles')
+        try:
+            shutil.rmtree(e.experclass.profiles_path)
+            e.experclass.make_profiles()
+        except:
+            err = traceback.format_exc()
+            e.log.error(f'error rebuilding profiles: {err}')
+            e.srv.unload_bundle()
+            return {
+                'err': err,
+                'vars': self._dboard.all_vars()
+            }
+        self._dboard.update_vars()
+        self._dboard._events.append(Event('profiles_rebuild'))
         return {'vars': self._dboard.all_vars()}
 
     def load_template(self, tplt, tplt_vars={}):
@@ -198,12 +227,18 @@ class Dashboard(view.View):
         # vars could conflict with them (well, the path, at least).
         self.variables['exp_dashboard_path'] = self._path
         self.variables['exp_authn_code'] = self.code
-        #self.variables['num_profiles'] = e.experclass.num_profiles \
-        #    if e.experclass else 0
         self.variables['exp_window_title'] = 'EXPERt Dashboard'
         self.variables['exp_favicon'] = srv.cfg['dashboard_favicon']
+        # XXX what about resuming?
+        self.variables['exp_completed_profiles'] = 0
+        self.update_vars()
 
         self._events = []
+
+    def update_vars(self):
+        # NB: This is the total number, not affected by resuming
+        self.variables['exp_total_profiles'] = \
+            e.experclass.num_profiles if e.experclass else 0
 
     def all_vars(self):
         all_vars = templates.variables.copy()
@@ -225,14 +260,14 @@ class Dashboard(view.View):
 
         @e.app.route(f'{self._path}/download/<path:subpath>/results')
         def dashboard_dl_results(subpath):
-            dl_name = f'exp_{e.experclass.name}_{subpath}_results.zip'
+            dl_name = f'exp_{e.bundle_name}_{subpath}_results.zip'
             e.log.info(f'download request for {dl_name}')
             self._zip_results(subpath, dl_name)
             return self._download(dl_name)
 
         @e.app.route(f'{self._path}/download/<path:subpath>/id_mapping')
         def dashboard_dl_id_map(subpath):
-            dl_name = f'exp_{e.experclass.name}_{subpath}_id_map.zip'
+            dl_name = f'exp_{e.bundle_name}_{subpath}_id_map.zip'
             e.log.info(f'download request for {dl_name}')
             self._zip_id_mapping(subpath, dl_name)
             return self._download(dl_name)
@@ -248,21 +283,26 @@ class Dashboard(view.View):
                 if '..' in relpath:
                     return {'ok': False, 'err': 'Filenames cannot contain ".."'}
 
-            if e.experclass and bundle_name == e.experclass.name:
-                self._end_run()
+            if e.experclass and bundle_name == e.bundle_name:
+                self._stop_run()
 
             bundle_path = bundles_path / bundle_name
             try:
                 bundle_path.mkdir(exist_ok=True)
             except FileExistsError:
                 # bundle_path already exists as a non-directory
-                return {'ok': False, 'err': 'Unable to create bundle directory'}
+                err = 'Unable to create bundle directory'
+                e.log.error(f'error uploading bundle \'{bundle_name}\': {err}')
+                return {'ok': False, 'err': err}
             for relpath, f in request.files.items():
                 path = bundles_path / relpath
                 try:
                     path.parent.mkdir(parents=True, exist_ok=True)
                 except FileExistsError:
-                    return {'ok': False, 'err': 'Unable to write file'}
+                    err = f'Unable to write file \'{relpath}\''
+                    e.log.error(
+                        f'error uploading bundle \'{bundle_name}\': {err}')
+                    return {'ok': False, 'err': err}
                 f.save(path)
             importlib.invalidate_caches()
             e.log.info(f'installed bundle \'{bundle_name}\'')
@@ -275,129 +315,10 @@ class Dashboard(view.View):
                 f = getattr(self._api, cmd)
                 val = f(*args)
             except:
-                return {'err': traceback.format_exc()}
+                err = traceback.format_exc()
+                e.log.error(f'dashboard API \'{cmd}\' error: {err}')
+                return {'err': err}
             return {'val': val}
-
-        # @srv.socketio.on('dboard_init', namespace=f'/{self.code}')
-        # def sio_dboard_init():
-        #     list_items = []
-        #     if e.experclass:
-        #         list_items = [item.to_client()
-        #                       for item in self._events]
-        #     return {
-        #         'vars': self.all_vars(),
-        #         'list_items': list_items,
-        #         'run_info': self._run_info()
-        #     }
-
-        # @srv.socketio.on('get_bundles', namespace=f'/{self.code}')
-        # def sio_get_bundles():
-        #     bundles_path = e.expert_path / 'bundles'
-        #     return sorted(bundle.name for bundle in bundles_path.iterdir()
-        #                   if bundle.is_dir() and bundle.stem[0] != '.')
-
-        # @srv.socketio.on('get_runs', namespace=f'/{self.code}')
-        # def sio_get_runs():
-        #     runs = []
-        #     for run in e.experclass.runs_path.iterdir():
-        #         if not run.is_dir() or run.stem[0] == '.':
-        #             continue
-        #         runs.append({
-        #             'id': run.name,
-        #             'num_complete': 0,
-        #             'num_incomplete': 0,
-        #             'has_pii': False
-        #         })
-        #         for cond in run.iterdir():
-        #             if cond.name == 'id-mapping' or \
-        #                not cond.is_dir() or cond.stem[0] == '.':
-        #                 continue
-        #             for resp in cond.iterdir():
-        #                 if not resp.is_file() or resp.stem[0] == '.':
-        #                     continue
-        #                 if any(resp.name.endswith(sfx)
-        #                        for sfx in experiment.resp_file_suffixes.values()):
-        #                     runs[-1]['num_incomplete'] += 1
-        #                 else:
-        #                     runs[-1]['num_complete'] += 1
-        #         if (run / 'id-mapping').is_dir():
-        #             runs[-1]['has_pii'] = True
-        #     return sorted(runs, key=lambda r: r['id'], reverse=True)
-
-        # @srv.socketio.on('start_new_run', namespace=f'/{self.code}')
-        # def sio_start_new_run():
-        #     try:
-        #         e.experclass.start('new')
-        #     except:
-        #         return {
-        #             'ok': False,
-        #             'err': traceback.format_exc()
-        #         }
-        #     self._events.append(Event('new_run', e.experclass.run))
-        #     return {'ok': True, 'info': self._run_info()}
-
-        # @srv.socketio.on('stop_run', namespace=f'/{self.code}')
-        # def sio_stop_run():
-        #     self._events.append(Event('run_stop', e.experclass.run))
-        #     self._stop_run()
-
-        # # @socketio.on('delete_results')
-        # # def sio_delete_results(runs):
-        # #     for run in runs:
-        # #         app.logger.info(f'deleting results for run {run}')
-        # #         shutil.rmtree(experclass.runs_path / run)
-
-        # @srv.socketio.on('delete_id_mappings', namespace=f'/{self.code}')
-        # def sio_delete_id_mappings(runs):
-        #     for run in runs:
-        #         e.log.info(f'deleting id mapping for run {run}')
-        #         shutil.rmtree(e.experclass.runs_path / run / 'id-mapping')
-
-        # @srv.socketio.on('terminate_inst', namespace=f'/{self.code}')
-        # def sio_terminate_inst(sid):
-        #     pass
-
-        # @srv.socketio.on('load_bundle', namespace=f'/{self.code}')
-        # def sio_load_bundle(name, tool_mode):
-        #     e.log.info(f'loading in tool mode: {tool_mode}')
-        #     path = e.expert_path / 'bundles' / name
-        #     #importlib.invalidate_caches()
-        #     try:
-        #         e.srv.load_bundle(path, tool_mode=tool_mode)
-        #     except:
-        #         return {
-        #             'ok': False,
-        #             'err': traceback.format_exc(),
-        #             'vars': self.all_vars()
-        #         }
-        #     self._events.append(Event('bundle_load', name))
-        #     #self.variables['num_profiles'] = e.experclass.num_profiles
-        #     return {'ok': True, 'vars': self.all_vars()}
-
-        # @srv.socketio.on('reload_bundle', namespace=f'/{self.code}')
-        # def sio_reload_bundle():
-        #     e.log.info('*** reloading bundle ***')
-
-        #     try:
-        #         e.srv.load_bundle(
-        #             e.experclass.dir_path, e.tool_mode, is_reloading=True)
-        #     except:
-        #         return {
-        #             'ok': False,
-        #             'err': traceback.format_exc(),
-        #             'vars': self.all_vars()
-        #         }
-        #     self._events.append(Event('bundle_reload', e.experclass.name))
-        #     # NB: Reloading does NOT start a new run.
-        #     # Reloading implies the bundle has changed, so
-        #     # allowing resuming seems counter-intuitive. But,
-        #     # it's possible a bug might need fixing mid-run,
-        #     # so it might be useful.
-        #     return {'ok': True, 'vars': self.all_vars()}
-
-        # @srv.socketio.on('load_template', namespace=f'/{self.code}')
-        # def sio_load_template(tplt, tplt_vars={}):
-        #     return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
 
     def _run_info(self):
         if e.experclass and e.experclass.running:
@@ -466,7 +387,7 @@ class Dashboard(view.View):
             as_attachment=True, download_name=dl_name)
 
     def inst_created(self, inst):
-        self._events.append(Event('inst', inst, inst.start_time))
+        self._events.append(Event('inst', weakref.ref(inst), inst.start_time))
         e.srv.socketio.emit('new_instance', inst.status(),
                             namespace=f'/{self.code}')
 
@@ -479,6 +400,8 @@ class Dashboard(view.View):
                 num_other += 1
             elif ev.data == inst:
                 break
+        if inst.state == experiment.State.COMPLETE:
+            self.variables['exp_completed_profiles'] += 1
         # NB: tuple for multiple args
         e.srv.socketio.emit('update_instance', (i - num_other, inst.status()),
                             namespace=f'/{self.code}')

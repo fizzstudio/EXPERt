@@ -46,7 +46,7 @@ def set_bundle_variables(experclass):
     pfx = e.srv.cfg['url_prefix']
     variables['exp_tool_mode'] = e.tool_mode
     if experclass:
-        variables['exp_app_name'] = experclass.name
+        variables['exp_app_name'] = e.bundle_name
         variables['exp_app_is_running'] = experclass.running
         variables['exp_window_title'] = experclass.window_title
         variables['exp_favicon'] = experclass.cfg['favicon']
@@ -56,6 +56,7 @@ def set_bundle_variables(experclass):
                 experclass.cfg['tool_display_total_tasks']
     else:
         variables['exp_app_name'] = None
+        variables['exp_app_is_running'] = False
         variables['exp_window_title'] = None
         variables['exp_favicon'] = None
         variables['exp_progbar_enabled'] = False

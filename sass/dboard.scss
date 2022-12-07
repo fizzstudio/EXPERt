@@ -33,14 +33,21 @@ body {
     }
     #inst-list {
         flex: 1 1 0;
+        display: flex;
+        flex-direction: column;
         background: globals.$very-light-gray;
         margin: 0.5rem 0;
         overflow: scroll;
         #inst-data {
+            flex: 1 1 auto;
             display: grid;
             grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
+            grid-auto-rows: min-content;
+            gap: 0.25rem;
+            padding: 0.25rem;
+            border: solid 1px black;
             div {
-                margin: 0 0.25rem;
+                //margin: 0 0.25rem;
             }
             .dboard-header {
                 font-weight: bold;
@@ -60,47 +67,47 @@ body {
             .dboard-num, .dboard-task, .dboard-elapsed {
                 text-align: right;
             }
-            .dboard-start-sep {
+            .dboard-sep {
                 grid-column: 1 / -1;
-                background: blue;
-                color: white;
                 text-align: center;
+            }
+            .dboard-info-sep {
+                @extend .dboard-sep;
+                background: lightblue;
+                color: black;
+            }
+            .dboard-warn-sep {
+                @extend .dboard-sep;
+                background: sandybrown;
+                color: black;
+            }
+            .dboard-start-sep {
+                @extend .dboard-info-sep;
             }
             .dboard-load-sep {
-                grid-column: 1 / -1;
-                background: blue;
-                color: white;
-                text-align: center;
+                @extend .dboard-info-sep;
             }
             .dboard-unload-sep {
-                grid-column: 1 / -1;
-                background: blue;
-                color: white;
-                text-align: center;
+                @extend .dboard-warn-sep;
             }
             .dboard-stop-sep {
-                grid-column: 1 / -1;
-                background: black;
-                color: white;
-                text-align: center;
+                @extend .dboard-warn-sep;
             }
             .dboard-reload-sep {
-                grid-column: 1 / -1;
-                background: black;
-                color: white;
-                text-align: center;
+                @extend .dboard-info-sep;
+            }
+            .dboard-profiles-sep {
+                @extend .dboard-info-sep;
             }
             .dboard-end-sep {
-                grid-column: 1 / -1;
+                @extend .dboard-sep;
                 background: globals.$bright-green;
                 color: black;
-                text-align: center;
             }
             .dboard-error-sep {
-                grid-column: 1 / -1;
+                @extend .dboard-sep;
                 background: red;
                 color: white;
-                text-align: center;
             }
         }
     }

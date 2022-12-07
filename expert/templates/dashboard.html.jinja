@@ -127,6 +127,8 @@
 
          constructor(ctrlr) {
              super(elt('inst-data'), ctrlr);
+             this.cols = [
+                 'sid', 'ip', 'profile', 'state', 'task', 'time', 'elapsed'];
              this.cellClasses = [
                  'dboard-num', 'dboard-id', 'dboard-clientip',
                  'dboard-profile', 'dboard-state', 'dboard-task',
@@ -140,6 +142,8 @@
                  run_complete: 'end',
                  bundle_load: 'load',
                  bundle_reload: 'reload',
+                 bundle_unload: 'unload',
+                 profiles_rebuild: 'profiles',
                  page_load_error: 'error',
                  api_error: 'error'
              };
@@ -149,6 +153,7 @@
                  end: run => `Run '${run}' complete`,
                  load: bundle => `Bundle '${bundle}' loaded`,
                  reload: bundle => `Bundle '${bundle}' reloaded`,
+                 profiles: () => 'Profiles rebuilt',
                  unload: bundle => `Bundle '${bundle}' unloaded`,
                  error: (tback, div) => {
                      //this.errors.push(tback);
@@ -185,13 +190,14 @@
          }
 
          setRow(index, fields, start=0, end=null) {
+             const vals = this.cols.map(name => fields[name]);
              // NB: if end is set, it must be non-negative
              if (end === null) {
                  end = this.numCols - 1;
              }
              const divs = this.getRow(index);
              for (let i=start; i<end; i++) {
-                 divs[i].innerHTML = fields[i - start];
+                 divs[i].innerHTML = vals[i - start];
              }
          }
 
@@ -329,32 +335,52 @@
              xhr.open('POST', url);
              xhr.responseType = 'json';
              xhr.overrideMimeType('multipart/form-data');
+             console.log('sending upload request');
              xhr.send(formData);
          }
 
          upload() {
              return new Promise(resolve => {
                  const listener = async () => {
+                     console.log('upload files selected');
                      this.ctrlr.uploadBtn.disabled = true;
                      this.input.removeEventListener('change', listener, false);
                      const bundleName = this.input.files[0]
                                             .webkitRelativePath.split('/')[0];
-                     if (bundleName === this.ctrlr.vars['exp_app_name'] &&
-                         this.ctrlr.run) {
+                     console.log('upload bundle name', bundleName);
+                     const bundles = await this.ctrlr.api('get_bundles');
+                     if (bundles.includes(bundleName)) {
+                         console.log('bundle already exists');
+                         let msg = `Really overwrite bundle '${bundleName}'?`;
+                         let unload = false;
+                         let stopRun = false;
+                         if (bundleName === this.ctrlr.bundle) {
+                             unload = true;
+                             if (this.ctrlr.run) {
+                                 msg += ' Current run will end.';
+                                 stopRun = true;
+                             }
+                         }
                          if (await this.ctrlr.confirmDlg.show(
-                             `Really replace current bundle '${bundleName}'?
-                             Current run will end.`,
-                             'Cancel', 'Replace')) {
-                             await this.ctrlr.stopRun();
+                             msg, 'Cancel', 'Overwrite')) {
+                             if (stopRun) {
+                                 await this.ctrlr.stopRun();
+                             }
+                             if (unload) {
+                                 await this.ctrlr.unloadBundle();
+                             }
                          } else {
+                             console.log('upload canceled');
                              resolve({ok: true});
                              this.ctrlr.uploadBtn.disabled = false;
                              return;
                          }
                      }
+
                      const formData = new FormData();
                      this.ctrlr.uploadingOverlay.show();
                      const files = await this._getFiles(bundleName);
+                     console.log('got upload files');
                      for (const file of files) {
                          formData.set(file.webkitRelativePath, file);
                      }
@@ -374,6 +400,7 @@
              this.loadBtn = elt('load-btn');
              this.newRunBtn = elt('new-run-btn');
              this.reloadBtn = elt('reload-btn');
+             this.profilesBtn = elt('profiles-btn');
              this.downloadBtn = elt('download-btn');
              //this.deleteBtn = elt('delete-btn');
              this.downloadIdBtn = elt('download-id-btn');
@@ -383,6 +410,7 @@
 
              this.bundle = null;
              this.run = null;
+             this.completed = 0;
              this._didInitViews = false;
 
              await super.init();
@@ -392,13 +420,17 @@
              super._initSocket();
              this._socket.on('new_instance',
                              inst => this.instList.addInst(inst));
-             this._socket.on('update_instance',
-                             (index, inst) => this.instList.setRow(
-                                 index, inst));
+             this._socket.on('update_instance', (index, inst) => {
+                 this.instList.setRow(index, inst);
+                 if (inst.state === 'COMPLETE') {
+                     this.completed++;
+                 }
+             });
              this._socket.on('run_complete', () => {
                  this.instList.addSeparator('end', this.run);
-                 this.setRunInfo({run: 'not running'});
                  this.run = null;
+                 this.completed = 0;
+                 this.updateRunInfo();
              });
              this._socket.on('page_load_error', tback => {
                  this.instList.addSeparator('error', tback);
@@ -423,7 +455,7 @@
                  const resp = await this.uploader.upload();
                  if (!resp.ok) {
                      await this.msgDlg.show(
-                         `Error uploading bundle: ${resp.err}`);
+                                     `Error uploading bundle: ${resp.err}`);
                  }
              });
              this.loadBtn.addEventListener('click', async () => {
@@ -439,7 +471,16 @@
              this.reloadBtn.addEventListener('click', async () => {
                  this.reloadBtn.disabled = true;
                  await this.reloadBundle();
-                 this.reloadBtn.disabled = false;
+                 if (this.bundle) {
+                     this.reloadBtn.disabled = false;
+                 }
+             });
+             this.profilesBtn.addEventListener('click', async () => {
+                 this.profilesBtn.disabled = true;
+                 await this.rebuildProfiles();
+                 if (this.bundle) {
+                     this.profilesBtn.disabled = false;
+                 }
              });
 
              this.downloadBtn.addEventListener('click', async () => {
@@ -456,7 +497,7 @@
                  if (await this.runsDlg.show(
                      'Delete Results', 'Delete', false) &&
                      await this.confirmDlg.show(
-                         `Really delete results for run ${this.runsDlg.run}?`,
+                                     `Really delete results for run ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
                      await callApi(
                          this.socket, 'delete_runs', [this.runsDlg.run]);
@@ -478,8 +519,8 @@
                      'Delete ID Mapping', 'Delete', false, true);
                  if (ok &&
                      await this.confirmDlg.show(
-                         `Really delete ID mapping for run
-                          ${this.runsDlg.run}?`,
+                                     `Really delete ID mapping for run
+                         ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
                      await this.api(
                          'delete_id_mappißngs', this.runsDlg.run);
@@ -503,11 +544,12 @@
              this._onBundleUpdate();
              this.instList.clear();
              this.instList.update(data.list_items);
-             this.setRunInfo(data.run_info);
              this.run = data.run_info.run;
+             this.completed = this.vars['exp_completed_profiles'];
+             this.updateRunInfo();
              console.log(
-                 `initializing; bundle: ${this.vars['exp_app_name']};` +
-                 ` run: ${this.run}`);
+                         `initializing; bundle: ${this.vars['exp_app_name']};` +
+                         ` run: ${this.run}`);
          }
 
          async _onSocketDisconnected() {
@@ -529,20 +571,23 @@
                      await this.tracebackDlg.show(err);
                  }
                  throw new APIError(
-                     `Error in API call '${params[0]}': ${err}`);
+                         `Error in API call '${params[0]}': ${err}`);
              } else {
                  return val;
              }
          }
 
          /**
-            Called when a bundle has been loaded.
+            Called when a bundle has been loaded or unloaded.
          */
          _onBundleUpdate() {
              if (this.bundle) {
-                 elt('bundle-name').textContent = this.bundle;
+                 elt('bundle-name').textContent =
+                         `${this.bundle}
+                         (${this.vars['exp_total_profiles']} profiles)`;
                  this.newRunBtn.disabled = false;
                  this.reloadBtn.disabled = false;
+                 this.profilesBtn.disabled = false;
                  this.downloadBtn.disabled = false;
                  this.downloadIdBtn.disabled = false;
                  this.deleteIdBtn.disabled = false;
@@ -550,6 +595,7 @@
                  elt('bundle-name').textContent = '<None>';
                  this.newRunBtn.disabled = true;
                  this.reloadBtn.disabled = true;
+                 this.profilesBtn.disabled = true;
                  this.downloadBtn.disabled = true;
                  this.downloadIdBtn.disabled = true;
                  this.deleteIdBtn.disabled = true;
@@ -560,7 +606,7 @@
              const ok = await this.bundlesDlg.show(
                  'Load Bundle', 'Load');
              if (ok) {
-                 if (this.bundlesDlg.bundle === this.vars['exp_app_name']) {
+                 if (this.bundlesDlg.bundle === this.bundle) {
                      await this.reloadBundle();
                  } else {
                      if (this.run) {
@@ -574,8 +620,10 @@
                              'load', this.bundlesDlg.bundle);
                      } else {
                          await this.tracebackDlg.show(err);
-                         this.instList.addSeparator(
-                             'unload', this.bundle);
+                         if (this.bundle) {
+                             this.instList.addSeparator(
+                                 'unload', this.bundle);
+                         }
                      }
                      this.vars = vars;
                      this.bundle = vars['exp_app_name'];
@@ -592,8 +640,9 @@
                  }
                  const {info, err} = await this.api('start_new_run');
                  if (info) {
-                     this.setRunInfo(info);
                      this.run = info.run;
+                     this.completed = 0;
+                     this.updateRunInfo();
                      this.instList.addSeparator('start', this.run);
                  } else {
                      await this.tracebackDlg.show(err);
@@ -604,14 +653,14 @@
          async stopRun() {
              await this.api('stop_run');
              this.instList.addSeparator('stop', this.run);
-             this.setRunInfo({});
              this.run = null;
+             this.completed = 0;
+             this.updateRunInfo();
          }
 
          async reloadBundle() {
              if (await this.confirmDlg.show(
-                 `Really reload '${this.bundle}'?
-                 Any current run will end.`,
+                 `Really reload '${this.bundle}'? Any current run will end.`,
                  'Cancel', 'Reload')) {
                  if (this.run) {
                      // NB: this adds a stop separator, not a reload separator
@@ -619,12 +668,37 @@
                  }
                  const {vars, err} = await this.api('reload_bundle');
                  if (!err) {
-                     this.instList.addSeparator(
-                         'reload', this.bundle);
+                     this.instList.addSeparator('reload', this.bundle);
                  } else {
                      await this.tracebackDlg.show(err);
-                     this.instList.addSeparator(
-                         'unload', this.bundle);
+                     this.instList.addSeparator('unload', this.bundle);
+                     this.bundle = null;
+                     this._onBundleUpdate();
+                 }
+                 this.vars = vars;
+             }
+         }
+
+         async unloadBundle() {
+             this.vars = await this.api('unload_bundle');
+             this.instList.addSeparator('unload', this.bundle);
+             this.bundle = null;
+             this._onBundleUpdate();
+         }
+
+         async rebuildProfiles() {
+             if (await this.confirmDlg.show(
+                 `Really rebuild profiles? Any current run will end.`,
+                 'Cancel', 'Rebuild')) {
+                 if (this.run) {
+                     await this.stopRun();
+                 }
+                 const {vars, err} = await this.api('rebuild_profiles');
+                 if (!err) {
+                     this.instList.addSeparator('profiles');
+                 } else {
+                     await this.tracebackDlg.show(err);
+                     this.instList.addSeparator('unload', this.bundle);
                      this.bundle = null;
                      this._onBundleUpdate();
                  }
@@ -642,14 +716,18 @@
              document.body.removeChild(anchor);
          }
 
-         setRunInfo(info) {
+         updateRunInfo() {
              const runInfo = elt('run-info');
-             runInfo.textContent = info.run ?? '<None>';
-             if (info.mode === 'res') {
-                 runInfo.textContent += ' res';
-             } else if (info.mode === 'rep') {
-                 runInfo.textContent += ' rep ' + info.target;
+             if (this.run) {
+                 runInfo.textContent = `${this.run} (${this.completed})`;
+             } else {
+                 runInfo.textContent = '<None>';
              }
+             //if (info.mode === 'res') {
+             //    runInfo.textContent += ' res';
+             //} else if (info.mode === 'rep') {
+             //    runInfo.textContent += ' rep ' + info.target;
+             //}
          }
 
      }
@@ -685,7 +763,7 @@
             <input type="file" id="file-input" class="exp-hidden"
             webkitdirectory multiple>
             <button type="button" id="upload-btn" disabled>
-                Upload Bundle to Server
+                Upload Bundle︎
             </button>
             <button type="button" id="load-btn" disabled>
                 Load Bundle
@@ -696,6 +774,9 @@
             </button>
             <button type="button" id="reload-btn" disabled>
                 Reload Bundle
+            </button>
+            <button type="button" id="profiles-btn" disabled>
+                Rebuild Profiles
             </button>
             <button type="button" id="download-btn" disabled>
                 Download Results
