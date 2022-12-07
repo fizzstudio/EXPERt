@@ -5,7 +5,7 @@ description = "Application for running browser-based scientific experiments"
 authors = [
     {name = "Josh Fennell", email = "josh@jfnl.org"},
 ]
-license-expression = "MIT"
+license = "MIT"
 dependencies = [
     "flask>=2.0.3",
     "flask-socketio>=5.1.1",

@@ -2,7 +2,7 @@
 import logging
 
 from pathlib import Path
-from typing import Type, Optional
+from typing import Type, Optional, Union
 
 from . import server, exper, tool
 
@@ -11,7 +11,7 @@ srv: server.Server
 app: server.App
 log: logging.Logger
 
-Experiment: Type[exper.Exper]|Type[tool.Tool] = exper.Exper
+Experiment: Union[Type[exper.Exper], Type[tool.Tool]] = exper.Exper
 
 tool_mode = False
 soundcheck_word = 'singapore'
