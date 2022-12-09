@@ -7,10 +7,10 @@ authors = [
 ]
 license = "MIT"
 dependencies = [
-    "flask>=2.0.3",
-    "flask-socketio>=5.1.1",
-    "eventlet>=0.33.0",
-    "strictyaml>=1.6.1",
+    "flask>=2.0.3,<2.1.0",
+    "flask-socketio>=5.1.1,<5.2.0",
+    "eventlet>=0.33.0,<0.34.0",
+    "strictyaml>=1.6.1,<1.7.0"
 ]
 requires-python = ">=3.9"
 

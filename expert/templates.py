@@ -14,6 +14,11 @@ js_ext = '.js.jinja'
 variables: dict[str, Any]
 
 
+class BadTemplateNameError(Exception):
+    def __init__(self, name):
+        super().__init__(f'bad template name \'{name}\'')
+
+
 class Loader(BaseLoader):
 
     def __init__(self, path, chain_loader):
@@ -70,6 +75,8 @@ def set_bundle_variables(experclass):
 
 
 def render(tplt, other_vars={}):
+    if '..' in tplt:
+        raise BadTemplateNameError(tplt)
     all_vars = variables.copy()
     all_vars.update(other_vars)
     return render_template(tplt, **all_vars)

@@ -199,3 +199,6 @@ After loading a new bundle, I was able to hit the URL and retrieve an instance f
 The answer, of course, is that 'instances' is an attribute of BaseExper, not the newly-loaded subclass. This actually applies to a number of class attributes ...
 ** TODO Reloading a bundle is not always a useful operation
 It only is if the bundle can be modified without being re-uploaded. So it's really basically a debug tool.
+** DONE CREATE THE BUNDLES DIR
+** TODO Security
+The flask-socketio server (or flask itself) seems to remove '..' from incoming request paths, so E doesn't need to. Still necessary for API calls, though.

@@ -51,6 +51,7 @@ class Server:
     cfg: dict[str, Any]
     host: str
     port: int
+    bundles_path: Path
     socketio: SocketIO
     dboard: dashboard.Dashboard
 
@@ -70,8 +71,8 @@ class Server:
 
         self.cfg = self._load_config(args.config)
 
-        self.host = self.cfg['host']
-        self.port = self.cfg['port']
+        self.host = self.cfg.get('host', '127.0.0.1')
+        self.port = self.cfg.get('port', 5000)
         if args.listen:
             if ':' in args.listen:
                 h, p = args.listen.split(':')
@@ -83,6 +84,13 @@ class Server:
             else:
                 self.host = args.listen
         e.log.info(f'listening on {self.host}:{self.port}')
+
+        bundles_dir = self.cfg.get('bundles_dir', 'bundles')
+        if '..' in bundles_dir:
+            sys.exit("config error: '..' not allowed in 'bundles_dir'")
+        self.bundles_path = e.expert_path / bundles_dir
+        self.bundles_path.mkdir(exist_ok=True)
+        e.log.info(f'bundles path: {self.bundles_path}')
 
         templates.set_server_variables(self)
 
@@ -144,13 +152,15 @@ class Server:
 
         @self.socketio.on_error
         def sio_error(e):
-            e.log.info(f'socketio error: {e}')
+            e.log.error(f'socketio error: {e}')
 
     def _add_routes(self):
         first_request_setup_complete = False
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/js/<path:subpath>')
         def js(subpath):
+            #if '..' in subpath:
+            #    return self.not_found(), 404
             # NB:
             # 1. Can't detect the dashboard by looking at the referrer;
             #    e.g., might be listening on 127.0.0.1, but
@@ -169,16 +179,22 @@ class Server:
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/audio/<path:subpath>')
         def global_audio(subpath):
+            #if '..' in subpath:
+            #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'audio', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/css/<path:subpath>')
         def global_css(subpath):
+            #if '..' in subpath:
+            #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'css', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/img/<path:subpath>')
         def global_img(subpath):
+            #if '..' in subpath:
+            #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'images', subpath)
 
@@ -227,7 +243,14 @@ class Server:
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/app/<path:subpath>')
         def exper_static(subpath):
+            #if '..' in subpath:
+            #    return self.not_found(), 404
             return send_from_directory(e.experclass.static_path, subpath)
+
+        @e.app.errorhandler(404)
+        def not_found(error):
+            e.log.warning(f'NOT FOUND: {request.full_path}')
+            return self.not_found(), 404
 
     def _get_ip(self):
         ip = request.headers.get('X-Real-IP', request.remote_addr)
@@ -249,6 +272,11 @@ class Server:
         e.srv.dboard.page_load_error(tback)
         return templates.render('error' + templates.html_ext, {
             'msg': 'System error. Please contact the administrator.'
+        })
+
+    def not_found(self):
+        return templates.render('error' + templates.html_ext, {
+            'msg': '404 Not Found.'
         })
 
     def load_bundle(self, path, tool_mode=False, is_reloading=False):

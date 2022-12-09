@@ -455,7 +455,7 @@
                  const resp = await this.uploader.upload();
                  if (!resp.ok) {
                      await this.msgDlg.show(
-                                     `Error uploading bundle: ${resp.err}`);
+                         `Error uploading bundle: ${resp.err}`);
                  }
              });
              this.loadBtn.addEventListener('click', async () => {
@@ -519,11 +519,10 @@
                      'Delete ID Mapping', 'Delete', false, true);
                  if (ok &&
                      await this.confirmDlg.show(
-                                     `Really delete ID mapping for run
+                         `Really delete ID mapping for run
                          ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
-                     await this.api(
-                         'delete_id_mappißngs', this.runsDlg.run);
+                     await this.api('delete_id_mapping', this.runsDlg.run);
                  }
                  this.deleteIdBtn.disabled = false;
              });
@@ -548,8 +547,8 @@
              this.completed = this.vars['exp_completed_profiles'];
              this.updateRunInfo();
              console.log(
-                         `initializing; bundle: ${this.vars['exp_app_name']};` +
-                         ` run: ${this.run}`);
+                 `initializing; bundle: ${this.vars['exp_app_name']};` +
+                 ` run: ${this.run}`);
          }
 
          async _onSocketDisconnected() {
@@ -571,7 +570,7 @@
                      await this.tracebackDlg.show(err);
                  }
                  throw new APIError(
-                         `Error in API call '${params[0]}': ${err}`);
+                     `Error in API call '${params[0]}': ${err}`);
              } else {
                  return val;
              }
@@ -583,8 +582,8 @@
          _onBundleUpdate() {
              if (this.bundle) {
                  elt('bundle-name').textContent =
-                         `${this.bundle}
-                         (${this.vars['exp_total_profiles']} profiles)`;
+                     `${this.bundle}
+                      (${this.vars['exp_total_profiles']} profiles)`;
                  this.newRunBtn.disabled = false;
                  this.reloadBtn.disabled = false;
                  this.profilesBtn.disabled = false;
@@ -612,18 +611,17 @@
                      if (this.run) {
                          await this.stopRun();
                      }
-                     const {vars, err} = await this.api(
+                     const {vars, tback} = await this.api(
                          'load_bundle', this.bundlesDlg.bundle,
                          this.bundlesDlg.toolMode);
-                     if (!err) {
+                     if (tback) {
+                         await this.tracebackDlg.show(tback);
+                         if (this.bundle) {
+                             this.instList.addSeparator('unload', this.bundle);
+                         }
+                     } else {
                          this.instList.addSeparator(
                              'load', this.bundlesDlg.bundle);
-                     } else {
-                         await this.tracebackDlg.show(err);
-                         if (this.bundle) {
-                             this.instList.addSeparator(
-                                 'unload', this.bundle);
-                         }
                      }
                      this.vars = vars;
                      this.bundle = vars['exp_app_name'];

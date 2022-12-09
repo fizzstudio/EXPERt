@@ -49,6 +49,11 @@ class Event:
         return d
 
 
+class APIBadArgumentError(Exception):
+    def __init__(self, cmd, value):
+        super().__init__(f'{cmd}: bad argument value \'{value}\'')
+
+
 class API:
 
     def __init__(self, dboard):
@@ -64,8 +69,7 @@ class API:
         }
 
     def get_bundles(self):
-        bundles_path = e.expert_path / 'bundles'
-        return sorted(bundle.name for bundle in bundles_path.iterdir()
+        return sorted(bundle.name for bundle in e.srv.bundles_path.iterdir()
                       if bundle.is_dir() and bundle.stem[0] != '.')
 
     def get_runs(self):
@@ -116,25 +120,30 @@ class API:
     #         app.logger.info(f'deleting results for run {run}')
     #         shutil.rmtree(experclass.runs_path / run)
 
-    def delete_id_mappings(self, runs):
-        for run in runs:
-            e.log.info(f'deleting id mapping for run {run}')
-            shutil.rmtree(e.experclass.runs_path / run / 'id-mapping')
+    def delete_id_mapping(self, run):
+        if '..' in run:
+            e.log.error(f'attempt to delete run \'{run}\'')
+            raise APIBadArgumentError('delete_id_mapping', run)
+        e.log.info(f'deleting id mapping for run \'{run}\'')
+        shutil.rmtree(e.experclass.runs_path / run / 'id-mapping')
 
     def terminate_inst(self, sid):
         pass
 
     def load_bundle(self, name, tool_mode):
+        if '..' in name:
+            e.log.error(f'attempt to load bundle \'{name}\'')
+            raise APIBadArgumentError('load_bundle', name)
         e.log.info(f'loading in tool mode: {tool_mode}')
-        path = e.expert_path / 'bundles' / name
+        path = e.srv.bundles_path / name
         #importlib.invalidate_caches()
         try:
             e.srv.load_bundle(path, tool_mode=tool_mode)
         except:
-            err = traceback.format_exc()
-            e.log.error(f'error loading bundle \'{name}\': {err}')
+            tback = traceback.format_exc()
+            e.log.error(f'error loading bundle \'{name}\': {tback}')
             return {
-                'err': err,
+                'tback': tback,
                 'vars': self._dboard.all_vars()
             }
         self._dboard._events.append(Event('bundle_load', name))
@@ -252,6 +261,8 @@ class Dashboard(view.View):
 
         @e.app.route(f'{self._js_path}/<path:subpath>')
         def dashboard_js(subpath):
+            #if '..' in subpath:
+            #    return e.srv.not_found(), 404
             body = self.render(f'js/{subpath}.jinja')
             resp = make_response(body)
             resp.cache_control.no_store = True
@@ -260,6 +271,8 @@ class Dashboard(view.View):
 
         @e.app.route(f'{self._path}/download/<path:subpath>/results')
         def dashboard_dl_results(subpath):
+            #if '..' in subpath:
+            #    return e.srv.not_found(), 404
             dl_name = f'exp_{e.bundle_name}_{subpath}_results.zip'
             e.log.info(f'download request for {dl_name}')
             self._zip_results(subpath, dl_name)
@@ -267,6 +280,8 @@ class Dashboard(view.View):
 
         @e.app.route(f'{self._path}/download/<path:subpath>/id_mapping')
         def dashboard_dl_id_map(subpath):
+            #if '..' in subpath:
+            #    return e.srv.not_found(), 404
             dl_name = f'exp_{e.bundle_name}_{subpath}_id_map.zip'
             e.log.info(f'download request for {dl_name}')
             self._zip_id_mapping(subpath, dl_name)
