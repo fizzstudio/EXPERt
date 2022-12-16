@@ -86,5 +86,12 @@
                 </button>
             </div>
         </div>
+        {% if exp_no_return_task is not defined  %}
+            <div id="exp-return-wrapper">
+                <button type="button" id="exp-return-btn">
+                    Withdraw Participation
+                </button>
+            </div>
+        {% endif %}
     </div>
 {% endblock %}

@@ -2,10 +2,9 @@
 from typing import ClassVar, Type
 
 import expert as e
-from . import experiment
+from .experiment import BaseExper, API
 
-
-class ToolAPI(experiment.API):
+class ToolAPI(API):
 
     def prev_page(self, resp):
         if self._inst.task.prev_task:
@@ -21,9 +20,9 @@ class ToolAPI(experiment.API):
         return self._inst.all_vars()
 
 
-class Tool(experiment.BaseExper):
+class Tool(BaseExper):
 
-    api_class: ClassVar[Type[experiment.API]] = ToolAPI
+    api_class: ClassVar[Type[API]] = ToolAPI
 
     # def __init__(self, *args, **kwargs):
     #     super().__init__(*args, **kwargs)

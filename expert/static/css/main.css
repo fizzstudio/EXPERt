@@ -110,6 +110,16 @@ body {
   width: 4rem;
   text-align: center;
 }
+#exp-chin #exp-return-wrapper {
+  align-self: start;
+}
+#exp-chin #exp-return-wrapper #exp-return-btn {
+  font-size: 0.75rem;
+  background: lightskyblue;
+  border-radius: 1rem;
+  border: solid black 1px;
+  padding: 0 0.25rem;
+}
 
 #exp-sidebar {
   position: absolute;

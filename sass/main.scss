@@ -122,6 +122,16 @@ body {
            margin: 1rem;
            }*/
     }
+    #exp-return-wrapper {
+        align-self: start;
+        #exp-return-btn {
+            font-size: 0.75rem;
+            background: lightskyblue;
+            border-radius: 1rem;
+            border: solid black 1px;
+            padding: 0 0.25rem;
+        }
+    }
 }
 
 #exp-sidebar {

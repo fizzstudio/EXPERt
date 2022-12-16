@@ -135,6 +135,17 @@ class NoProgbarTask(Task):
         self.variables['exp_progbar_enabled'] = False
 
 
+class NoReturnTask(Task):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.variables['exp_no_return_task'] = True
+
+
+class IncompleteTask(NoProgbarTask, NoReturnTask):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class Welcome(NoProgbarTask):
     pass
 
@@ -157,17 +168,21 @@ class Soundcheck(Task):
     template = 'soundcheck'
 
 
-class Thankyou(Task):
+class Thankyou(NoReturnTask):
     template = 'thankyou'
 
 
-class TimedOut(NoProgbarTask):
+class TimedOut(IncompleteTask):
     template = 'timedout'
 
 
-class Terminated(NoProgbarTask):
+class ReturnedSurvey(IncompleteTask):
+    template = 'returned'
+
+
+class Terminated(IncompleteTask):
     template = 'terminated'
 
 
-class NonConsent(NoProgbarTask):
+class NonConsent(IncompleteTask):
     template = 'nonconsent'

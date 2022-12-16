@@ -1,0 +1,18 @@
+{% extends "task_base_layout.html.jinja" %}
+
+{% set task_script = '_incomplete' %}
+
+{% block exp_task_content %}
+    <div id="exp-task">
+        <h2>Participation Withdrawn</h2>
+        <p>
+            You have withdrawn your participation in this survey.
+        </p>
+        {% if exp_prolific_pid %}
+            <p>
+                Please return to Prolific and complete your survey return
+                as described
+                <a href="https://participant-help.prolific.co/hc/en-gb/articles/360022342094-How-do-I-withdraw-my-participation-in-a-study-">here</a>.</p>
+        {% endif %}
+    </div>
+{% endblock %}

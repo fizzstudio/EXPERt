@@ -172,7 +172,7 @@
                  this.node.append(divs[i]);
                  divs[i].classList.add(this.cellClasses[i], 'dboard-item');
              }
-             divs[0].innerHTML = this.numRows + 1;
+             divs[0].textContent = this.numRows + 1;
              divs[1].dataset.index = `${this.numRows++}`;
              return divs;
          }
@@ -189,15 +189,19 @@
              }
          }
 
-         setRow(index, fields, start=0, end=null) {
+         setRow(index, fields) { // , start=0, end=null) {
              const vals = this.cols.map(name => fields[name]);
              // NB: if end is set, it must be non-negative
-             if (end === null) {
-                 end = this.numCols - 1;
-             }
+             //if (end === null) {
+             //    end = this.numCols - 1;
+             //}
              const divs = this.getRow(index);
-             for (let i=start; i<end; i++) {
-                 divs[i].innerHTML = vals[i - start];
+             //for (let i=start; i<end; i++) {
+             //    divs[i].innerHTML = vals[i - start];
+             //}
+             for (const [k, v] of Object.entries(fields)) {
+                 const i = this.cols.indexOf(k);
+                 divs[i].textContent = v;
              }
          }
 
@@ -421,9 +425,15 @@
              this._socket.on('new_instance',
                              inst => this.instList.addInst(inst));
              this._socket.on('update_instance', (index, inst) => {
+                 //console.log('got update_instance', index, inst);
                  this.instList.setRow(index, inst);
                  if (inst.state === 'COMPLETE') {
                      this.completed++;
+                 }
+             });
+             this._socket.on('update_active_instances', insts => {
+                 for (const [index, inst] of insts) {
+                     this.instList.setRow(index, inst);
                  }
              });
              this._socket.on('run_complete', () => {
@@ -606,7 +616,7 @@
                  'Load Bundle', 'Load');
              if (ok) {
                  if (this.bundlesDlg.bundle === this.bundle) {
-                     await this.reloadBundle();
+                     await this.reloadBundle(this.bundlesDlg.toolMode);
                  } else {
                      if (this.run) {
                          await this.stopRun();
@@ -656,7 +666,7 @@
              this.updateRunInfo();
          }
 
-         async reloadBundle() {
+         async reloadBundle(toolMode = false) {
              if (await this.confirmDlg.show(
                  `Really reload '${this.bundle}'? Any current run will end.`,
                  'Cancel', 'Reload')) {
@@ -664,7 +674,7 @@
                      // NB: this adds a stop separator, not a reload separator
                      await this.stopRun();
                  }
-                 const {vars, err} = await this.api('reload_bundle');
+                 const {vars, err} = await this.api('reload_bundle', toolMode);
                  if (!err) {
                      this.instList.addSeparator('reload', this.bundle);
                  } else {

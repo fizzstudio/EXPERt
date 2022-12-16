@@ -200,5 +200,53 @@ The answer, of course, is that 'instances' is an attribute of BaseExper, not the
 ** TODO Reloading a bundle is not always a useful operation
 It only is if the bundle can be modified without being re-uploaded. So it's really basically a debug tool.
 ** DONE CREATE THE BUNDLES DIR
-** TODO Security
+** DONE Security
 The flask-socketio server (or flask itself) seems to remove '..' from incoming request paths, so E doesn't need to. Still necessary for API calls, though.
+** TODO Large uploads redux
+CM2 rollup was leaving old versions of output files in the static/js directory. They'd piled up to about 35 MB, which PL's server barfed on when I tried to upload. Getting rid of the old files reduced the size to under 500K, which was no problem. Something to be aware of, though, bc experiments with large media files could prove problematic.
+** TODO Download event log
+Might be handy to be able to download the event log directly from the dashboard.
+** TODO Better logging
+Maybe a better format that clearly lists the event first.
+Also, when someone timed out, log what task they were on.
+** TODO Ppt arrival
+Just because you accept the task on Prolific doesn't mean you get assigned an E profile right away. In fact, that doesn't happen until permission is given. Is it possible for a ppt to be unable to receive a profile?
+
+Prolific says:
+  Data collection for your study will continue until it has reached this maximum number of complete submissions. You can only ever have this number of submissions active, awaiting review or approved at any one time, but returned, timed out, and rejected submissions are excluded from this total.
+
+- Does a ppt become "active" as soon as they sign up to take part? It does sound like it.
+- Okay, apparently ppts do have a 'Reserved' status when they've signed up but not started, which is distinct from 'Active' status. Do 'Reserved' ppts count as part of the total?
+** TODO Don't update dboard dom for items that haven't changed
+It clears mouse selection (which may happen if anything gets changed, not sure).
+** DONE Tools don't use ToolAPI (just API), apparently
+Well, it didn't work when I loaded CM-R in tool mode after CM2 in tool mode, but when I then repeated the process, it worked...
+Okay, on restarting E and loading CM-R clean, same problem.
+Ah, tool mode gets enabled *after* the bundle has been loaded, and the experclass created. e.Experiment doesn't get set to tool.Tool until tool mode gets enabled. So the experclass doesn't inherit from it.
+** DONE Crazy dboard task numbers
+Watching an active task on the dashboard, and the task number is jumping around, not increasing in order. It may be that what's happening is that only the very last row is getting updated as ppts advance, so hopefully this is just a dashboard issue.
+UPDATE: Weakrefs broke things. Static typing would've caught this...
+** TODO The usual 'pop from empty list'
+Traceback (most recent call last):
+  File "/var/www/fizz.studio/survey/EXPERt/expert/experiment.py", line 182, in sio_call
+    val = f(*args)
+  File "/var/www/fizz.studio/survey/EXPERt/expert/experiment.py", line 92, in next_page
+    self._inst._next_task(resp)
+  File "/var/www/fizz.studio/survey/EXPERt/expert/exper.py", line 154, in _next_task
+    self.task = self.task.next_task(resp)
+  File "/var/www/fizz.studio/survey/EXPERt/expert/tasks.py", line 152, in next_task
+    self.inst.assign_profile()
+  File "/var/www/fizz.studio/survey/EXPERt/expert/experiment.py", line 476, in assign_profile
+    self.profile = self.profiles.pop(0)
+IndexError: pop from empty list
+Reported by PID 607eafaf008af56a5a3ba462.
+** DONE A Prolific ppt returning a study does NOT immediately free the profile
+It has to time out first. This allows other people to show up with potentially no profiles available!
+I'm going to add a small button, visible on every task screen, that will allow ppts to immediately return their survey and end their participation. This only affects the E side of things; they still have to formally do a return on the Prolific side.
+** DONE Dashboard number completed is insane garbage
+Currently reads 16312 for a study with 25 ppts!
+I think this was due to continuing to update the dashboard even for non-active insts, and incrementing the completed counter on every message.
+** DONE Even downloading results is broken
+Apparently, I'd renamed the 'tstamp' field to 'time', but neglected to change it when collecting responses to download.
+** DONE Coalesce dashboard inst update events
+** TODO Recent bundle(s) button/menu on dashboard

@@ -9,7 +9,7 @@ import traceback
 import weakref
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional, Union
 
 from flask import send_file, request, make_response
 
@@ -31,7 +31,7 @@ class Event:
     tag: str
     data: Any
 
-    def __init__(self, tag, data=None, ts=None):
+    def __init__(self, tag: str, data: Any = None, ts: Optional[float] = None):
         self.tag = tag
         self.data = data
         self.time = ts or time.monotonic()
@@ -39,24 +39,27 @@ class Event:
     def to_client(self):
         d = {'tag': self.tag}
         if self.tag == 'inst':
-        #if isinstance(self.data, experiment.BaseExper):
-            d['data'] = self.data().status() if self.data() else {
-                'sid': '---', 'ip': '---', 'profile': '---', 'state': '---',
-                'task': '---', 'time': '---', 'elapsed': '---'
-            }
+            d['data'] = e.srv.dboard.inst_full_status(self.data()) \
+                if self.data() else {
+                        'sid': '---', 'ip': '---',
+                        'profile': '---', 'state': '---',
+                        'task': '---', 'time': '---', 'elapsed': '---'
+                }
         else:
             d['data'] = self.data
         return d
 
 
 class APIBadArgumentError(Exception):
-    def __init__(self, cmd, value):
+    def __init__(self, cmd: str, value: Any):
         super().__init__(f'{cmd}: bad argument value \'{value}\'')
 
 
 class API:
 
-    def __init__(self, dboard):
+    _dboard: 'Dashboard'
+
+    def __init__(self, dboard: 'Dashboard'):
         self._dboard = dboard
 
     def dboard_init(self):
@@ -68,7 +71,7 @@ class API:
             'run_info': self._dboard._run_info()
         }
 
-    def get_bundles(self):
+    def get_bundles(self) -> list[str]:
         return sorted(bundle.name for bundle in e.srv.bundles_path.iterdir()
                       if bundle.is_dir() and bundle.stem[0] != '.')
 
@@ -150,11 +153,12 @@ class API:
         self._dboard.update_vars()
         return {'vars': self._dboard.all_vars()}
 
-    def reload_bundle(self):
+    def reload_bundle(self, tool_mode):
         e.log.info('*** reloading bundle ***')
+        e.log.info(f'reloading in tool mode: {tool_mode}')
         try:
             e.srv.load_bundle(
-                e.experclass.dir_path, e.tool_mode, is_reloading=True)
+                e.experclass.dir_path, tool_mode, is_reloading=True)
         except:
             return {
                 'err': traceback.format_exc(),
@@ -401,25 +405,46 @@ class Dashboard(view.View):
             e.experclass.dls_path / dl_name,
             as_attachment=True, download_name=dl_name)
 
+    def _inst_index(self, inst):
+        i = None
+        num_other = 0
+        for i, ev in enumerate(self._events):
+            if ev.tag != 'inst':
+                num_other += 1
+            # NB: deref weakref
+            elif ev.data() == inst:
+                return i - num_other
+
+    def inst_full_status(self, inst):
+        status = inst.status()
+        y, mo, d, h, mi, s = inst.start_timestamp.split('.')
+        status.update({
+            'sid': inst.sid, 'ip': inst.clientip,
+            'time': f'{mo}/{d}/{y} {h}:{mi}:{s}',
+            'state': inst.state.name
+        })
+        return status
+
     def inst_created(self, inst):
         self._events.append(Event('inst', weakref.ref(inst), inst.start_time))
-        e.srv.socketio.emit('new_instance', inst.status(),
+        e.srv.socketio.emit('new_instance', self.inst_full_status(inst),
                             namespace=f'/{self.code}')
 
     def inst_updated(self, inst):
-        i = None
-        num_other = 0
-        for i in range(len(self._events)):
-            ev = self._events[i]
-            if ev.tag != 'inst':
-                num_other += 1
-            elif ev.data == inst:
-                break
+        i = self._inst_index(inst)
+        status = inst.status()
+        status['state'] = inst.state.name
         if inst.state == experiment.State.COMPLETE:
             self.variables['exp_completed_profiles'] += 1
         # NB: tuple for multiple args
-        e.srv.socketio.emit('update_instance', (i - num_other, inst.status()),
-                            namespace=f'/{self.code}')
+        e.srv.socketio.emit(
+            'update_instance', (i, status), namespace=f'/{self.code}')
+
+    def monitor_updated(self, insts):
+        e.srv.socketio.emit(
+            'update_active_instances',
+            [[self._inst_index(inst), inst.status()] for inst in insts],
+            namespace=f'/{self.code}')
 
     def run_complete(self, run):
         self._events.append(Event('run_complete', run))

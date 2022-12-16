@@ -32,12 +32,14 @@ class State(Enum):
     TIMED_OUT = 2
     COMPLETE = 3
     TERMINATED = 4
+    RETURNED = 5
 
 
 resp_file_suffixes = {
     # NB: CONSENT_DECLINED insts never have their results saved
     State.TIMED_OUT: '-timeout',
-    State.TERMINATED: '-terminated'
+    State.TERMINATED: '-terminated',
+    State.RETURNED: '-returned'
 }
 
 
@@ -56,7 +58,7 @@ class TaskResponse:
         self.sid = sid
         self.cond = cond
         # reserved for output files
-        for reserved in ['tstamp', 'task', 'resp']:
+        for reserved in ['time', 'task', 'resp']:
             assert reserved not in extra
         self.extra = extra
 
@@ -382,18 +384,18 @@ class BaseExper:
                                 row[2], row[1], row[0], sid, cond.name,
                                 **dict(zip(headers[3:], row[3:]))))
                 elif cls.cfg['output_format'] == 'json':
-                    # 'tstamp', 'task', 'resp', + extra fields
+                    # 'time', 'task', 'resp', + extra fields
                     with open(respath) as f:
                         items = json.load(f)
                     sid = items[0]['resp']
                     by_cond[cond.name][sid] = []
                     for item in items:
                         extras = item.copy()
-                        extras.pop('tstamp')
+                        extras.pop('time')
                         extras.pop('task')
                         extras.pop('resp', None)
                         by_cond[cond.name][sid].append(TaskResponse(
-                            item.get('resp'), item['task'], item['tstamp'],
+                            item.get('resp'), item['task'], item['time'],
                             sid, cond.name, **extras))
                 else:
                     # XXX would probably be better to sanity-check this
@@ -462,13 +464,9 @@ class BaseExper:
             return []
 
     def status(self):
-        y, mo, d, h, mi, s = self.start_timestamp.split('.')
         return {
-            'sid': self.sid, 'ip': self.clientip,
             'profile': str(self.profile) if self.profile else 'unassigned',
-            'state': self.state.name, 'task': self.task_cursor,
-            #self.start_timestamp[11:].replace('.', ':'),
-            'time': f'{mo}/{d}/{y} {h}:{mi}:{s}',
+            'task': self.task_cursor,
             'elapsed': f'{self._elapsed_time()/60:.1f}'
         }
 

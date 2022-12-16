@@ -2,13 +2,13 @@
 import hashlib
 import time
 
-from typing import cast, ClassVar, Optional
+from typing import cast, ClassVar, Optional, Type
 
 from flask import request
 
 import expert as e
-from .experiment import BaseExper, State, TaskResponse, Record
-from . import tasks, timestamp
+from .experiment import State, TaskResponse, API, BaseExper
+from . import tasks
 
 
 def _monitor():
@@ -16,17 +16,26 @@ def _monitor():
     while True:
         e.srv.socketio.sleep(e.srv.cfg['monitor_check_interval'])
         if e.experclass:
-            for inst in e.experclass.instances.values():
-                #inst = cast(Exper, inst)
+            insts = []
+            for inst in e.experclass.all_active():
                 if not (isinstance(inst, Exper) and inst.check_for_timeout()):
-                    # Exper.end() sends the update if the inst has timed out
-                    e.srv.dboard.inst_updated(inst)
+                    insts.append(inst)
+            # Exper.end() sends separate updates if any inst has timed out
+            e.srv.dboard.monitor_updated(insts)
         else:
             e.log.info('monitor task shutting down')
             break
 
 
+class ExperAPI(API):
+
+    def return_survey(self):
+        self._inst.return_survey()
+
+
 class Exper(BaseExper):
+
+    api_class: ClassVar[Type[API]] = ExperAPI
 
     # Will be True when all profiles have completed the experiment.
     complete: ClassVar[bool] = False
@@ -54,6 +63,7 @@ class Exper(BaseExper):
                 TaskResponse(self.prolific_pid, 'PROLIFIC_PID'))
 
         if self.prolific_pid:
+            self.variables['exp_prolific_pid'] = self.prolific_pid
             self.variables['exp_prolific_completion_url'] = \
                 self.cfg['prolific_completion_url']
 
@@ -145,6 +155,13 @@ class Exper(BaseExper):
                 self.profiles.insert(0, self.profile)
             return True
         return False
+
+    def return_survey(self):
+        e.log.info(f'sid {self.sid[:4]} returned their survey')
+        self.task = tasks.ReturnedSurvey(self)
+        self.end(State.RETURNED)
+        if self.profile:
+            self.profiles.insert(0, self.profile)
 
     def _next_task(self, resp):
         self._store_resp(resp)

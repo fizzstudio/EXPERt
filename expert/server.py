@@ -291,9 +291,10 @@ class Server:
         e.bundle_mods = self._bundle_mods(bundle_path)
 
         try:
+            # NB: Tool Mode must get enabled before loading the bundle source
+            self.enable_tool_mode(tool_mode or bundle_cfg['tool_mode'])
             e.experclass = self._load_bundle_src(bundle_path, is_reloading)
             e.log.info(f'bundle modules: {" ".join(sorted(e.bundle_mods))}')
-            self.enable_tool_mode(tool_mode or bundle_cfg['tool_mode'])
             e.experclass.cfg = bundle_cfg
             e.experclass.init(bundle_path, is_reloading)
         except:
