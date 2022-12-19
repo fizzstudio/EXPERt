@@ -7,6 +7,7 @@ from typing import Type, Optional, Union
 from . import server, exper, tool
 
 
+ver: str = ''
 srv: server.Server
 app: server.App
 log: logging.Logger

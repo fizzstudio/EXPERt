@@ -134,6 +134,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tomli"
+version = "2.0.1"
+requires_python = ">=3.7"
+summary = "A lil' TOML parser"
+
+[[package]]
 name = "werkzeug"
 version = "2.0.3"
 requires_python = ">=3.7"
@@ -146,8 +152,8 @@ requires_python = ">=3.7"
 summary = "Backport of pathlib-compatible object wrapper for zip files"
 
 [metadata]
-lock_version = "4.0"
-content_hash = "sha256:30cbb7a5b635d3e2d25ed31be86acc6ee803dee6d823a957a12af95719ebec57"
+lock_version = "4.1"
+content_hash = "sha256:434e5f9f3f3ccfa3002b083b2a2e70a30cb23cde6b5fc48f2f3f0d28d87b1726"
 
 [metadata.files]
 "bidict 0.21.4" = [
@@ -307,6 +313,10 @@ content_hash = "sha256:30cbb7a5b635d3e2d25ed31be86acc6ee803dee6d823a957a12af9571
 ]
 "strictyaml 1.6.2" = [
     {url = "https://files.pythonhosted.org/packages/7c/86/c9b04acef55685b3abf5d4db3a348ab1409734fdd8650c98fc63ca6a6c0a/strictyaml-1.6.2.tar.gz", hash = "sha256:70cd55980fe2929dc038924ca08f68f96148223a8777810fa616e3478ebe71ca"},
+]
+"tomli 2.0.1" = [
+    {url = "https://files.pythonhosted.org/packages/97/75/10a9ebee3fd790d20926a90a2547f0bf78f371b2f13aa822c759680ca7b9/tomli-2.0.1-py3-none-any.whl", hash = "sha256:939de3e7a6161af0c887ef91b7d41a53e7c5a1ca976325f429cb46ea9bc30ecc"},
+    {url = "https://files.pythonhosted.org/packages/c0/3f/d7af728f075fb08564c5949a9c95e44352e23dee646869fa104a3b2060a3/tomli-2.0.1.tar.gz", hash = "sha256:de526c12914f0c550d15924c62d72abc48d6fe7364aa87328337a31007fe8a4f"},
 ]
 "werkzeug 2.0.3" = [
     {url = "https://files.pythonhosted.org/packages/6c/a8/60514fade2318e277453c9588545d0c335ea3ea6440ce5cdabfca7f73117/Werkzeug-2.0.3.tar.gz", hash = "sha256:b863f8ff057c522164b6067c9e28b041161b4be5ba4d0daceeaa50a163822d3c"},

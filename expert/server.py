@@ -9,9 +9,10 @@ import datetime
 import traceback
 import gc
 
-
 from typing import Type, Any, Optional
 from pathlib import Path
+
+import tomli
 
 from flask import (
     Flask, session, make_response,
@@ -60,14 +61,20 @@ class Server:
 
         e.app = App(__name__)
         e.log = e.app.logger
+        e.log.setLevel(logging.INFO)
+        e.log.info('=== starting EXPERt server ===')
+
+        with open(e.expert_path / 'pyproject.toml', 'rb') as f:
+            pyproj = tomli.load(f)
+        e.ver = pyproj['project']['version']
+
+        e.log.info(f'EXPERt version: {e.ver}')
+        e.log.info(f'root path: {e.app.root_path}')
         # sessions aren't enabled until this is set
         # NB: opening the dashboard or displaying a task view
         # doesn't make use of the session
         e.app.secret_key = b'\xe4\xfb\xfd\xff\x80uZL]\xe8B\xcb\x1c\xb3)g'
         e.app.templates_auto_reload = True
-
-        e.log.setLevel(logging.INFO)
-        e.log.info(f'root path: {e.app.root_path}')
 
         self.cfg = self._load_config(args.config)
 

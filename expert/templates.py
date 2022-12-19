@@ -40,6 +40,7 @@ def set_server_variables(srv):
     # to avoid clashing with vars defined by experiments.
     pfx = srv.cfg['url_prefix']
     variables = {
+        'exp_version': e.ver,
         'exp_url_prefix': pfx
     }
     variables['exp_audio'] = f'/{pfx}/audio'

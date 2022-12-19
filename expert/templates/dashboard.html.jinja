@@ -455,6 +455,10 @@
              this.uploadingOverlay = await new Overlay(
                  this, 'upload-ovl').init();
              this.uploadingOverlay.contentNode.textContent = 'Uploading...';
+             this.errorOverlay = await new Overlay(
+                 this, 'error-ovl').init();
+             this.errorOverlay.contentNode.textContent =
+                 'Client-server version mismatch; hit reload';
              this.bundlesDlg = await new BundlesDialog(this).init();
              this.runsDlg = await new RunsDialog(this).init();
              this.confirmDlg = await new ConfirmDialog(this).init();
@@ -548,6 +552,10 @@
                  await this._initViews();
              }
              const data = await this.api('dboard_init');
+             if (this.vars &&
+                 this.vars['exp_version'] !== data.vars['exp_version']) {
+                 await this.errorOverlay.show();
+             }
              this.vars = data.vars;
              this.bundle = this.vars['exp_app_name'];
              this._onBundleUpdate();
@@ -760,7 +768,9 @@
 {% block exp_page_content %}
     <div id="dboard">
 
-        <h2>EXPERt Dashboard <span id="conn-status">NOT CONNECTED</span></h2>
+        <h2>EXPERt Dashboard [{{exp_version}}]
+            <span id="conn-status">NOT CONNECTED</span>
+        </h2>
         <div id="status">
             <span class="status-key">Bundle:</span>
             <span id="bundle-name">&lt;None&gt;</span>
