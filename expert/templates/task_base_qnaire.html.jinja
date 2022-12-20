@@ -28,7 +28,7 @@
 
         <div id="exp-qnaire-items">
             {% for q in exp_qnaire_questions %}
-                <div class="qnaire-item"
+                <div class="exp-qnaire-item"
                      id="exp-qnaire-item{{ loop.index }}"
                      data-type="{{ q[0] }}"
                      data-optional="{{ q[-1] == ':opt' }}">
@@ -45,7 +45,8 @@
                         {% if q[0] in ('radio', 'checkbox') %}
                             {{ quest_opts(loop.index, q[0], q[2:]) }}
                         {% elif q[0] == 'shorttext' %}
-                            <input type="text">
+                            <input type="text"
+                                   data-validate="{{ q[2]|e }}">
                         {% elif q[0] == 'text' %}
                             <textarea rows="5" cols="30"></textarea>
                         {% endif %}

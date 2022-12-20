@@ -163,7 +163,7 @@ class Exper(BaseExper):
         if self.profile:
             self.profiles.insert(0, self.profile)
 
-    def _next_task(self, resp):
+    def next_task(self, resp):
         self._store_resp(resp)
         e.log.info(
             f'sid {self.sid[:4]} completed "{self.task.template_name}"' +

@@ -64,7 +64,7 @@ class Tool(BaseExper):
     def prev_task(self, resp):
         self._nav(resp, self.task.prev_task)
 
-    def _next_task(self, resp):
+    def next_task(self, resp):
         self._nav(resp, self.task.next_task(resp))
 
     def go_to(self, task_label, resp):

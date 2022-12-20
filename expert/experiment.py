@@ -91,7 +91,7 @@ class API:
             # to hit 'Next' on the final task screen,
             # which shouldn't be possible ...
             #self.handle_response(resp)
-            self._inst._next_task(resp)
+            self._inst.next_task(resp)
         return self._inst.all_vars()
 
     def get_feedback(self, resp):
@@ -484,7 +484,7 @@ class BaseExper:
         self.variables['exp_num_tasks'] = self.num_tasks_created
         self._update_vars()
 
-    def _next_task(self, resp):
+    def next_task(self, resp):
         pass
 
     def present(self, tplt_vars={}):

@@ -6,14 +6,15 @@ class QnaireTask extends Task {
     constructor() {
         super();
 
-        // indicates whether mandatory items have been set or not
-        this.mandatories = new Map();
+        // Whether mandatory or to-be-validated answers are in fact
+        // provided or valid
+        this.ansValid = new Map();
 
         for (const item of this.content.querySelectorAll('.exp-qnaire-item')) {
             //if (item.dataset['optional'] === 'False') {
             const mandatory = item.dataset['optional'] === 'False';
             if (mandatory) {
-                this.mandatories.set(item.id, false);
+                this.ansValid.set(item.id, false);
             }
             // set handlers to enable/disable the next button
             if (item.dataset['type'] === 'radio') {
@@ -24,13 +25,13 @@ class QnaireTask extends Task {
                        restore values on page reload
                      */
                     if (mandatory && input.checked) {
-                        this.mandatories.set(item.id, true);
+                        this.ansValid.set(item.id, true);
                     }
                     input.addEventListener('click', () => {
                         if (mandatory) {
-                            this.mandatories.set(item.id, true);
+                            this.ansValid.set(item.id, true);
                         }
-                        this.checkMandatories();
+                        this.checkAnsValid();
                     });
                 }
             } else if (item.dataset['type'] === 'checkbox') {
@@ -42,16 +43,16 @@ class QnaireTask extends Task {
                 for (const opt of item.querySelectorAll('.exp-qnaire-opt')) {
                     const input = opt.querySelector('input');
                     if (mandatory && input.checked) {
-                        this.mandatories.set(item.id, true);
+                        this.ansValid.set(item.id, true);
                         numChecked += 1;
                     }
                     input.addEventListener('click', () => {
                         if (mandatory) {
                             numChecked += input.checked ? 1 : -1;
-                            this.mandatories.set(item.id,
-                                                 numChecked ? true : false);
+                            this.ansValid.set(item.id,
+                                              numChecked ? true : false);
                         }
-                        this.checkMandatories();
+                        this.checkAnsValid();
                     });
                 }
             } else if (['text', 'shorttext'].includes(item.dataset['type'])) {
@@ -59,14 +60,16 @@ class QnaireTask extends Task {
                     text: 'textarea',
                     shorttext: 'input'})[item.dataset['type']];
                 const input = item.querySelector(elem);
-                if (mandatory) {
-                    this.mandatories.set(item.id, Boolean(input.value));
-                }
+                const validator = input.dataset['validate'];
+                const validatorRegex = validator ? new RegExp(validator) : null;
+                this.ansValid.set(
+                    item.id, this._validateText(
+                        input.value.trim(), validatorRegex, mandatory));
                 input.addEventListener('input', () => {
-                    if (mandatory) {
-                        this.mandatories.set(item.id, Boolean(input.value));
-                    }
-                    this.checkMandatories();
+                    this.ansValid.set(
+                        item.id, this._validateText(
+                            input.value.trim(), validatorRegex, mandatory));
+                    this.checkAnsValid();
                 });
             } else {
                 console.log('unknown question type: ' +
@@ -76,16 +79,27 @@ class QnaireTask extends Task {
         }
         // browser might restore all mandatory values,
         // making it necessary to enable the Next button
-        this.checkMandatories();
+        this.checkAnsValid();
+    }
+
+    _validateText(value, re, mand) {
+        let valid = true;
+        if (mand) {
+            valid = Boolean(value);
+        }
+        if (re) {
+            valid &= re.test(value);
+        }
+        return valid;
     }
 
     defaultResponse() {
         return this.collectAnswers();
     }
 
-    checkMandatories() {
+    checkAnsValid() {
         // NB: .every() is true for an empty array
-        if (Array.from(this.mandatories.values()).every(val => val)) {
+        if (Array.from(this.ansValid.values()).every(val => val)) {
             const answers = this.collectAnswers();
             this.setResponse(answers);
             this.enableNext();

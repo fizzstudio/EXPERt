@@ -250,3 +250,18 @@ I think this was due to continuing to update the dashboard even for non-active i
 Apparently, I'd renamed the 'tstamp' field to 'time', but neglected to change it when collecting responses to download.
 ** DONE Coalesce dashboard inst update events
 ** TODO Recent bundle(s) button/menu on dashboard
+
+* Deployment checklist
+EXPERt
+- Have all tasks (even built-ins) been tested using the very latest code base?
+- Has testing been performed with multiple simultaneous users?
+- Has the server been updated with the latest version?
+Bundle
+- Is all expected response data present in the output files?
+- Have the profiles been rebuilt if necessary?
+- Are any timeouts set appropriately?
+- Does the 'Return to Prolific' button show up?
+- Has the Prolific URL been updated?
+- Have all necessary 'build' commands been run?
+- Is the bundle source configured to run all desired tasks?
+- Has the latest source been uploaded?
