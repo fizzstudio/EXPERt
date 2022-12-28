@@ -305,6 +305,9 @@ class BaseExper:
             run_cond_path = cls.record.run_path / condname
             for prof_path in cond_path.iterdir():
                 profname = prof_path.name
+                if cls.cfg.get('enabled_profiles') and \
+                   profname not in cls.cfg['enabled_profiles']:
+                    continue
                 if profname.startswith('.') or not prof_path.is_file():
                     continue
                 if cls.replicate and \
@@ -321,6 +324,7 @@ class BaseExper:
         # the actual list of profiles will shrink
         # as the experiment progresses
         cls.num_profiles = len(cls.profiles)
+        e.log.info(f'num_profiles: {cls.num_profiles}')
 
     @classmethod
     def make_profiles(cls):

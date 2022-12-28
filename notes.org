@@ -284,6 +284,23 @@ CM2:
   Hypothesis: they timed out on the permission screen, maybe hit next, and were assigned a profile at that point because they didn't decline consent. UPDATE: Looks like. tasks.Consent.next_task() doesn't check whether the inst has timed out, just whether consent was given.
 
   Weirdly, even though the dashboard originally listed 7 timeouts, 6 of which had received profiles, there are only 4 in the aggregate response file.
+
+  All profiles:
+  Blrpkx  DSZdVG  KSQpyc  NyZIUn  aMCuAU
+  CfWaYx  OyZLIA  UIYQxc  fMwAda  gYUUWn
+  JEwDmC  KUEMAv  WwEtix  uVFdwn  xlmBVQ
+  MOfAXZ  OQSyRc  OrbIUM  gGdwwQ  hUqTQt
+  ACnXjo  DJolOz  VAOIpz  VURbQh  eJAlUZ
+  Results profiles:
+          DSZdVG  KSQpyc  NyZIUn  aMCuAU
+  CfWaYx  OyZLIA  UIYQxc  fMwAda  gYUUWn
+  JEwDmC  KUEMAv  WwEtix  uVFdwn  xlmBVQ
+  MOfAXZ  OQSyRc  OrbIUM  gGdwwQ  hUqTQt
+  ACnXjo  DJolOz  VAOIpz  VURbQh  eJAlUZ
+  "UIYQxc-timeout"
+  "WwEtix-timeout"
+  "JEwDmC-timeout"
+  "OrbIUM-timeout"
 ** DONE Record profile in aggregate response file
 ** TODO Record timed-out and returned task 'results'
 The aggregate file does at least currently have ...-timeout in the profile field.
