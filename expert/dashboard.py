@@ -283,7 +283,7 @@ class Dashboard(view.View):
             return self._download(dl_name + '.zip')
 
         @e.app.route(f'{self._path}/download/profiles')
-        def dashboard_dl_profiless():
+        def dashboard_dl_profiles():
             dl_name = f'exp_{e.bundle_name}_profiles'
             e.log.info(f'download request for {dl_name}.zip')
             self._zip_profiles(dl_name)
