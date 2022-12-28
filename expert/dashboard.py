@@ -313,6 +313,7 @@ class Dashboard(view.View):
                 err = 'Unable to create bundle directory'
                 e.log.error(f'error uploading bundle \'{bundle_name}\': {err}')
                 return {'ok': False, 'err': err}
+            count = 0
             for relpath, f in request.files.items():
                 path = bundles_path / relpath
                 try:
@@ -323,6 +324,9 @@ class Dashboard(view.View):
                         f'error uploading bundle \'{bundle_name}\': {err}')
                     return {'ok': False, 'err': err}
                 f.save(path)
+                count += 1
+                #e.log.info(f'saved {relpath}')
+            e.log.info(f'received {count} files')
             importlib.invalidate_caches()
             e.log.info(f'installed bundle \'{bundle_name}\'')
             return {'ok':True, 'err': None}

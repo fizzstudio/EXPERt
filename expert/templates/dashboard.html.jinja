@@ -301,19 +301,26 @@
              for (const item of allow) {
                  const itemPath = `${bundleName}/${item}`;
                  for (const file of this.input.files) {
+                     // XXX should exclude files in __pycache__ directories,
+                     // .DS_Store, etc.
                      if (item[item.length - 1] === '/') {
                          if (file.webkitRelativePath.startsWith(
                              itemPath)) {
+                             //console.log(
+                             //'will upload', file.webkitRelativePath);
                              files.push(file);
                          }
                      } else {
                          if (file.webkitRelativePath === itemPath) {
+                             //console.log(
+                             //'will upload', file.webkitRelativePath);
                              files.push(file);
                              break;
                          }
                      }
                  }
              }
+             console.log(`will upload ${files.length} files`);
              return files;
          }
 

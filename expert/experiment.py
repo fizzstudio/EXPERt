@@ -49,16 +49,18 @@ class TaskResponse:
     timestamp: str
     sid: Optional[str]
     cond: Optional[str]
+    prof: Optional[str]
     extra: dict[str, Any]
     def __init__(self, response, task_name,
-                 ts=None, sid=None, cond=None, **extra):
+                 ts=None, sid=None, cond=None, prof=None, **extra):
         self.response = response
         self.task_name = task_name
         self.timestamp = ts or timestamp.make_timestamp()
         self.sid = sid
         self.cond = cond
+        self.prof = prof
         # reserved for output files
-        for reserved in ['time', 'task', 'resp']:
+        for reserved in ['time', 'task', 'resp', 'sid', 'cond', 'prof']:
             assert reserved not in extra
         self.extra = extra
 
@@ -380,9 +382,11 @@ class BaseExper:
                         by_cond[cond.name][sid] = []
                         # skip header row
                         for row in rows[1:]:
-                            by_cond[cond.name][sid].append(TaskResponse(
-                                row[2], row[1], row[0], sid, cond.name,
-                                **dict(zip(headers[3:], row[3:]))))
+                            by_cond[cond.name][sid].append(
+                                TaskResponse(
+                                    row[2], row[1], row[0],
+                                    sid, cond.name, respath.stem,
+                                    **dict(zip(headers[3:], row[3:]))))
                 elif cls.cfg['output_format'] == 'json':
                     # 'time', 'task', 'resp', + extra fields
                     with open(respath) as f:
@@ -394,9 +398,10 @@ class BaseExper:
                         extras.pop('time')
                         extras.pop('task')
                         extras.pop('resp', None)
-                        by_cond[cond.name][sid].append(TaskResponse(
-                            item.get('resp'), item['task'], item['time'],
-                            sid, cond.name, **extras))
+                        by_cond[cond.name][sid].append(
+                            TaskResponse(
+                                item.get('resp'), item['task'], item['time'],
+                                sid, cond.name, respath.stem, **extras))
                 else:
                     # XXX would probably be better to sanity-check this
                     # when the program loads
@@ -426,14 +431,14 @@ class BaseExper:
                         extras.add(k)
                 headers = ['time', 'task', 'resp', *extras]
                 if resps[0].sid:
-                    headers = ['sid', 'cond'] + headers
+                    headers = ['sid', 'cond', 'prof'] + headers
                 writer.writerow(headers)
                 for r in resps:
                     # NB: None is written as the empty string
                     data = [r.timestamp, r.task_name, r.response,
                             *[r.extra.get(e) for e in extras]]
                     if r.sid:
-                        data = [r.sid[:min_uniq_len], r.cond] + data
+                        data = [r.sid[:min_uniq_len], r.cond, r.prof] + data
                     writer.writerow(data)
             elif cls.cfg['output_format'] == 'json':
                 output = []
@@ -445,6 +450,7 @@ class BaseExper:
                     if r.sid:
                         item['sid'] = r.sid[:min_uniq_len]
                         item['cond'] = r.cond
+                        item['prof'] = r.prof
                     output.append(item)
                 json.dump(output, f, indent=2)
             else:

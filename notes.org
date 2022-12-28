@@ -250,6 +250,39 @@ I think this was due to continuing to update the dashboard even for non-active i
 Apparently, I'd renamed the 'tstamp' field to 'time', but neglected to change it when collecting responses to download.
 ** DONE Coalesce dashboard inst update events
 ** TODO Recent bundle(s) button/menu on dashboard
+** TODO Downloading extra files
+Bundles may well write other files of interest aside from the results. It would be nice to be able to specify and download them.
+** TODO After profiles get rebuilt
+Yes, the directory gets removed and they get recreated. But the bundle doesn't get reloaded, which means, for e.g., CM2, even though chart_data.json got recreated, it doesn't get re-read, and experclass.charts doesn't get recreated.
+** TODO Potentially missed dboard events
+Say we load the dboard and are running an experiment, then put the laptop to sleep. When the laptop is opened again, will the dboard receive any missed events? For this to happen, they'd have to get queued on the server, I suppose. Can we just ask for updates on socket reconnect? Or maybe Window.offline/online events?
+** TODO Multiple dboard instances
+For that matter, what about multiple dboard instances (i.e., in different browsers)? They'd all try to connect to the server on the same namespace. The server only has one socket instance, though.
+UPDATE: It does seem to work fine automatically.
+** TODO Client-side error handling for bundle uploads
+E.g., FileReader and XHR errors, etc.
+** TODO Have the bundles dialog say No Bundles Available if there aren't any
+** TODO Dboard number completed indicator seems broken
+Or at least, isn't updating automatically.
+** TODO Simultaneous user testing script
+Can we simulate users outside of the browser?
+** TODO Change elapsed time display to mm:ss
+** TODO Display average time taken during a run
+Could be shown somewhere on the dboard during the run, or on the divider at the end, or in a summary popup available by clicking the divider ...
+** TODO x
+Can we manually reactivate/resurrect someone who's timed out? It seems feasible...
+CM2:
+  31 instances
+  7 time-outs (only 6 assigned profiles)
+  -> 24 completions
+  Prolific only recorded 24 completions, though.
+  Prolific recorded a completion for PID 56fb (start=16:59, elapsed=22:07) that doesn't seem to correspond to anything on the dashboard. Likewise, E has SID 6b23 (start=17:02, elapsed=19.8), which doesn't quite match.
+
+  SID 9d50 (PID 5dcb, I think) timed out early on, but their task index was displayed as 53, one greater than the maximum possible.
+
+  Aha! Profile group0/Blrpkx (start=16:29) timed out on task 3, but the profile was never re-used. The profile was originally used by SID cf15. Weirdly, no record on Prolific matches this start time. At 16:45:56, the profile should've become the next available, and been assigned to whoever arrived immediately after. This doesn't appear to have happened, though.
+** DONE Record profile in aggregate response file
+
 
 * Deployment checklist
 EXPERt
@@ -258,10 +291,10 @@ EXPERt
 - Has the server been updated with the latest version?
 Bundle
 - Is all expected response data present in the output files?
-- Have the profiles been rebuilt if necessary?
 - Are any timeouts set appropriately?
 - Does the 'Return to Prolific' button show up?
 - Has the Prolific URL been updated?
 - Have all necessary 'build' commands been run?
 - Is the bundle source configured to run all desired tasks?
 - Has the latest source been uploaded?
+- Have the profiles been rebuilt if necessary?
