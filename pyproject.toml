@@ -1,6 +1,6 @@
 [project]
 name = "EXPERt"
-version = "0.8.0"
+version = "0.9.0"
 description = "Application for running browser-based scientific experiments"
 authors = [
     {name = "Josh Fennell", email = "josh@jfnl.org"},

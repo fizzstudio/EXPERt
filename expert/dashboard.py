@@ -273,23 +273,30 @@ class Dashboard(view.View):
             resp.content_type = 'application/javascript'
             return resp
 
-        @e.app.route(f'{self._path}/download/<path:subpath>/results')
+        @e.app.route(f'{self._path}/download/results/<path:subpath>')
         def dashboard_dl_results(subpath):
             #if '..' in subpath:
             #    return e.srv.not_found(), 404
-            dl_name = f'exp_{e.bundle_name}_{subpath}_results.zip'
-            e.log.info(f'download request for {dl_name}')
+            dl_name = f'exp_{e.bundle_name}_{subpath}_results'
+            e.log.info(f'download request for {dl_name}.zip')
             self._zip_results(subpath, dl_name)
-            return self._download(dl_name)
+            return self._download(dl_name + '.zip')
 
-        @e.app.route(f'{self._path}/download/<path:subpath>/id_mapping')
+        @e.app.route(f'{self._path}/download/profiles')
+        def dashboard_dl_profiless():
+            dl_name = f'exp_{e.bundle_name}_profiles'
+            e.log.info(f'download request for {dl_name}.zip')
+            self._zip_profiles(dl_name)
+            return self._download(dl_name + '.zip')
+
+        @e.app.route(f'{self._path}/download/id_mapping/<path:subpath>')
         def dashboard_dl_id_map(subpath):
             #if '..' in subpath:
             #    return e.srv.not_found(), 404
-            dl_name = f'exp_{e.bundle_name}_{subpath}_id_map.zip'
-            e.log.info(f'download request for {dl_name}')
+            dl_name = f'exp_{e.bundle_name}_{subpath}_id_map'
+            e.log.info(f'download request for {dl_name}.zip')
             self._zip_id_mapping(subpath, dl_name)
-            return self._download(dl_name)
+            return self._download(dl_name + '.zip')
 
         @e.app.route(f'{self._path}/upload_bundle', methods=['POST'])
         def dashboard_ul_bundle():
@@ -377,7 +384,7 @@ class Dashboard(view.View):
         resps_name = root + '.' + resps_ext
         resps_path = e.experclass.dls_path / resps_name
         e.experclass.write_responses(resps, resps_path)
-        with zipfile.ZipFile(e.experclass.dls_path / zip_name, 'w',
+        with zipfile.ZipFile(e.experclass.dls_path / f'{zip_name}.zip', 'w',
                              compression=zipfile.ZIP_DEFLATED,
                              compresslevel=9) as zf:
             zf.write(resps_path, resps_name)
@@ -390,6 +397,19 @@ class Dashboard(view.View):
             #         zf.write(
             #             str(respath),
             #             root + '/' + str(respath.relative_to(run_path)))
+
+    def _zip_profiles(self, zip_name):
+        e.log.info('building zip file')
+        with zipfile.ZipFile(e.experclass.dls_path / f'{zip_name}.zip', 'w',
+                             compression=zipfile.ZIP_DEFLATED,
+                             compresslevel=9) as zf:
+            for cond in e.experclass.profiles_path.iterdir():
+                if cond.stem[0] == '.' or not cond.is_dir():
+                    continue
+                for prof in cond.iterdir():
+                    if prof.stem[0] == '.' or not prof.is_file():
+                        continue
+                    zf.write(prof, f'{zip_name}/{cond.name}/{prof.name}')
 
     def _zip_id_mapping(self, run_id, zip_name):
         e.log.info('building zip file')
