@@ -163,6 +163,12 @@ class Exper(BaseExper):
         if self.profile:
             self.profiles.insert(0, self.profile)
 
+    def assign_profile(self):
+        # It's possible to time out on the consent page,
+        # and we don't want to assign a profile if that happens
+        if self.state == State.ACTIVE:
+            super().assign_profile()
+
     def next_task(self, resp):
         self._store_resp(resp)
         e.log.info(

@@ -281,6 +281,7 @@ CM2:
   SID 9d50 (PID 5dcb, I think) timed out early on, but their task index was displayed as 53, one greater than the maximum possible.
 
   Aha! Profile group0/Blrpkx (start=16:29) timed out on task 3, but the profile was never re-used. The profile was originally used by SID cf15. Weirdly, no record on Prolific matches this start time. At 16:45:56, the profile should've become the next available, and been assigned to whoever arrived immediately after. This doesn't appear to have happened, though.
+  Hypothesis: they timed out on the permission screen, maybe hit next, and were assigned a profile at that point because they didn't decline consent. UPDATE: Looks like. tasks.Consent.next_task() doesn't check whether the inst has timed out, just whether consent was given.
 
   Weirdly, even though the dashboard originally listed 7 timeouts, 6 of which had received profiles, there are only 4 in the aggregate response file.
 ** DONE Record profile in aggregate response file
