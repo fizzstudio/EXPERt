@@ -6,9 +6,9 @@ from typing import ClassVar, Any, Optional
 
 from flask import current_app as app
 
-import expert
+import expert as e
 
-from . import templates
+from . import view
 
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
@@ -26,13 +26,12 @@ class TaskDesc:
     kwargs: dict = field(default_factory=dict)
 
 
-class Task:
+class Task(view.View):
 
     template: ClassVar[str] = ''
 
-    inst: expert.Experiment
+    inst: e.Experiment
     template_name: str
-    template_filename: str
     variables: dict[str, Any]
     prev_task: Optional[Task]
     next_tasks: list[Task]
@@ -40,17 +39,23 @@ class Task:
     resp_extra: dict[str, Any]
     id: int
 
+    @classmethod
+    def new(cls, inst, *posargs, **kwargs):
+        if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
+            cls = posargs[0]
+            posargs = posargs[1:]
+        else:
+            cls = Task
+        return cls(inst, *posargs, **kwargs)
+
+    @classmethod
+    def reify(cls, inst, desc):
+        return cls.new(inst, *desc.args, **desc.kwargs)
+
     def __init__(self, inst, template=None, variables=None, timeout_secs=None):
+        super().__init__(template=template, variables=variables)
         self.inst = inst
         self.sid = inst.sid
-        self.template_name = template or self.template
-        self.template_filename = \
-            f'task_{self.template_name}{templates.html_ext}'
-        # if (exper.templates_path() / self.template_filename).is_file():
-        #     self.template_filename = \
-        #         f'{exper.name()}/{self.template_filename}'
-        self.variables = variables.copy() if variables else {}
-        #self.variables['debug'] = expert.debug
         self.variables['task_type'] = self.template_name
         self.prev_task = None
         self.next_tasks = []
@@ -68,31 +73,19 @@ class Task:
     def get_feedback(self, response):
         pass
 
-    def all_vars(self):
-        all_vars = templates.variables.copy()
-        all_vars.update(self.inst.variables)
-        all_vars.update(self.variables)
-        return all_vars
+    def template_filename(self):
+        return 'task_' + super().template_filename()
 
-    def render(self, tplt, tplt_vars={}):
+    def render_vars(self):
         all_vars = self.inst.variables.copy()
-        all_vars.update(self.variables)
-        all_vars.update(tplt_vars)
-        return templates.render(tplt, all_vars)
-
-    def present(self, tplt_vars={}):
-        return self.render(self.template_filename, tplt_vars)
+        all_vars.update(super().render_vars())
+        return all_vars
 
     def then(self, *posargs, **kwargs):
         if isinstance(posargs[0], Task):
             task = posargs[0]
         else:
-            if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
-                cls = posargs[0]
-                posargs = posargs[1:]
-            else:
-                cls = Task
-            task = cls(self.inst, *posargs, **kwargs)
+            task = self.new(self.inst, *posargs, **kwargs)
         task.prev_task = self
         self.next_tasks.append(task)
         if len(self.next_tasks) > 1:
@@ -142,6 +135,17 @@ class NoProgbarTask(Task):
         self.variables['exp_progbar_enabled'] = False
 
 
+class NoReturnTask(Task):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.variables['exp_no_return_task'] = True
+
+
+class IncompleteTask(NoProgbarTask, NoReturnTask):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+
 class Welcome(NoProgbarTask):
     pass
 
@@ -164,17 +168,21 @@ class Soundcheck(Task):
     template = 'soundcheck'
 
 
-class Thankyou(Task):
+class Thankyou(NoReturnTask):
     template = 'thankyou'
 
 
-class TimedOut(NoProgbarTask):
+class TimedOut(IncompleteTask):
     template = 'timedout'
 
 
-class Terminated(NoProgbarTask):
+class ReturnedSurvey(IncompleteTask):
+    template = 'returned'
+
+
+class Terminated(IncompleteTask):
     template = 'terminated'
 
 
-class NonConsent(NoProgbarTask):
+class NonConsent(IncompleteTask):
     template = 'nonconsent'

@@ -1,13 +1,10 @@
 
-{# params: id #}
+{% extends 'overlay.html.jinja' %}
 
-<div id="exp-dlg-{{ exp_dlg_id }}" class="exp-hidden exp-dlg">
-    <div class="exp-dlg-filter"></div>
-    <div class="exp-dlg-elements">
-        <div class="exp-dlg-elements-title"></div>
-        {% block content %}
-        {% endblock %}
-        <div class="exp-dlg-elements-buttons">
-        </div>
+{% block exp_overlay_content %}
+    <div class="exp-dlg-title"></div>
+    {% block exp_dlg_content %}
+    {% endblock %}
+    <div class="exp-dlg-buttons">
     </div>
-</div>
+{% endblock %}

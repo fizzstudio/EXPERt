@@ -2,32 +2,44 @@
 import hashlib
 import time
 
-from typing import cast, ClassVar, Optional
+from typing import cast, ClassVar, Optional, Type
 
 from flask import request
 
-import expert
-from .experiment import BaseExper, State, TaskResponse, Record
-from . import tasks, timestamp
+import expert as e
+from .experiment import State, TaskResponse, API, BaseExper
+from . import tasks
 
 
 def _monitor():
-    expert.log.info('starting monitor task')
-    while expert.experclass:
-        expert.socketio.sleep(expert.cfg['monitor_check_interval'])
-        for inst in expert.experclass.instances.values():
-            inst = cast(Exper, inst)
-            if not inst.check_for_timeout():
-                # Exper.end() sends the update if the inst has timed out
-                expert.socketio.emit('update_instance', inst.status())
+    e.log.info('starting monitor task')
+    while True:
+        e.srv.socketio.sleep(e.srv.cfg['monitor_check_interval'])
+        if e.experclass:
+            insts = []
+            for inst in e.experclass.all_active():
+                if not (isinstance(inst, Exper) and inst.check_for_timeout()):
+                    insts.append(inst)
+            # Exper.end() sends separate updates if any inst has timed out
+            e.srv.dboard.monitor_updated(insts)
+        else:
+            e.log.info('monitor task shutting down')
+            break
+
+
+class ExperAPI(API):
+
+    def return_survey(self):
+        self._inst.return_survey()
 
 
 class Exper(BaseExper):
 
+    api_class: ClassVar[Type[API]] = ExperAPI
+
     # Will be True when all profiles have completed the experiment.
     complete: ClassVar[bool] = False
 
-    end_time: float
     global_timeout_time: Optional[float]
 
     def __init__(self, *args, **kwargs):
@@ -60,35 +72,30 @@ class Exper(BaseExper):
         self.global_timeout_time = None
 
     @classmethod
-    def _setup(cls, *args):
-        super()._setup(*args)
-        cls.monitor_task = expert.socketio.start_background_task(
-            _monitor)
+    def _setup(cls, is_reloading):
+        super()._setup(is_reloading)
+        if not is_reloading:
+            cls.monitor_task = e.srv.socketio.start_background_task(_monitor)
 
-    @classmethod
-    def all_active(cls):
-        return [cast(Exper, inst) for inst in cls.instances.values()
-                if inst.state == State.ACTIVE]
-
-    @classmethod
-    def start_new_run(cls):
-        expert.log.info('--- starting new run ---')
-        for inst in cls.all_active():
-            inst.terminate()
-        #cls.instances.clear()
-        cls.run = timestamp.make_timestamp()
-        cls.record = Record(cls)
-        if cls.mode == 'rep':
-            cls.record.replicate = cls.target
-        elif cls.mode == 'res':
-            if cls.replicate:
-                cls.mode = 'rep'
-                cls.record.replicate = cls.target
-            else:
-                cls.mode = 'new'
-        cls.record.save()
-        cls._load_profiles()
-        cls.running = True
+    # @classmethod
+    # def start_new_run(cls):
+    #     e.log.info('--- starting new run ---')
+    #     for inst in cls.all_active():
+    #         inst.terminate()
+    #     #cls.instances.clear()
+    #     cls._load_profiles()
+    #     cls.run = timestamp.make_timestamp()
+    #     cls.record = Record(cls)
+    #     if cls.mode == 'rep':
+    #         cls.record.replicate = cls.target
+    #     elif cls.mode == 'res':
+    #         if cls.replicate:
+    #             cls.mode = 'rep'
+    #             cls.record.replicate = cls.target
+    #         else:
+    #             cls.mode = 'new'
+    #     cls.record.save()
+    #     cls.running = True
 
     @classmethod
     def dummy_run(cls, inst_count):
@@ -102,9 +109,9 @@ class Exper(BaseExper):
     def check_for_run_complete(cls):
         if not cls.profiles and \
            not any(i.state == State.ACTIVE for i in cls.instances.values()):
-            expert.log.info('--- run complete ---')
+            e.log.info('--- run complete ---')
             cls.running = False
-            expert.socketio.emit('run_complete')
+            e.srv.dboard.run_complete(cls.run)
 
     def check_for_complete(self):
         if not self.task.next_tasks and self.profile:
@@ -141,7 +148,7 @@ class Exper(BaseExper):
         else:
             tout_time = self.inact_timeout_time
         if tout_time and time.monotonic() >= tout_time:
-            expert.log.info(f'sid {self.sid[:4]} timed out')
+            e.log.info(f'sid {self.sid[:4]} timed out')
             self.task.replace_next_task(tasks.TimedOut(self))
             self.end(State.TIMED_OUT)
             if self.profile:
@@ -149,27 +156,22 @@ class Exper(BaseExper):
             return True
         return False
 
-    def terminate(self):
-        if self.state != State.ACTIVE:
-            return
-        expert.log.info(f'sid {self.sid[:4]} terminated')
-        self.task.replace_next_task(tasks.Terminated(self))
-        self.end(State.TERMINATED)
+    def return_survey(self):
+        e.log.info(f'sid {self.sid[:4]} returned their survey')
+        self.task = tasks.ReturnedSurvey(self)
+        self.end(State.RETURNED)
         if self.profile:
             self.profiles.insert(0, self.profile)
 
-    def end(self, state):
-        # called for normal completion, timeout, nonconsent, or termination
-        self.end_time = time.monotonic()
-        self.state = state
-        expert.socketio.emit('update_instance', self.status())
-        if self.profile:
-            expert.log.info(f'saving responses for sid {self.sid[:4]}')
-            self._save_responses()
+    def assign_profile(self):
+        # It's possible to time out on the consent page,
+        # and we don't want to assign a profile if that happens
+        if self.state == State.ACTIVE:
+            super().assign_profile()
 
-    def _next_task(self, resp):
+    def next_task(self, resp):
         self._store_resp(resp)
-        expert.log.info(
+        e.log.info(
             f'sid {self.sid[:4]} completed "{self.task.template_name}"' +
             f' ({self.task.id})')
         self.task = self.task.next_task(resp)
@@ -182,13 +184,7 @@ class Exper(BaseExper):
             self.check_for_complete()
         self._update_vars()
         if self.state == State.ACTIVE:
-            expert.socketio.emit('update_instance', self.status())
-
-    def _elapsed_time(self):
-        if self.state == State.ACTIVE:
-            return super()._elapsed_time()
-        else:
-            return self.end_time - self.start_time
+            e.srv.dboard.inst_updated(self)
 
     def _dummy_do_tasks(self):
         while self.state != State.COMPLETE:

@@ -1,11 +1,11 @@
 {% extends "layout.html.jinja" %}
 
-{% block script %}
+{% block exp_script %}
     <script src="https://cdn.socket.io/3.1.1/socket.io.min.js"
             integrity="sha384-gDaozqUvc4HTgo8iZjwth73C6dDDeOJsAgpxBcMpZYztUfjHXpzrpdrHRdVp8ySO"
             crossorigin="anonymous"></script>
     <script type="module">
-     document.getElementById('task-wrapper').scrollTo(0, 0);
+     document.getElementById('exp-task-wrapper').scrollTo(0, 0);
      window.scrollTo(0, 0);
 
      import { Task } from '{{ exp_js }}/task.js';
@@ -47,9 +47,9 @@
     </script>
 {% endblock %}
 
-{% block page_content %}
-    <div id="task-wrapper">
-        {% block task_content %}{% endblock %}
+{% block exp_page_content %}
+    <div id="exp-task-wrapper">
+        {% block exp_task_content %}{% endblock %}
     </div>
     <div id="exp-chin">
         <div id="exp-progbar" class="exp-hidden">
@@ -82,9 +82,16 @@
                         {{ '' if exp_tool_mode else 'disabled' }}
                         autocomplete="off">
                     Next
-                    <img src="{{ exp_img}}/right_arrow.svg">
+                    <img src="{{ exp_img }}/right_arrow.svg">
                 </button>
             </div>
         </div>
+        {% if exp_no_return_task is not defined  %}
+            <div id="exp-return-wrapper">
+                <button type="button" id="exp-return-btn">
+                    Withdraw Participation
+                </button>
+            </div>
+        {% endif %}
     </div>
 {% endblock %}

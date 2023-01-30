@@ -1,6 +1,6 @@
 {% extends "layout.html.jinja" %}
 
-{% block script %}
+{% block exp_script %}
     <script src="https://cdn.socket.io/3.1.1/socket.io.min.js"
             integrity="sha384-gDaozqUvc4HTgo8iZjwth73C6dDDeOJsAgpxBcMpZYztUfjHXpzrpdrHRdVp8ySO"
             crossorigin="anonymous"></script>
@@ -11,16 +11,27 @@
 
     <script type="module">
 
-     import { Dialog, ConfirmDialog } from '{{ exp_js }}/dialog.js';
-     import { elt, callApi } from '{{ exp_js }}/util.js';
+     import { Overlay, Dialog, MessageDialog, ConfirmDialog, TracebackDialog }
+       from '{{ exp_js }}/dialog.js';
+     import { elt } from '{{ exp_js }}/util.js';
+     import { Controller } from '{{ exp_js }}/controller.js';
+     import { View } from '{{ exp_js }}/view.js';
 
-     class RunsDialog extends Dialog {
 
-         constructor(ctrlr) {
-             super('exp-dlg-download');
-             this.ctrlr = ctrlr;
+     class APIError extends Error {
+     }
+
+     class SingleSelectorDialog extends Dialog {
+
+         constructor(ctrlr, id = 'exp-dlg-download', template = 'download') {
+             super(ctrlr, id, template);
+         }
+
+         async init() {
+             await super.init();
              this.selectNode = this.node.querySelector(
                  '.exp-dlg-download-select');
+             return this;
          }
 
          clearOptions() {
@@ -29,6 +40,10 @@
              }
          }
 
+     }
+
+     class RunsDialog extends SingleSelectorDialog {
+
          async show(title, btnText, includeCurrent=true, onlyHasPii=false) {
              this.titlebar = title;
              this.run = null;
@@ -36,7 +51,7 @@
              {# obj with keys:
              'id', 'num_complete', 'num_incomplete', 'has_pii'
              #}
-             const runs = await callApi(this.ctrlr.socket, 'get_runs');
+             const runs = await this.ctrlr.api('get_runs');
              this.clearOptions();
              this.selectNode.add(new Option('Select a run'));
              for (const run of runs) {
@@ -66,35 +81,107 @@
          }
      }
 
-     class InstList {
+     class BundlesDialog extends SingleSelectorDialog {
 
-         constructor() {
-             this.instDataNode = elt('inst-data');
+         constructor(ctrlr) {
+             super(ctrlr, 'exp-dlg-load', 'load_bundle');
+         }
+
+         async init() {
+             await super.init();
+             // Can't use elt() here bc we're not added to the document yet
+             this.toolCboxNode = this.node.querySelector(
+                 '#exp-dlg-load-tool-cbox');
+             return this;
+         }
+
+         async show(title, btnText) {
+             this.titlebar = title;
+             this.run = null;
+             this.selectNode.selectedIndex = 0;
+             const bundles = await this.ctrlr.api('get_bundles');
+             this.clearOptions();
+             this.selectNode.add(new Option('Select a bundle'));
+             for (const bundle of bundles) {
+                 this.selectNode.add(new Option(bundle));
+             }
+             const selectionChanged = () => {
+                 this.bundle = null;
+                 if (this.selectNode.selectedIndex) {
+                     this.bundle = this.selectNode.value;
+                 }
+                 this.setButtonsDisabled({okay: !this.bundle});
+             }
+             this.selectNode.addEventListener('change', selectionChanged);
+             this.setButtons(
+                 [{tag: 'cancel', text: 'Cancel'},
+                  {tag: 'okay', text: btnText, disabled: true}]);
+             let tag = await super.show(() => this.buttons['okay'][0].focus());
+             this.selectNode.removeEventListener('change', selectionChanged);
+             this.toolMode = this.toolCboxNode.checked;
+             return tag === 'okay';
+         }
+     }
+
+     class InstList extends View {
+
+         constructor(ctrlr) {
+             super(elt('inst-data'), ctrlr);
+             this.cols = [
+                 'sid', 'ip', 'profile', 'state', 'task', 'time', 'elapsed'];
              this.cellClasses = [
                  'dboard-num', 'dboard-id', 'dboard-clientip',
                  'dboard-profile', 'dboard-state', 'dboard-task',
                  'dboard-started', 'dboard-elapsed'];
              this.numRows = 0;
              this.numCols = this.cellClasses.length;
+             //this.errors = [];
+             this._eventSeps = {
+                 new_run: 'start',
+                 run_stop: 'stop',
+                 run_complete: 'end',
+                 bundle_load: 'load',
+                 bundle_reload: 'reload',
+                 bundle_unload: 'unload',
+                 profiles_rebuild: 'profiles',
+                 page_load_error: 'error',
+                 api_error: 'error'
+             };
+             this._sepText = {
+                 start: run => `Started new run '${run}'`,
+                 stop: run => `Run '${run}' stopped`,
+                 end: run => `Run '${run}' complete`,
+                 load: bundle => `Bundle '${bundle}' loaded`,
+                 reload: bundle => `Bundle '${bundle}' reloaded`,
+                 profiles: () => 'Profiles rebuilt',
+                 unload: bundle => `Bundle '${bundle}' unloaded`,
+                 error: (tback, div) => {
+                     //this.errors.push(tback);
+                     //div.dataset.error = this.errors.length - 1;
+                     div.addEventListener('click', async () =>
+                         await this.ctrlr.tracebackDlg.show(tback));
+                     return 'Error';
+                 }
+             };
          }
 
-         newRow(subjid) {
+         newRow() {
              const divs = [];
              for (let i = 0; i < this.numCols; i++) {
                  divs.push(document.createElement('div'));
-                 this.instDataNode.append(divs[i]);
+                 this.node.append(divs[i]);
                  divs[i].classList.add(this.cellClasses[i], 'dboard-item');
              }
-             divs[0].innerHTML = ++this.numRows;
-             divs[1].dataset.subjid = subjid;
+             divs[0].textContent = this.numRows + 1;
+             divs[1].dataset.index = `${this.numRows++}`;
              return divs;
          }
 
-         getRow(subjid) {
-             const subjidDiv = this.instDataNode.querySelector(
-                 `div[data-subjid="${subjid}"]`);
-             if (subjidDiv) {
-                 const divs = [subjidDiv];
+         getRow(index) {
+             const indexDiv = this.node.querySelector(
+                 `div[data-index="${index}"]`);
+             if (indexDiv) {
+                 const divs = [indexDiv];
                  for (let i=2; i<this.numCols; i++) {
                      divs.push(divs.at(-1).nextElementSibling);
                  }
@@ -102,53 +189,56 @@
              }
          }
 
-         setRow(subjid, fields, start=0, end=null) {
+         setRow(index, fields) { // , start=0, end=null) {
+             const vals = this.cols.map(name => fields[name]);
              // NB: if end is set, it must be non-negative
-             if (end === null) {
-                 end = this.numCols - 1;
-             }
-             const divs = this.getRow(subjid);
-             for (let i=start; i<end; i++) {
-                 divs[i].innerHTML = fields[i - start];
+             //if (end === null) {
+             //    end = this.numCols - 1;
+             //}
+             const divs = this.getRow(index);
+             //for (let i=start; i<end; i++) {
+             //    divs[i].innerHTML = vals[i - start];
+             //}
+             for (const [k, v] of Object.entries(fields)) {
+                 const i = this.cols.indexOf(k);
+                 divs[i].textContent = v;
              }
          }
 
          addInst(inst) {
-             this.newRow(inst[0]);
-             this.setRow(inst[0], inst);
+             this.newRow();
+             this.setRow(this.numRows - 1, inst);
          }
 
-         addStopSeparator(run) {
+         addSeparator(sepType, data) {
              const div = document.createElement('div');
-             div.className = 'dboard-stop-sep';
-             div.textContent = `Run ${run} stopped early`;
-             this.instDataNode.append(div);
+             div.textContent = this._sepText[sepType](data, div);
+             div.className = `dboard-${sepType}-sep`;
+             this.node.append(div);
          }
 
-         addReloadSeparator() {
-             const div = document.createElement('div');
-             div.className = 'dboard-reload-sep';
-             div.textContent = 'Experiment reloaded';
-             this.instDataNode.append(div);
+         clear() {
+             this.node.replaceChildren();
+             this.numRows = 0;
+             //this.errors = [];
          }
 
-         addEndSeparator(run) {
-             const div = document.createElement('div');
-             div.className = 'dboard-end-sep';
-             div.textContent = `Run ${run} complete`;
-             this.instDataNode.append(div);
-         }
-
-         updateInst(inst) {
-             this.setRow(inst[0], inst);
-         }
-
-         update(insts) {
-             for (let i = this.numRows; i < insts.length; i++) {
-                 this.newRow(insts[i][0]);
-             }
-             for (let i = 0; i < insts.length; i++) {
-                 this.updateInst(insts[i]);
+         update(items) {
+             console.log('items', items);
+             for (let i = 0; i < items.length; i++) {
+                 if (items[i].tag === 'inst') {
+                     //if (i === this.numRows) {
+                         this.newRow();
+                     //}
+                     this.setRow(this.numRows - 1, items[i].data);
+                 } else {
+                     const sepType = this._eventSeps[items[i].tag];
+                     if (sepType) {
+                         this.addSeparator(sepType, items[i].data);
+                     } else {
+                         this.addSeparator('unknown', 'UNKNOWN EVENT');
+                     }
+                 }
              }
          }
 
@@ -156,109 +246,503 @@
 
      const exper = "{{ exp_app_name }}";
 
-     class Controller {
+     class Uploader {
 
-         constructor() {
+         constructor(ctrlr) {
+             this.ctrlr = ctrlr;
+             this.input = elt('file-input');
+             // The manifest can list extra items to be uploaded in addition
+             // to what is allowed. Denied items are removed
+             // from the manifest before it is added to the allow list.
+             this.allow = ['cfg.json', 'src/', 'static/', 'templates/'];
+             this.deny = ['profiles/', 'runs/'];
+         }
+
+         _aread(f) {
+             return new Promise(resolve => {
+                 const reader = new FileReader();
+                 const listener = () => {
+                     reader.removeEventListener('load', listener);
+                     resolve(reader.result);
+                 };
+                 reader.addEventListener('load', listener);
+                 reader.readAsText(f);
+             });
+         }
+
+         async _loadManifest(f) {
+             const manifest = await this._aread(f);
+             return manifest
+                 .split('\n')
+                 .map(x => x.trim())
+                 .filter(
+                     x => x.length &&
+                        !this.deny.find(
+                            y => x.toLowerCase() === y) &&
+                        // Skip anything already on the allow list
+                        !this.allow.find(
+                            y => x.toLowerCase() === y));
+         }
+
+         async _getFiles(bundleName) {
+             let manifestF = null;
+             for (const file of this.input.files) {
+                 const parts = file.webkitRelativePath.split('/');
+                 if (parts[1] === 'exp_manifest.txt') {
+                     manifestF = file;
+                     break;
+                 }
+             }
+             let allow = this.allow;
+             if (manifestF) {
+                 allow = allow.concat(await this._loadManifest(manifestF));
+             }
+             const files = [];
+             for (const item of allow) {
+                 const itemPath = `${bundleName}/${item}`;
+                 for (const file of this.input.files) {
+                     // XXX should exclude files in __pycache__ directories,
+                     // .DS_Store, etc.
+                     if (item[item.length - 1] === '/') {
+                         if (file.webkitRelativePath.startsWith(
+                             itemPath)) {
+                             //console.log(
+                             //'will upload', file.webkitRelativePath);
+                             files.push(file);
+                         }
+                     } else {
+                         if (file.webkitRelativePath === itemPath) {
+                             //console.log(
+                             //'will upload', file.webkitRelativePath);
+                             files.push(file);
+                             break;
+                         }
+                     }
+                 }
+             }
+             console.log(`will upload ${files.length} files`);
+             return files;
+         }
+
+         _sendRequest(formData, resolve) {
+             const url = `{{ exp_dashboard_path }}/upload_bundle`;
+             const xhr = new XMLHttpRequest();
+             xhr.upload.addEventListener('progress', e => {
+                 if (e.lengthComputable) {
+                     const pct = Math.round((e.loaded*100)/e.total);
+                     console.log('pct', pct);
+                 }
+             }, false);
+             xhr.upload.addEventListener('load', e => {
+                 console.log('upload complete');
+             }, false);
+             xhr.addEventListener('readystatechange', e => {
+                 if (xhr.readyState === 4) {
+                     resolve(xhr.response);
+                     this.ctrlr.uploadBtn.disabled = false;
+                     this.ctrlr.uploadingOverlay.close();
+                 }
+             }, false);
+             xhr.open('POST', url);
+             xhr.responseType = 'json';
+             xhr.overrideMimeType('multipart/form-data');
+             console.log('sending upload request');
+             xhr.send(formData);
+         }
+
+         upload() {
+             return new Promise(resolve => {
+                 const listener = async () => {
+                     console.log('upload files selected');
+                     this.ctrlr.uploadBtn.disabled = true;
+                     this.input.removeEventListener('change', listener, false);
+                     const bundleName = this.input.files[0]
+                                            .webkitRelativePath.split('/')[0];
+                     console.log('upload bundle name', bundleName);
+                     const bundles = await this.ctrlr.api('get_bundles');
+                     if (bundles.includes(bundleName)) {
+                         console.log('bundle already exists');
+                         let msg = `Really overwrite bundle '${bundleName}'?`;
+                         let unload = false;
+                         let stopRun = false;
+                         if (bundleName === this.ctrlr.bundle) {
+                             unload = true;
+                             if (this.ctrlr.run) {
+                                 msg += ' Current run will end.';
+                                 stopRun = true;
+                             }
+                         }
+                         if (await this.ctrlr.confirmDlg.show(
+                             msg, 'Cancel', 'Overwrite')) {
+                             if (stopRun) {
+                                 await this.ctrlr.stopRun();
+                             }
+                             if (unload) {
+                                 await this.ctrlr.unloadBundle();
+                             }
+                         } else {
+                             console.log('upload canceled');
+                             resolve({ok: true});
+                             this.ctrlr.uploadBtn.disabled = false;
+                             return;
+                         }
+                     }
+
+                     const formData = new FormData();
+                     this.ctrlr.uploadingOverlay.show();
+                     const files = await this._getFiles(bundleName);
+                     console.log('got upload files');
+                     for (const file of files) {
+                         formData.set(file.webkitRelativePath, file);
+                     }
+                     this._sendRequest(formData, resolve);
+                 };
+                 this.input.addEventListener('change', listener, false);
+                 this.input.click();
+             });
+         }
+
+     }
+
+     class Dashboard extends Controller {
+
+         async init() {
+             this.uploadBtn = elt('upload-btn');
+             this.loadBtn = elt('load-btn');
+             this.newRunBtn = elt('new-run-btn');
+             this.reloadBtn = elt('reload-btn');
+             this.profilesBtn = elt('profiles-btn');
              this.downloadBtn = elt('download-btn');
+             this.downloadProfBtn = elt('download-prof-btn');
              //this.deleteBtn = elt('delete-btn');
              this.downloadIdBtn = elt('download-id-btn');
              this.deleteIdBtn = elt('delete-id-btn');
-             this.newRunBtn = elt('new-run-btn');
-             this.reloadBtn = elt('reload-btn');
-             this.runsDlg = new RunsDialog(this);
-             this.confirmDlg = new ConfirmDialog(this);
-             this.instList = new InstList();
+
+             this.uploader = new Uploader(this);
+
+             this.bundle = null;
+             this.run = null;
+             this.completed = 0;
+             this._didInitViews = false;
+
+             await super.init();
+         }
+
+         _initSocket() {
+             super._initSocket();
+             this._socket.on('new_instance',
+                             inst => this.instList.addInst(inst));
+             this._socket.on('update_instance', (index, inst) => {
+                 //console.log('got update_instance', index, inst);
+                 this.instList.setRow(index, inst);
+                 if (inst.state === 'COMPLETE') {
+                     this.completed++;
+                 }
+             });
+             this._socket.on('update_active_instances', insts => {
+                 for (const [index, inst] of insts) {
+                     this.instList.setRow(index, inst);
+                 }
+             });
+             this._socket.on('run_complete', () => {
+                 this.instList.addSeparator('end', this.run);
+                 this.run = null;
+                 this.completed = 0;
+                 this.updateRunInfo();
+             });
+             this._socket.on('page_load_error', tback => {
+                 this.instList.addSeparator('error', tback);
+             });
+             this._socket.on('api_error', tback => {
+                 this.instList.addSeparator('error', tback);
+             });
+         }
+
+         async _initViews() {
+             this.tracebackDlg = await new TracebackDialog(this).init();
+             this.uploadingOverlay = await new Overlay(
+                 this, 'upload-ovl').init();
+             this.uploadingOverlay.contentNode.textContent = 'Uploading...';
+             this.errorOverlay = await new Overlay(
+                 this, 'error-ovl').init();
+             this.errorOverlay.contentNode.textContent =
+                 'Client-server version mismatch; hit reload';
+             this.bundlesDlg = await new BundlesDialog(this).init();
+             this.runsDlg = await new RunsDialog(this).init();
+             this.confirmDlg = await new ConfirmDialog(this).init();
+             this.msgDlg = await new MessageDialog(this).init();
+             this.instList = new InstList(this);
+
+             this.uploadBtn.addEventListener('click', async () => {
+                 const resp = await this.uploader.upload();
+                 if (!resp.ok) {
+                     await this.msgDlg.show(
+                         `Error uploading bundle: ${resp.err}`);
+                 }
+             });
+             this.loadBtn.addEventListener('click', async () => {
+                 this.loadBtn.disabled = true;
+                 await this.loadBundle();
+                 this.loadBtn.disabled = false;
+             });
+             this.newRunBtn.addEventListener('click', async () => {
+                 this.newRunBtn.disabled = true;
+                 await this.newRun();
+                 this.newRunBtn.disabled = false;
+             });
+             this.reloadBtn.addEventListener('click', async () => {
+                 this.reloadBtn.disabled = true;
+                 await this.reloadBundle();
+                 if (this.bundle) {
+                     this.reloadBtn.disabled = false;
+                 }
+             });
+             this.profilesBtn.addEventListener('click', async () => {
+                 this.profilesBtn.disabled = true;
+                 await this.rebuildProfiles();
+                 if (this.bundle) {
+                     this.profilesBtn.disabled = false;
+                 }
+             });
 
              this.downloadBtn.addEventListener('click', async () => {
                  this.downloadBtn.disabled = true;
-                 if (await this.runsDlg.show(
-                     'Download Results', 'Download')) {
-                     this.download(this.runsDlg.run, 'results');
+                 const ok = await this.runsDlg.show(
+                     'Download Results', 'Download');
+                 if (ok) {
+                     this.download('results', this.runsDlg.run);
                  }
                  this.downloadBtn.disabled = false;
              });
+             this.downloadProfBtn.addEventListener('click', async () => {
+                 this.downloadProfBtn.disabled = true;
+                 this.download('profiles');
+                 this.downloadProfBtn.disabled = false;
+             });
              /*this.deleteBtn.addEventListener('click', async () => {
-                 this.deleteBtn.disabled = true;
-                 if (await this.runsDlg.show(
-                     'Delete Results', 'Delete', false) &&
-                     await this.confirmDlg.show(
-                         `Really delete results for run ${this.runsDlg.run}?`,
-                         'Cancel', 'Delete')) {
-                     await callApi(
-                         this.socket, 'delete_runs', [this.runsDlg.run]);
-                 }
-                 this.deleteBtn.disabled = false;
-             });*/
+                this.deleteBtn.disabled = true;
+                if (await this.runsDlg.show(
+                'Delete Results', 'Delete', false) &&
+                await this.confirmDlg.show(
+                `Really delete results for run ${this.runsDlg.run}?`,
+                'Cancel', 'Delete')) {
+                await callApi(
+                this.socket, 'delete_runs', [this.runsDlg.run]);
+                }
+                this.deleteBtn.disabled = false;
+                });*/
              this.downloadIdBtn.addEventListener('click', async () => {
                  this.downloadIdBtn.disabled = true;
-                 if (await this.runsDlg.show(
-                     'Download ID Mapping', 'Download', true, true)) {
-                     this.download(this.runsDlg.run, 'id_mapping');
+                 const ok = await this.runsDlg.show(
+                     'Download ID Mapping', 'Download', true, true);
+                 if (ok) {
+                     this.download('id_mapping', this.runsDlg.run);
                  }
                  this.downloadIdBtn.disabled = false;
              });
              this.deleteIdBtn.addEventListener('click', async () => {
                  this.deleteIdBtn.disabled = true;
-                 if (await this.runsDlg.show(
-                     'Delete ID Mapping', 'Delete', false, true) &&
+                 const ok = await this.runsDlg.show(
+                     'Delete ID Mapping', 'Delete', false, true);
+                 if (ok &&
                      await this.confirmDlg.show(
-                         `Really delete ID mapping for run ${this.runsDlg.run}?`,
+                         `Really delete ID mapping for run
+                         ${this.runsDlg.run}?`,
                          'Cancel', 'Delete')) {
-                     await callApi(
-                         this.socket, 'delete_id_mappings', this.runsDlg.run);
+                     await this.api('delete_id_mapping', this.runsDlg.run);
                  }
                  this.deleteIdBtn.disabled = false;
              });
-             this.newRunBtn.addEventListener('click', async () => {
-                 if (await this.confirmDlg.show(
-                     'Really start a new run?', 'Cancel', 'Start')) {
-                     this.newRunBtn.disabled = true;
-                     const runInfo = await callApi(
-                         this.socket, 'start_new_run');
-                     if (this.run) {
-                         this.instList.addStopSeparator(this.run);
-                     }
-                     this.setRunInfo(runInfo);
-                     this.run = runInfo.run;
-                     this.newRunBtn.disabled = false;
-                 }
-             });
-             this.reloadBtn.addEventListener('click', async () => {
-                 if (await this.confirmDlg.show(
-                     'Really reload experiment?', 'Cancel', 'Reload')) {
-                     this.reloadBtn.disabled = true;
-                     await callApi(this.socket, 'reload_exper');
-                     if (this.run) {
-                         this.instList.addReloadSeparator();
-                     }
-                     this.reloadBtn.disabled = false;
-                 }
-             });
-
-             this.socket = io();
-
-             this.socket.on('connect', async () => {
-                 console.log("socket connected");
-                 const data = await callApi(this.socket, 'dboard_init');
-                 this.instList.update(data.insts);
-                 this.setRunInfo(data.runInfo);
-                 this.run = data.runInfo.run;
-             });
-
-             this.socket.on('new_instance',
-                            inst => this.instList.addInst(inst));
-             this.socket.on('update_instance',
-                            inst => this.instList.updateInst(inst));
-             this.socket.on('run_complete', () => {
-                 this.instList.addEndSeparator(this.run);
-                 this.setRunInfo({run: 'not running'});
-                 this.run = null;
-             });
+             this._didInitViews = true;
          }
 
-         download(run, what) {
+         async _onSocketConnected() {
+             await super._onSocketConnected();
+             elt('conn-status').textContent = '';
+             this.uploadBtn.disabled = false;
+             this.loadBtn.disabled = false;
+             if (!this._didInitViews) {
+                 await this._initViews();
+             }
+             const data = await this.api('dboard_init');
+             if (this.vars &&
+                 this.vars['exp_version'] !== data.vars['exp_version']) {
+                 await this.errorOverlay.show();
+             }
+             this.vars = data.vars;
+             this.bundle = this.vars['exp_app_name'];
+             this._onBundleUpdate();
+             this.instList.clear();
+             this.instList.update(data.list_items);
+             this.run = data.run_info.run;
+             this.completed = this.vars['exp_completed_profiles'];
+             this.updateRunInfo();
+             console.log(
+                 `initializing; bundle: ${this.vars['exp_app_name']};` +
+                 ` run: ${this.run}`);
+         }
+
+         async _onSocketDisconnected() {
+             await super._onSocketDisconnected();
+             elt('conn-status').textContent = 'NOT CONNECTED';
+             this.bundle = null;
+             this.uploadBtn.disabled = true;
+             this.loadBtn.disabled = true;
+             this._onBundleUpdate();
+         }
+
+         async api(...params) {
+             const {val, err} = await super.api(...params);
+             if (err) {
+                 // If an error occurs during the API call that happens
+                 // when the traceback dialog is created, obviously
+                 // it won't exist yet!
+                 if (this.tracebackDlg) {
+                     await this.tracebackDlg.show(err);
+                 }
+                 throw new APIError(
+                     `Error in API call '${params[0]}': ${err}`);
+             } else {
+                 return val;
+             }
+         }
+
+         /**
+            Called when a bundle has been loaded or unloaded.
+         */
+         _onBundleUpdate() {
+             if (this.bundle) {
+                 elt('bundle-name').textContent =
+                     `${this.bundle}
+                      (${this.vars['exp_total_profiles']} profiles)`;
+                 this.newRunBtn.disabled = false;
+                 this.reloadBtn.disabled = false;
+                 this.profilesBtn.disabled = false;
+                 this.downloadBtn.disabled = false;
+                 this.downloadProfBtn.disabled = false;
+                 this.downloadIdBtn.disabled = false;
+                 this.deleteIdBtn.disabled = false;
+             } else {
+                 elt('bundle-name').textContent = '<None>';
+                 this.newRunBtn.disabled = true;
+                 this.reloadBtn.disabled = true;
+                 this.profilesBtn.disabled = true;
+                 this.downloadBtn.disabled = true;
+                 this.downloadProfBtn.disabled = true;
+                 this.downloadIdBtn.disabled = true;
+                 this.deleteIdBtn.disabled = true;
+             }
+         }
+
+         async loadBundle() {
+             const ok = await this.bundlesDlg.show(
+                 'Load Bundle', 'Load');
+             if (ok) {
+                 if (this.bundlesDlg.bundle === this.bundle) {
+                     await this.reloadBundle(this.bundlesDlg.toolMode);
+                 } else {
+                     if (this.run) {
+                         await this.stopRun();
+                     }
+                     const {vars, tback} = await this.api(
+                         'load_bundle', this.bundlesDlg.bundle,
+                         this.bundlesDlg.toolMode);
+                     if (tback) {
+                         await this.tracebackDlg.show(tback);
+                         if (this.bundle) {
+                             this.instList.addSeparator('unload', this.bundle);
+                         }
+                     } else {
+                         this.instList.addSeparator(
+                             'load', this.bundlesDlg.bundle);
+                     }
+                     this.vars = vars;
+                     this.bundle = vars['exp_app_name'];
+                     this._onBundleUpdate();
+                 }
+             }
+         }
+
+         async newRun() {
+             if (this.run === null || await this.confirmDlg.show(
+                 'Really start a new run?', 'Cancel', 'Start')) {
+                 if (this.run) {
+                     await this.stopRun();
+                 }
+                 const {info, err} = await this.api('start_new_run');
+                 if (info) {
+                     this.run = info.run;
+                     this.completed = 0;
+                     this.updateRunInfo();
+                     this.instList.addSeparator('start', this.run);
+                 } else {
+                     await this.tracebackDlg.show(err);
+                 }
+             }
+         }
+
+         async stopRun() {
+             await this.api('stop_run');
+             this.instList.addSeparator('stop', this.run);
+             this.run = null;
+             this.completed = 0;
+             this.updateRunInfo();
+         }
+
+         async reloadBundle(toolMode = false) {
+             if (await this.confirmDlg.show(
+                 `Really reload '${this.bundle}'? Any current run will end.`,
+                 'Cancel', 'Reload')) {
+                 if (this.run) {
+                     // NB: this adds a stop separator, not a reload separator
+                     await this.stopRun();
+                 }
+                 const {vars, err} = await this.api('reload_bundle', toolMode);
+                 if (!err) {
+                     this.instList.addSeparator('reload', this.bundle);
+                 } else {
+                     await this.tracebackDlg.show(err);
+                     this.instList.addSeparator('unload', this.bundle);
+                     this.bundle = null;
+                     this._onBundleUpdate();
+                 }
+                 this.vars = vars;
+             }
+         }
+
+         async unloadBundle() {
+             this.vars = await this.api('unload_bundle');
+             this.instList.addSeparator('unload', this.bundle);
+             this.bundle = null;
+             this._onBundleUpdate();
+         }
+
+         async rebuildProfiles() {
+             if (await this.confirmDlg.show(
+                 `Really rebuild profiles? Any current run will end.`,
+                 'Cancel', 'Rebuild')) {
+                 if (this.run) {
+                     await this.stopRun();
+                 }
+                 const {vars, err} = await this.api('rebuild_profiles');
+                 if (!err) {
+                     this.instList.addSeparator('profiles');
+                 } else {
+                     await this.tracebackDlg.show(err);
+                     this.instList.addSeparator('unload', this.bundle);
+                     this.bundle = null;
+                     this._onBundleUpdate();
+                 }
+                 this.vars = vars;
+             }
+         }
+
+         download(what, run = null) {
              const anchor = document.createElement('a');
-             anchor.href = `{{ dashboard_path }}/download/${run}/${what}`;
+             anchor.href = `{{ exp_dashboard_path }}/download/${what}`;
+             if (run) {
+                 anchor.href += `/${run}`;
+             }
              anchor.download = run;
              anchor.style.display = 'none';
              document.body.append(anchor);
@@ -266,19 +750,23 @@
              document.body.removeChild(anchor);
          }
 
-         setRunInfo(info) {
+         updateRunInfo() {
              const runInfo = elt('run-info');
-             runInfo.textContent = info.run;
-             if (info.mode === 'res') {
-                 runInfo.textContent += ' res';
-             } else if (info.mode === 'rep') {
-                 runInfo.textContent += ' rep ' + info.target;
+             if (this.run) {
+                 runInfo.textContent = `${this.run} (${this.completed})`;
+             } else {
+                 runInfo.textContent = '<None>';
              }
+             //if (info.mode === 'res') {
+             //    runInfo.textContent += ' res';
+             //} else if (info.mode === 'rep') {
+             //    runInfo.textContent += ' rep ' + info.target;
+             //}
          }
 
      }
 
-     const ctrlr = new Controller();
+     const ctrlr = await new Dashboard().init();
 
      /*const dummy = [
          '0123456789abcdef0123456789abcdef',
@@ -295,33 +783,51 @@
     </script>
 {% endblock %}
 
-{% block page_content %}
+{% block exp_page_content %}
     <div id="dboard">
 
-        <h2>Dashboard</h2>
-        <div>
-            <strong>{{ exp_app_name }} ({{ num_profiles }} profiles);
-                run <span id="run-info"></span></strong>
+        <h2>EXPERt Dashboard [{{exp_version}}]
+            <span id="conn-status">NOT CONNECTED</span>
+        </h2>
+        <div id="status">
+            <span class="status-key">Bundle:</span>
+            <span id="bundle-name">&lt;None&gt;</span>
+            <span class="status-key">Run:</span>
+            <span id="run-info"></span>
         </div>
         <div id="controls">
-            <button type="button" id="download-btn">
+            <input type="file" id="file-input" class="exp-hidden"
+            webkitdirectory multiple>
+            <button type="button" id="upload-btn" disabled>
+                Upload Bundle︎
+            </button>
+            <button type="button" id="load-btn" disabled>
+                Load Bundle
+            </button>
+            <button type="button" id="new-run-btn" disabled>
+                    {# {{'disabled' if exp_tool_mode else ''}}> #}
+                Start New Run
+            </button>
+            <button type="button" id="reload-btn" disabled>
+                Reload Bundle
+            </button>
+            <button type="button" id="profiles-btn" disabled>
+                Rebuild Profiles
+            </button>
+            <button type="button" id="download-btn" disabled>
                 Download Results
             </button>
             {#<button type="button" id="delete-btn">
                 Delete Results
             </button>#}
-            <button type="button" id="download-id-btn">
+            <button type="button" id="download-prof-btn" disabled>
+                Download Profiles
+            </button>
+            <button type="button" id="download-id-btn" disabled>
                 Download ID Mapping
             </button>
-            <button type="button" id="delete-id-btn">
+            <button type="button" id="delete-id-btn" disabled>
                 Delete ID Mapping
-            </button>
-            <button type="button" id="new-run-btn"
-                    {{'disabled' if exp_tool_mode else ''}}>
-                Start New Run
-            </button>
-            <button type="button" id="reload-btn">
-                Reload Experiment
             </button>
         </div>
 
@@ -340,8 +846,4 @@
             <div id="inst-data"></div>
         </div>
     </div>
-    {% set exp_dlg_id = 'download' %}
-    {% include 'download_dialog.html.jinja' %}
-    {% set exp_dlg_id = 'confirm' %}
-    {% include 'confirm_dialog.html.jinja' %}
 {% endblock %}

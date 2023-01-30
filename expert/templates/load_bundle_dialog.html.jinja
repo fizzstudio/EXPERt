@@ -1,0 +1,12 @@
+
+{% extends 'download_dialog.html.jinja' %}
+
+{% block exp_dlg_content %}
+    {{ super() }}
+    <div>
+        <input type="checkbox" id="exp-dlg-load-tool-cbox"
+               autocomplete="off"><label for="exp-dlg-load-tool-cbox">
+            Tool mode
+               </label>
+    </div>
+{% endblock %}

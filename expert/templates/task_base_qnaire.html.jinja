@@ -5,12 +5,12 @@
 
 {% macro quest_opts(idx, type, opts) %}
     {% for opt in opts if opt != ':opt' %}
-        <div class="qnaire-opt">
+        <div class="exp-qnaire-opt">
             {#
             input and label must be adjacent to avoid a text node in between
             #}
             {% set group = 'q{}'.format(idx) %}
-            {% set optid = '{}-{}'.format(group, loop.index) %}
+            {% set optid = 'exp-qnaire-{}-{}'.format(group, loop.index) %}
             {# name attr is required for radio buttons #}
             <input type="{{ type }}" id="{{ optid }}" name="{{ group }}"
                    autocomplete="off"><label for="{{ optid }}">
@@ -20,26 +20,28 @@
     {% endfor %}
 {% endmacro %}
 
-{% block task_content %}
-    <div id="qnaire">
-        <div id="qnaire-header">
-            {% block qnaire_header %}{% endblock %}
+{% block exp_task_content %}
+    <div id="exp-qnaire">
+        <div id="exp-qnaire-header">
+            {% block exp_qnaire_header %}{% endblock %}
         </div>
 
-        <div id="qnaire-items">
-            {% for q in questions %}
-                <div class="qnaire-item"
-                     id="qnaire-item{{ loop.index }}"
+        <div id="exp-qnaire-items">
+            {% for q in exp_qnaire_questions %}
+                <div class="exp-qnaire-item"
+                     id="exp-qnaire-item{{ loop.index }}"
                      data-type="{{ q[0] }}"
                      data-optional="{{ q[-1] == ':opt' }}">
-                    <div class="qnaire-q">
-                        <span class="qnaire-q-num">{{ loop.index }}.</span>
-                        <span class="qnaire-q-text">{{ q[1] }}</span>
+                    <div class="exp-qnaire-q">
+                        <span class="exp-qnaire-q-num">{{ loop.index }}.</span>
+                        <span class="exp-qnaire-q-text">{{ q[1] }}</span>
                         {% if q[-1] == ':opt' %}
-                            <span class="qnaire-q-optional">[Optional]</span>
+                            <span class="exp-qnaire-q-optional">
+                                [Optional]
+                            </span>
                         {% endif %}
                     </div>
-                    <div class="qnaire-a">
+                    <div class="exp-qnaire-a">
                         {% if q[0] in ('radio', 'checkbox') %}
                             {{ quest_opts(loop.index, q[0], q[2:]) }}
                         {% elif q[0] == 'shorttext' %}

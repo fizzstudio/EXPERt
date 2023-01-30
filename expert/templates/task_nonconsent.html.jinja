@@ -3,11 +3,17 @@
 
 {% set task_script = '_incomplete' %}
 
-{% block task_content %}
-    <div id="task">
-        <div>
+{% block exp_task_content %}
+    <div id="exp-task">
+        <h2>Consent Declined</h2>
+        <p>
             You have <b>declined</b> your consent to participate
-            in this experiment. It is okay to close this tab.
-        </div>
+            in this survey.
+        </p>
+        {% if exp_prolific_pid %}
+            <p>
+                Please return to Prolific and return your survey as described
+                <a href="https://participant-help.prolific.co/hc/en-gb/articles/360022342094-How-do-I-withdraw-my-participation-in-a-study-">here</a>. </p>
+        {% endif %}
     </div>
 {% endblock %}

@@ -1,28 +1,47 @@
 
-import expert
-from . import experiment
+from typing import ClassVar, Type
+
+import expert as e
+from .experiment import BaseExper, API
+
+class ToolAPI(API):
+
+    def prev_page(self, resp):
+        if self._inst.task.prev_task:
+            self._inst.prev_task(resp)
+        return self._inst.all_vars()
+
+    def goto(self, task_label, resp):
+        self._inst.go_to(task_label, resp)
+        return self._inst.all_vars()
+
+    def goto_id(self, task_id, resp):
+        self._inst.go_to_id(task_id, resp)
+        return self._inst.all_vars()
 
 
-class Tool(experiment.BaseExper):
+class Tool(BaseExper):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    api_class: ClassVar[Type[API]] = ToolAPI
 
-        @expert.socketio.on('prev_page', namespace=f'/{self.sid}')
-        def sio_prev_page(resp):
-            if self.task.prev_task:
-                self.prev_task(resp)
-            return self.task.all_vars()
+    # def __init__(self, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
 
-        @expert.socketio.on('goto', namespace=f'/{self.sid}')
-        def sio_goto(task_label, resp):
-            self.go_to(task_label, resp)
-            return self.task.all_vars()
+    #     @e.srv.socketio.on('prev_page', namespace=f'/{self.sid}')
+    #     def sio_prev_page(resp):
+    #         if self.task.prev_task:
+    #             self.prev_task(resp)
+    #         return self.all_vars()
 
-        @expert.socketio.on('goto_id', namespace=f'/{self.sid}')
-        def sio_goto_id(task_id, resp):
-            self.go_to_id(task_id, resp)
-            return self.task.all_vars()
+    #     @e.srv.socketio.on('goto', namespace=f'/{self.sid}')
+    #     def sio_goto(task_label, resp):
+    #         self.go_to(task_label, resp)
+    #         return self.all_vars()
+
+    #     @e.srv.socketio.on('goto_id', namespace=f'/{self.sid}')
+    #     def sio_goto_id(task_id, resp):
+    #         self.go_to_id(task_id, resp)
+    #         return self.all_vars()
 
     def assign_profile(self):
         super().assign_profile()
@@ -40,12 +59,12 @@ class Tool(experiment.BaseExper):
         self._update_vars()
         if self.profile:
             self._save_responses()
-        expert.socketio.emit('update_instance', self.status())
+        e.srv.dboard.inst_updated(self)
 
     def prev_task(self, resp):
         self._nav(resp, self.task.prev_task)
 
-    def _next_task(self, resp):
+    def next_task(self, resp):
         self._nav(resp, self.task.next_task(resp))
 
     def go_to(self, task_label, resp):

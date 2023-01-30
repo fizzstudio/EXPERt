@@ -3,8 +3,11 @@
 
 {% set task_script = '_incomplete' %}
 
-{% block task_content %}
-    <div id="task">
-        The time allotted for this experiment has expired.
+{% block exp_task_content %}
+    <div id="exp-task">
+        <h2>Timed Out</h2>
+        <p>
+            The time allotted for this survey has expired.
+        </p>
     </div>
 {% endblock %}

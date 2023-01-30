@@ -1,0 +1,324 @@
+
+* Docker
+** Build
+~docker build --tag jfnl/expert .~
+Or, for multi-arch:
+~docker buildx build --push --platform linux/amd64,linux/arm64 \
+                            --tag jfnl/expert:latest .~
+** Upload to Docker Hub
+~docker push jfnl/expert~
+** Run
+Notes:
+1. <path-to-bundle> has to be absolute, so it can be convenient to use a path relative to $PWD.
+2. Within the container, EXPERt is invoked with the path ~/bundle~, which is mapped to the external bundle directory. So it's currently impossible to start it without a bundle.
+
+~docker run --rm -v <path-to-bundle>:/bundle -p 5000:5000 jfnl/expert [args ...]~
+
+NB: If you want to run on a port other than 5000, use:
+~-l 0.0.0.0:new-port-number~
+If you just pass the port number, EXPERt will listen on 127.0.0.1, which won't work inside the container.
+
+* Issues
+** TODO Make conditions optional?
+Currently, the notion of conditions is mandatory, even if there's only 1.
+** TODO Caching like minik
+HTML responses now all have ~Cache-Control: no-store~, which prevents any cache from storing the content. This seems necessary so that when the page is reloaded (which will use cached content) when moving to a new task type, we get the new content even though the URL stays the same. However, I'm not entirely sure this is necessary, given that Flask also sets ~Vary: Cookie~, which should allow cookie contents to also get used in the cache key. It may be sufficient to use ~Cache-Control: private~ to allow caching, but not in shared caches.
+UPDATE: Actually, the session cookie actually doesn't keep track of the user's progress; this is done strictly on the server. So ~no-store~ is probably the way to go.
+It's important to note that, since the URL never changes, EXPERt uses ~location.reload()~ when moving to a new task type. This causes the browser to set ~Cache-Control: max-age=0~ on the request (with *force reloading*, browsers instead use ~no-cache~, which forces caches to re-validate any cached response they have). ~max-age=0~ means don't reuse any response older than 0 seconds. So technically, with regard to moving between task types, ~no-store~ isn't really needed.
+What's the real concern here, then? Cases:
+1. User completes the experiment, gets the mturk code page. It's desirable that if they leave and return later, they can still see the code. Seeing cached content in this case is not an issue. Do they still see the code if they hit reload? Or the "already participated" screen?
+   1. I think they should still get the code, since the instance is still in memory.
+2. User stops midway, experiment times out, they click the link to return later. Seeing the cached experiment content here would not be desirable.
+***** Weird behavior on mac FF
+If I use EXPERt, then stop and restart the server, and return without a reload (hit enter in the address bar), the request never even gets to the EXPERt server, but instead gets a ~403 Forbidden~ from server software that identifies itself as AirTunes. I'm guessing that this happens because the request doesn't include a ~Cache-Control~ header.
+UPDATE: I turned off 'AirPlay Receiver' under Sharing in System Prefs. Seems to have fixed the problem.
+** TODO Rollup support
+An EXPERt session currently involves downloading various separate pieces of JS:
+- script in task_base_layout (includes jinja code)
+- various built-in scripts (task.js, etc.)
+- any task-specific scripts (built-in or in the experiment bundle)
+Chartmob currently uses rollup to generate its segmentation task script.
+Rollup has the capability to treat specific imports as external, i.e., leaving them out of the rolled-up module. The question is, with all of EXPERt's built-in scripts rolled up into a single file, is it possible for imports from another rollup bundle to still reference them?
+** TODO Share built-in sass globals with experiments
+Mostly important for $desktop-break, but also useful for matching the default colors.
+** TODO Globalparams startup sanity check
+** TODO Save partial responses?
+If you navigate away from a task where a change has been made (e.g., some input) but the response hasn't been submitted yet, then navigate back, the task is reset to its initial state (would the timer get reset as well?). Technically, the bfcache should prevent this (if they just hit back then forward), but it can get disabled in certain instances, IIRC.
+** DONE Are we genuinely single-threaded?
+If async_handlers=True (the default), events should get handled using eventlet coroutines. AFAIK, this doesn't involve multiple system threads, or have any possibility of memory races.
+** TODO Unknown socketio events
+It would be lovely to be able to throw an error if an unknown message is received. Not sure how to do this, though...
+** DONE Old dashboard persistence
+It's currently possible to leave a dashboard window open, restart the server for a new run, and have entries for the new run get added to the existing dashboard. Maybe the old dashboard should fail to reconnect with the server because of the different dashboard code? This is all basically security-through-obscurity anyway...
+** DONE Making the URL prefix customizable
+A trickier problem than expected. The main issue here is scripts: they don't get served as templates, so I can't just pass in the prefix.
+The prefix itself should be specified by the experiment as an EXPERt config setting. This means that rollup (if I were to use it in EXPERt proper) wouldn't see it (rollup for EXPERt itself should happen once, not per-experiment). So somehow, the experiment sets the value for the prefix, and the built-in scripts can see this value.
+Minik has a templated script that dynamically imports per-page scripts, then calls an init function they export with an object containing the values of template variables (as well as a reference to the custom import function itself, so imported scripts can import others in the same fashion). I could use the same approach in EXPERt.
+This is almost a "module-in-a-module" style... Would it be simpler just to serve scripts as jinja templates?
+UPDATE: Script templates would be great, but wouldn't play well with rollup in the experiment bundle. So back to the minik approach...
+Yet another approach might be to serve the built-in scripts as templates, but serve experiment-bundle scripts as ordinary modules. Built-ins could use the URL prefix directly, while experiment scripts could either access it via the task instance, or simply let rollup read in the config json file.
+** TODO Show timeout immediately
+Currently, if a participant times out, the timed-out screen shows up where the next task would have been. E.g., you might load the site (seeing the welcome page), close the window, come back an hour later, reload it (still seeing the welcome page), then get "timed-out" after clicking next.
+** TODO Profile reuse
+There may be times when we want to do some experiment-like pseudo-task, but actually have all "participants" do the exact same thing (perhaps even with an unspecified number of people). In such cases, it might be nice to simply have one profile, and allow it to be used by all comers. Or possible one profile per condition. Or even make it more general, and be able to specify the number of participants to be assigned the same profile. (It only makes sense to have a single profile if reuse is unlimited; this would basically be a "no-profiles" mode, in effect.)
+** TODO Run dir naming
+Currently, run folders are named with timestamps with precision to the second. Typing them in is awkward, and it's a lot to look at, too. Maybe something more like: ~2022.05.07-01~, where the last component is simply an increasing number.
+** TODO Tie runs to profiles (and config)?
+It occurs to me (much later than it should've) that replicating a run would require access to the same profiles as the original run, but that EXPERt isn't currently designed to guarantee that those profiles will still be around; a different run of the experiment might've involved changed params, with a new set of profiles.
+A change in params may result in a new set of profiles, but it's also possible for a new set to be generated using the identical params as another set.
+So maybe we introduce the notion of profile sets, stored in timestamped folders. Generating a new set of profiles would be a manual operation generally, although making a params change might force a new set to be generated. (Well, profile generation doesn't have to be tied to params at all, so maybe not the latter.) The experiment record would now include both a copy of the params used to run the experiment, and the timestamp of the profile set used.
+With this change, replication (and resumption, I suppose) would need to make use of the stored params and profiles.
+** TODO Config var and param types
+So, we have config vars, which control aspects of how EXPERt functions, e.g., 'url_prefix', 'output_format', etc. Then, we have params, which are meant to be used only within an experiment, and not by EXPERt itself; e.g., 'translate_neg_y_charts'. But there's also a third class: experiment params that are required by EXPERt; the only one at the moment may be 'n_profiles'.
+- Should there be a formal check that it's present?
+- Should it instead be a config var?
+- Should config vars be copied to runs along with params?
+** TODO Task socket disconnect/reconnect
+If the server is restarted, the task socket will actually be able to reconnect, even though its sid is old. But this establishes a namespace on which the server is no longer listening. Calls to api() do seem to resolve, but with an ~undefined~ result.
+We can hook into the 'disconnect' event, but reconnection does occur without error. It would be nice to display some sort of sensible error message when we get the ~undefined~ result.
+** DONE Results download file caching
+If we download results multiple times during a run, we only get the original cached file, not including later results.
+UPDATE: Download files are still saved in the 'dl' folder, but we create a new one on each request, overwriting any older file.
+
+** TODO All slots filled
+Went through CM-R in tool mode. All tasks completed and data was saved, but on the 'thank you' page, got 'all participant slots have already been filled' message.
+** TODO Repeated profile assignment in tool mode
+This can currently happen if you page back over the consent form (if there is one) multiple times.
+** DONE Sidebar
+CM2 is going to feature a sidebar (which can be shown or hidden) with always-available help. I'd like this to be able to scroll independently from the main task scroll area.
+** TODO Caching redux
+I think static files (e.g., scripts) can still get cached?
+** TODO Simplified state machine
+It may be the case that a task has a simple set of states it can toggle between, and that each one is associated with its own particular event, such that if any state receives that event, we always enter the associated state. In such a case, there's hardly any point in having a distinction between events and states, or bothering with a transition table.
+Options:
+1. If no transition table is defined, event() could simply look up 'sym' directly in the states class.
+2. More simply, just use enter() directly, passing in the state function name.
+** TODO Async FSA
+Currently, FSA state-entry functions are not treated as async. I.e., enter() is not async, and doesn't await any entry function it calls.
+** TODO Temporary param setting via command line
+It's often useful to limit the number of tasks shown during development. I've been doing this manually, just slicing, e.g., 'testing_tasks', or whatever. But this is annoying because then you've changed the code, and it's easy to mistakenly commit the change. It'd be nice to have a parameter of some type that controls how many tasks are seen, and to be able to temporarily set it via a command-line switch. Where would such variables live, though? params.py? cfg.json? Somewhere new?
+
+Currently, the E server itself only references an experiment's params.py to read 'n_profiles' (although there is a commented-out reference in __init__.py for debug mode). Maybe this should go into cfg.json?
+** DONE What bundle contents to upload
+A bundle directory may contain any number of extraneous things that EXPERt doesn't need to run the experiment: build files, local git repo, etc. Certain things that are needed are known, such as the src directory. But other necessary data files may be present. It's convenient to allow the user to just select the toplevel bundle folder to upload, but this may include all of the extraneous stuff. Options:
+1. Whitelist + manifest: accept (in the browser) only known things (e.g., src/), but allow a manifest file listing additional things to allow. The manifest would need to be read separately in the browser.
+   1. Pros: Can keep current bundle file layouts.
+   2. Cons: Need to create manifest files.
+2. Whitelist only: add an extra directory, e.g., 'data', to hold any extra data files.
+   1. Pros: No manifest.
+   2. Cons: Need to modify bundle code to handle new file layouts.
+Whitelist items:
+- cfg.json
+- src/
+- static/
+- templates/
+** TODO Large uploads
+With the current upload mechanism, the browser literally reads all files in the selected directory, and sends a single, giant POST request to the server containing all the data. This could get unwieldy if one were running an experiment using large, e.g., video or audio files.
+** DONE Overwriting profiles and runs
+Replacing a bundle directory would also replace any profiles and runs within it. Seems like a good way to accidentally delete important data! Maybe just overwrite files, but explicitly leave profiles and runs alone?
+This also implies that it shouldn't be possible to include any local profiles and runs directories in the manifest.
+** DONE If the user selects nothing to upload
+It doesn't look like there's any way to receive an event if an open file selector window has simply been closed without selecting anything. So it's not a good idea to gray out the upload button, since we can't un-gray it in that case.
+** DONE Can the user select a directory they're inside?
+And if so, will the uploaded file relative paths still have the directory name prepended?
+UPDATE: Yep, it works just fine.
+** TODO Mandatory bundle content
+Might be a good idea to make sure any to-be-uploaded bundle actually is an EXPERt bundle, i.e., contains 'src', 'templates', etc.
+** TODO Remove bundle button
+Should just make a 'manage bundles' dialog.
+** DONE Rebuild profiles button
+When you replace the contents of a bundle, you may want to create new profiles.
+** DONE Show a page when an experiment isn't running
+Even when no bundle has been loaded, or one has but no run has been started.
+** DONE Protect dangerous API calls
+Normal users (i.e., participants) shouldn't be able to make global API calls, generally. However, template loading recently became a global command.
+The current global API commands are:
+- soundcheck: just compares user input to the soundcheck word
+- load_template: renders the specified template, with variables set
+- dboard_init: returns global variables, status of all insts, and run info
+- get_bundles: returns list of installed bundles
+- get_runs: returns list of runs for current bundle
+- start_new_run
+- delete_id_mappings
+- load_exper
+- reload_exper
+UPDATE: The dashboard now simply uses its authn code as its socketio namespace, making all the API commands it defines secure. I moved the soundcheck command into experiment.py (where it belongs), and added load_template to both experiment.py and the dashboard.
+** DONE Dboard is not getting updated when new insts are created
+Probably need to emit on the correct namespace.
+** DONE Can we upload a bundle that replaces the currently-running one?
+** TODO Maintain task state across page reload?
+This would go beyond the tool-mode feature to read a stored response, allowing the task to set its state to reflect the response. This would allow for saving arbitrary task state.
+** DONE Reloading tool-mode bundles
+Currently doesn't work bc Tool instances don't have a terminate() method, nor do they have any concept of "ending".
+** DONE Dashboard separators don't persist across page reload
+** TODO Index route
+This used to be defined in BaseExper, and the experiment class was referenced as 'cls'. 'cls' here was a reference to the class object loaded from the first bundle loaded. Loading new bundles or reloading a loaded bundle wouldn't call _add_routes() again. So, referencing, e.g., cls.running, would refer to the value in the first-loaded class, which wouldn't match the state for the newly-loaded class. Not to mention that we'd be creating instances of the original class!
+Also, if we only call _add_routes() once, we can't set up new static file routes for bundles with different IDs! Not to mention that without any way to delete routes, we'd essentially have a memory leak.
+Solution: moved the route definition into the server, which is the more logical place, and removed the bundle ID from the bundle static URL.
+** TODO Terminated insts after bundle reload
+If an inst was terminated mid-experiment, they can still reload and see the task they were on.
+** DONE Bundles not actually getting reloaded
+Pretty sure python caches imports, so I may need to remove the imported module from the cache before re-importing it.
+UPDATE: The way I'm doing things now may not be entirely proper, but it works.
+** DONE Trap bundle load errors
+It would be lovely if, when attempting to load a bundle throws an exception, we could get a dialog with a traceback.
+** TODO Bundle version numbers
+Bundles ought to have some sort of version number, or at least a hash that can distinguish different versions of the same bundle. Would be nice to show this on the dashboard. This is relevant to the whole git commits idea.
+** DONE Old bundle module remnants
+When loading a new bundle, it's possible the previous module may hang around somewhere. Previously, the loaded package always had the name 'src'. I would assign it so sys.modules, but importlib.import_module() (called in, e.g., profile_mod()) wanted to load from the old package anyway. Now, the bundle package always has the name of the bundle, which at least prevents issues with loading different packages in succession, but 1) I'm not currently deleting the old package from sys.modules, so there's at least 1 leak, and 2) some subtle issue could remain when reloading.
+UPDATE:
+Still ran into a bug going from chart-gallery to CM2. Even reloading a bundle shows this bug!
+UPDATE:
+Maybe got this licked. When a bundle package is loaded, we make a note of all modules inside of it. Then, they get removed from sys.modules if we reload or load another bundle. Seems to be working. There could still potentially be issues with sub-modules, since this fix doesn't take those into account.
+UPDATE:
+Okay, still another issue when moving between different bundles...
+Loaded chart-gallery after CM2, and if I don't start a run, I get a blank page (i.e., just a gray box where it should give me 'nothing to see here').
+UPDATE: Just a template issue.
+** TODO Cached resources when switching bundles
+Different bundles may serve up different resources (e.g., stylesheets) with the same name, but very different contents. If these get cached, we can have problems.
+** TODO Dashboard should scroll new events onscreen
+** TODO Event separators need timestamps too (on the dashboard)
+** TODO Module loading needs to take potential sub-modules into account
+** TODO Delete profiles button
+** DONE Catch and show errors when starting a new run
+** TODO Rework adding tasks
+The first task (self.task) currently must be a Task instance, and can't be a TaskDesc.
+** DONE Restart monitor thread when loading bundles
+NB: For the record, the python-engineio eventlet driver imports a Thread class from the eventlet.green.threading package, which is why starting the monitor thread returns a 'threading.Thread' object (which seems to mimic the stdlib API). In fact, looking at the eventlet source, it is exactly that. So no worries! We're green!
+
+NB: The monitor thread is left running across bundle reloads.
+** DONE Handle runtime errors
+** TODO Dashboard events after bundle unload
+What to do with dashboard events that refer to instances from unloaded bundles?
+Any 'inst' events will have a data field referencing what is essentially a broken instance (now that its class has been unloaded). Weak references?
+UPDATE:
+Am using weak refs now, and GCing after removing all old instances, but the old insts seem to remain alive. I assume they're referenced from socketio or something. Unfortunately, it doesn't look like there's any convenient way to remove socketio event handlers. Probably the best way to deal with this is to make the 'call_api' handler global, and have it accept the sid of the inst as an argument.
+** TODO Ask before loading a new bundle that stops a run
+** DONE Old bundle remnants
+After loading a new bundle, I was able to hit the URL and retrieve an instance from the previous bundle! Even though experclass had been re-assigned to!
+The answer, of course, is that 'instances' is an attribute of BaseExper, not the newly-loaded subclass. This actually applies to a number of class attributes ...
+** TODO Reloading a bundle is not always a useful operation
+It only is if the bundle can be modified without being re-uploaded. So it's really basically a debug tool.
+** DONE CREATE THE BUNDLES DIR
+** DONE Security
+The flask-socketio server (or flask itself) seems to remove '..' from incoming request paths, so E doesn't need to. Still necessary for API calls, though.
+** TODO Large uploads redux
+CM2 rollup was leaving old versions of output files in the static/js directory. They'd piled up to about 35 MB, which PL's server barfed on when I tried to upload. Getting rid of the old files reduced the size to under 500K, which was no problem. Something to be aware of, though, bc experiments with large media files could prove problematic.
+** TODO Download event log
+Might be handy to be able to download the event log directly from the dashboard.
+** TODO Better logging
+Maybe a better format that clearly lists the event first.
+Also, when someone timed out, log what task they were on.
+** TODO Ppt arrival
+Just because you accept the task on Prolific doesn't mean you get assigned an E profile right away. In fact, that doesn't happen until permission is given. Is it possible for a ppt to be unable to receive a profile?
+
+Prolific says:
+  Data collection for your study will continue until it has reached this maximum number of complete submissions. You can only ever have this number of submissions active, awaiting review or approved at any one time, but returned, timed out, and rejected submissions are excluded from this total.
+
+- Does a ppt become "active" as soon as they sign up to take part? It does sound like it.
+- Okay, apparently ppts do have a 'Reserved' status when they've signed up but not started, which is distinct from 'Active' status. Do 'Reserved' ppts count as part of the total?
+** TODO Don't update dboard dom for items that haven't changed
+It clears mouse selection (which may happen if anything gets changed, not sure).
+** DONE Tools don't use ToolAPI (just API), apparently
+Well, it didn't work when I loaded CM-R in tool mode after CM2 in tool mode, but when I then repeated the process, it worked...
+Okay, on restarting E and loading CM-R clean, same problem.
+Ah, tool mode gets enabled *after* the bundle has been loaded, and the experclass created. e.Experiment doesn't get set to tool.Tool until tool mode gets enabled. So the experclass doesn't inherit from it.
+** DONE Crazy dboard task numbers
+Watching an active task on the dashboard, and the task number is jumping around, not increasing in order. It may be that what's happening is that only the very last row is getting updated as ppts advance, so hopefully this is just a dashboard issue.
+UPDATE: Weakrefs broke things. Static typing would've caught this...
+** TODO The usual 'pop from empty list'
+Traceback (most recent call last):
+  File "/var/www/fizz.studio/survey/EXPERt/expert/experiment.py", line 182, in sio_call
+    val = f(*args)
+  File "/var/www/fizz.studio/survey/EXPERt/expert/experiment.py", line 92, in next_page
+    self._inst._next_task(resp)
+  File "/var/www/fizz.studio/survey/EXPERt/expert/exper.py", line 154, in _next_task
+    self.task = self.task.next_task(resp)
+  File "/var/www/fizz.studio/survey/EXPERt/expert/tasks.py", line 152, in next_task
+    self.inst.assign_profile()
+  File "/var/www/fizz.studio/survey/EXPERt/expert/experiment.py", line 476, in assign_profile
+    self.profile = self.profiles.pop(0)
+IndexError: pop from empty list
+Reported by PID 607eafaf008af56a5a3ba462.
+** DONE A Prolific ppt returning a study does NOT immediately free the profile
+It has to time out first. This allows other people to show up with potentially no profiles available!
+I'm going to add a small button, visible on every task screen, that will allow ppts to immediately return their survey and end their participation. This only affects the E side of things; they still have to formally do a return on the Prolific side.
+** DONE Dashboard number completed is insane garbage
+Currently reads 16312 for a study with 25 ppts!
+I think this was due to continuing to update the dashboard even for non-active insts, and incrementing the completed counter on every message.
+** DONE Even downloading results is broken
+Apparently, I'd renamed the 'tstamp' field to 'time', but neglected to change it when collecting responses to download.
+** DONE Coalesce dashboard inst update events
+** TODO Recent bundle(s) button/menu on dashboard
+** TODO Downloading extra files
+Bundles may well write other files of interest aside from the results. It would be nice to be able to specify and download them.
+** TODO After profiles get rebuilt
+Yes, the directory gets removed and they get recreated. But the bundle doesn't get reloaded, which means, for e.g., CM2, even though chart_data.json got recreated, it doesn't get re-read, and experclass.charts doesn't get recreated.
+** TODO Potentially missed dboard events
+Say we load the dboard and are running an experiment, then put the laptop to sleep. When the laptop is opened again, will the dboard receive any missed events? For this to happen, they'd have to get queued on the server, I suppose. Can we just ask for updates on socket reconnect? Or maybe Window.offline/online events?
+** TODO Multiple dboard instances
+For that matter, what about multiple dboard instances (i.e., in different browsers)? They'd all try to connect to the server on the same namespace. The server only has one socket instance, though.
+UPDATE: It does seem to work fine automatically.
+** TODO Client-side error handling for bundle uploads
+E.g., FileReader and XHR errors, etc.
+** TODO Have the bundles dialog say No Bundles Available if there aren't any
+** TODO Dboard number completed indicator seems broken
+Or at least, isn't updating automatically.
+** TODO Simultaneous user testing script
+Can we simulate users outside of the browser?
+** TODO Change elapsed time display to mm:ss
+** TODO Display average time taken during a run
+Could be shown somewhere on the dboard during the run, or on the divider at the end, or in a summary popup available by clicking the divider ...
+** TODO x
+Can we manually reactivate/resurrect someone who's timed out? It seems feasible...
+CM2:
+  31 instances
+  7 time-outs (only 6 assigned profiles)
+  -> 24 completions
+  Prolific only recorded 24 completions, though.
+  Prolific recorded a completion for PID 56fb (start=16:59, elapsed=22:07) that doesn't seem to correspond to anything on the dashboard. Likewise, E has SID 6b23 (start=17:02, elapsed=19.8), which doesn't quite match.
+
+  SID 9d50 (PID 5dcb, I think) timed out early on, but their task index was displayed as 53, one greater than the maximum possible.
+
+  Aha! Profile group0/Blrpkx (start=16:29) timed out on task 3, but the profile was never re-used. The profile was originally used by SID cf15. Weirdly, no record on Prolific matches this start time. At 16:45:56, the profile should've become the next available, and been assigned to whoever arrived immediately after. This doesn't appear to have happened, though.
+  Hypothesis: they timed out on the permission screen, maybe hit next, and were assigned a profile at that point because they didn't decline consent. UPDATE: Looks like. tasks.Consent.next_task() doesn't check whether the inst has timed out, just whether consent was given.
+
+  Weirdly, even though the dashboard originally listed 7 timeouts, 6 of which had received profiles, there are only 4 in the aggregate response file.
+
+  All profiles:
+  Blrpkx  DSZdVG  KSQpyc  NyZIUn  aMCuAU
+  CfWaYx  OyZLIA  UIYQxc  fMwAda  gYUUWn
+  JEwDmC  KUEMAv  WwEtix  uVFdwn  xlmBVQ
+  MOfAXZ  OQSyRc  OrbIUM  gGdwwQ  hUqTQt
+  ACnXjo  DJolOz  VAOIpz  VURbQh  eJAlUZ
+  Results profiles:
+          DSZdVG  KSQpyc  NyZIUn  aMCuAU
+  CfWaYx  OyZLIA  UIYQxc  fMwAda  gYUUWn
+  JEwDmC  KUEMAv  WwEtix  uVFdwn  xlmBVQ
+  MOfAXZ  OQSyRc  OrbIUM  gGdwwQ  hUqTQt
+  ACnXjo  DJolOz  VAOIpz  VURbQh  eJAlUZ
+  "UIYQxc-timeout"
+  "WwEtix-timeout"
+  "JEwDmC-timeout"
+  "OrbIUM-timeout"
+** DONE Record profile in aggregate response file
+** TODO Record timed-out and returned task 'results'
+The aggregate file does at least currently have ...-timeout in the profile field.
+** TODO Dashboard 'download events' button
+** TODO Timestamped profile sets
+Which get linked to runs.
+
+* Deployment checklist
+EXPERt
+- Have all tasks (even built-ins) been tested using the very latest code base?
+- Has testing been performed with multiple simultaneous users?
+- Has the server been updated with the latest version?
+Bundle
+- Is all expected response data present in the output files?
+- Are any timeouts set appropriately?
+- Does the 'Return to Prolific' button show up?
+- Has the Prolific URL been updated?
+- Have all necessary 'build' commands been run?
+- Is the bundle source configured to run all desired tasks?
+- Has the latest source been uploaded?
+- Have the profiles been rebuilt if necessary?

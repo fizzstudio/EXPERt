@@ -2,7 +2,8 @@
 import { elts } from '{{ exp_js }}/util.js';
 import { Task } from '{{ exp_js }}/task.js';
 
-const dom = elts('consent-agree-box', 'radio1', 'radio2');
+const dom = elts(
+    'exp-consent-agree-box', 'exp-consent-radio1', 'exp-consent-radio2');
 
 class ConsentTask extends Task {
 
@@ -10,13 +11,13 @@ class ConsentTask extends Task {
         await super.reset();
         this.disableNext();
 
-        this.guide(dom['consent-agree-box']);
+        this.guide(dom['exp-consent-agree-box']);
 
-        dom['radio1'].addEventListener('click', () => {
+        dom['exp-consent-radio1'].addEventListener('click', () => {
             this.setResponse('consent_given');
             this.enableNext();
         });
-        dom['radio2'].addEventListener('click', () => {
+        dom['exp-consent-radio2'].addEventListener('click', () => {
             this.setResponse('consent_declined');
             this.enableNext();
         });
