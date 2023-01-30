@@ -190,43 +190,45 @@ body {
     @extend #exp-task;
     align-items: center;
     //background: white;
-    &-controls {
+    #controls {
         display: flex;
         flex-direction: column;
         align-items: center;
     }
-    &-player {
-        width: 10rem;
+    #play-btn {
+        //width: 10rem;
+        margin: 0.5rem;
         //margin-bottom: 1rem;
     }
-    &-response-wrapper {
+    #response-wrapper {
         display: flex;
         flex-direction: column;
         align-items: center;
-        background: globals.$dark-gray;
-        color: white;
+        background: white;
+        color: black;
+        border: solid 1px black;
         padding: 0.5rem;
         margin-top: 1rem;
     }
-    &-input {
+    #response-input-wrapper {
         display: flex;
         justify-content: center;
         flex-wrap: wrap;
         padding: 0.5rem;
     }
-    &-prompt {
+    #response-prompt {
         flex: auto;
         text-align: center;
         padding: 0 0.5rem;
     }
-    &-submit-btn-wrapper { padding: 0.5rem; }
-    &-correct-msg {
+    #submit-btn-wrapper { padding: 0.5rem; }
+    #correct-msg {
         display: none;
         background: globals.$bright-green;
         color: black;
         padding: 0.5rem;
     }
-    &-format-error {
+    #format-error {
         display: none;
         background: red;
         color: white;

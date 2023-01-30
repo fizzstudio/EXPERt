@@ -1,69 +1,106 @@
 
-import { FSA } from '{{ exp_js }}/task.js'
-import { elt } from '{{ exp_js }}/util.js'
+import { Task, FSA } from '{{ exp_js }}/task.js';
+import { elts } from '{{ exp_js }}/util.js';
 
-let player = elt('soundcheck-player')
 
-let responseWrapper = elt('soundcheck-response-wrapper')
-let submitButton = elt('soundcheck-submit-btn')
-let responseField = elt('soundcheck-response')
-let correctMsg = elt('soundcheck-correct-msg')
+const dom = elts(
+    'play-btn', 'player-wrapper',
+    'response-wrapper',
+    'submit-btn', 'response-input',
+    'correct-msg',
+    'format-error', 'controls'
+);
 
-// global socket
-const socket = io()
-socket.on('connect', () => {
-    console.log("socket connected")
-})
 
-class MyFSA extends FSA {
-    q1() {
-        this.task.guide(responseWrapper)
-        let submitHandler = () => {
-            let enteredText = responseField.value
-            socket.emit('soundcheck', enteredText, ok => {
-                if (ok) {
-                    this.event('response_correct')
-                } else {
-                    // clear text field
-                    responseField.value = ''
-                    alert(
-                        'That did not match the audio clip. Please try again.')
-                }
-            })
-        }
-        submitButton.disabled = false
-        submitButton.onclick = submitHandler
-        responseField.disabled = false
-        responseField.onkeydown = async (e) => {
-            if (e.code === 'Enter')
-                await submitHandler()
-        }
-    }
-    q2() {
-        this.task.enableNext()
-        correctMsg.style.display = 'block'
-        submitButton.disabled = true
-        responseField.disabled = true
-    }
-}
+class States {
 
-export function initTask(task) {
-    task.disableNext()
-
-    if (player.canPlayType('audio/mp3')) {
-        let playerWrapper = elt('soundcheck-player-wrapper')
-        task.guide(playerWrapper)
-        let fsa = new MyFSA(task, {
-            q0: {play_clicked: 'q1'},
+    constructor(task) {
+        this.task = task;
+        this.transits = {
+            q0: {sound_ended: 'q1'},
             q1: {response_correct: 'q2'}
-        })
-        player.onended = () => {
-            fsa.event('play_clicked')
-        }
-    } else {
-        let formatError = elt('soundcheck-format-error')
-        let controlsWrapper = elt('soundcheck-controls')
-        controlsWrapper.style.display = 'none'
-        formatError.style.display = 'block'
-     }
+        };
+    }
+
+    q0() {
+        const playerWrapper = dom['player-wrapper'];
+        this.task.guide(playerWrapper);
+    }
+
+    q1() {
+        this.task.disableNext();
+        this.task.guide(dom['response-wrapper']);
+        const submitHandler = async () => {
+            const enteredText = dom['response-input'].value;
+            const ok = await this.task.api('soundcheck', enteredText);
+            if (ok) {
+                this.fsa.event('response_correct');
+            } else {
+                // clear text field
+                dom['response-input'].value = '';
+                alert(
+                    'That did not match the audio clip. Please try again.');
+            }
+        };
+        dom['submit-btn'].disabled = false;
+        dom['submit-btn'].addEventListener('click', submitHandler);
+        dom['response-input'].disabled = false;
+        dom['response-input'].focus();
+        dom['response-input'].addEventListener('keydown', async e => {
+            if (e.code === 'Enter') {
+                await submitHandler();
+            }
+        });
+    }
+
+    q2() {
+        dom['play-btn'].disabled = true;
+        this.task.enableNext();
+        dom['correct-msg'].style.display = 'block';
+        dom['submit-btn'].disabled = true;
+        dom['response-input'].disabled = true;
+    }
+
 }
+
+class Soundcheck extends Task {
+
+    async reset() {
+        await super.reset();
+
+        //const player = dom['soundcheck-player'];
+        const player = this.initPlayer(
+            () => this.fsa.event('sound_ended'));
+        if (player) {
+            dom['play-btn'].addEventListener('click', () => player.play());
+            const states = new States(this);
+            this.fsa = new FSA(states);
+            this.fsa.enter('q0');
+        } else {
+            dom['soundcheck-controls'].style.display = 'none';
+            dom['soundcheck-format-error'].style.display = 'block';
+        }
+    }
+
+    initPlayer(onended) {
+        //const player = this.loadSound(sound);
+        const player = new Audio(
+            `{{ exp_audio }}/_soundcheck.mp3`);
+        if (player.canPlayType('audio/mp3')) {
+            player.addEventListener('play', () => {
+                dom['play-btn'].disabled = true;
+            });
+            player.addEventListener('ended', () => {
+                dom['play-btn'].disabled = false;
+                if (onended) {
+                    onended();
+                }
+            });
+            return player;
+        } else {
+            return null;
+        }
+    }
+}
+
+export { Soundcheck as taskClass };

@@ -24,6 +24,16 @@ export class Task extends Controller {
         elt('exp-progbar').classList.remove('exp-hidden');
         {% endif %}
 
+        document.addEventListener('keydown', async ev => {
+            if (ev.code === 'Enter' && !this.nextBtn.disabled) {
+                this.nextBtn.click();
+                // Don't allow any other focused element to
+                // do anything
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+        }, true);
+
         this.nextBtn.addEventListener('click', async () => {
             if (this._nextHook) {
                 await this._nextHook();

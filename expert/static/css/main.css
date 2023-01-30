@@ -192,8 +192,9 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: #767676;
-  color: white;
+  background: white;
+  color: black;
+  border: solid 1px black;
   padding: 0.5rem;
   margin-top: 1rem;
 }
