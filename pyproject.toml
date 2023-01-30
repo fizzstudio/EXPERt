@@ -1,15 +1,15 @@
 [project]
 name = "EXPERt"
-version = "0.10.0"
+version = "0.11.0"
 description = "Application for running browser-based scientific experiments"
 authors = [
     {name = "Josh Fennell", email = "josh@jfnl.org"},
 ]
 license = "MIT"
 dependencies = [
-    "flask>=2.0.3,<2.1.0",
-    "flask-socketio>=5.1.1,<5.2.0",
-    "eventlet>=0.33.0,<0.34.0",
+    "flask>=2.2.2,<2.3.0",
+    "flask-socketio>=5.3.2,<5.4.0",
+    "eventlet>=0.33.3,<0.34.0",
     "strictyaml>=1.6.1,<1.7.0",
     "tomli>=2.0.1",
 ]
