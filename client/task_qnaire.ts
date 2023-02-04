@@ -1,10 +1,11 @@
 
-import { Task } from '{{ exp_js }}/task.js';
+import { Task } from '@fizz/expert-client';
 
 class QnaireTask extends Task {
+    ansValid: Map<any, any>;
 
-    constructor() {
-        super();
+    constructor(domVars: {[name: string]: string}) {
+        super(domVars);
 
         // Whether mandatory or to-be-validated answers are in fact
         // provided or valid
@@ -12,14 +13,15 @@ class QnaireTask extends Task {
 
         for (const item of this.content.querySelectorAll('.exp-qnaire-item')) {
             //if (item.dataset['optional'] === 'False') {
-            const mandatory = item.dataset['optional'] === 'False';
+            const dataset = (item as HTMLElement).dataset;
+            const mandatory = dataset['optional'] === 'False';
             if (mandatory) {
                 this.ansValid.set(item.id, false);
             }
             // set handlers to enable/disable the next button
-            if (item.dataset['type'] === 'radio') {
+            if (dataset['type'] === 'radio') {
                 for (const opt of item.querySelectorAll('.exp-qnaire-opt')) {
-                    const input = opt.querySelector('input');
+                    const input = opt.querySelector('input')!;
                     /*
                        this is necessary because the browser may
                        restore values on page reload
@@ -34,14 +36,14 @@ class QnaireTask extends Task {
                         this.checkAnsValid();
                     });
                 }
-            } else if (item.dataset['type'] === 'checkbox') {
+            } else if (dataset['type'] === 'checkbox') {
                 /*
                    NB: a mandatory checkbox question requires that
                    at least one option be checked
                  */
                 let numChecked = 0;
                 for (const opt of item.querySelectorAll('.exp-qnaire-opt')) {
-                    const input = opt.querySelector('input');
+                    const input = opt.querySelector('input')!;
                     if (mandatory && input.checked) {
                         this.ansValid.set(item.id, true);
                         numChecked += 1;
@@ -55,11 +57,11 @@ class QnaireTask extends Task {
                         this.checkAnsValid();
                     });
                 }
-            } else if (['text', 'shorttext'].includes(item.dataset['type'])) {
+            } else if (['text', 'shorttext'].includes(dataset['type']!)) {
                 const elem = ({
                     text: 'textarea',
-                    shorttext: 'input'})[item.dataset['type']];
-                const input = item.querySelector(elem);
+                    shorttext: 'input'})[dataset['type']!]!;
+                const input = item.querySelector(elem) as HTMLInputElement | HTMLTextAreaElement;
                 const validator = input.dataset['validate'];
                 const validatorRegex = validator ? new RegExp(validator) : null;
                 this.ansValid.set(
@@ -72,8 +74,7 @@ class QnaireTask extends Task {
                     this.checkAnsValid();
                 });
             } else {
-                console.log('unknown question type: ' +
-                            item.dataset['type']);
+                console.log('unknown question type: ' + dataset['type']);
             }
             //}
         }
@@ -82,13 +83,13 @@ class QnaireTask extends Task {
         this.checkAnsValid();
     }
 
-    _validateText(value, re, mand) {
+    _validateText(value: string, re: RegExp | null, mand: boolean) {
         let valid = true;
         if (mand) {
             valid = Boolean(value);
         }
         if (re) {
-            valid &= re.test(value);
+            valid &&= re.test(value);
         }
         return valid;
     }
@@ -109,14 +110,15 @@ class QnaireTask extends Task {
     }
 
     collectAnswers() {
-        const answers = [];
+        const answers: any[] = [];
         for (const item of this.content.querySelectorAll('.exp-qnaire-item')) {
-            const itemType = item.dataset['type'];
+            const dataset = (item as HTMLElement).dataset;
+            const itemType = dataset['type']!;
             if (itemType === 'radio') {
                 const opts = item.querySelectorAll('.exp-qnaire-opt');
                 let selected = -1;
                 for (let i = 0; i < opts.length; i++) {
-                    const input = opts[i].querySelector('input');
+                    const input = opts[i].querySelector('input')!;
                     if (input.checked) {
                         selected = i;
                         break;
@@ -125,9 +127,9 @@ class QnaireTask extends Task {
                 answers.push(selected);
             } else if (itemType === 'checkbox') {
                 const opts = item.querySelectorAll('.exp-qnaire-opt');
-                const checked = [];
+                const checked: number[] = [];
                 for (let i = 0; i < opts.length; i++) {
-                    const input = opts[i].querySelector('input');
+                    const input = opts[i].querySelector('input')!;
                     if (input.checked) {
                         checked.push(i);
                     }
@@ -136,8 +138,8 @@ class QnaireTask extends Task {
             } else if (['text', 'shorttext'].includes(itemType)) {
                 const elem = ({
                     text: 'textarea',
-                    shorttext: 'input'})[itemType];
-                const input = item.querySelector(elem);
+                    shorttext: 'input'})[itemType]!;
+                const input = item.querySelector(elem) as HTMLInputElement | HTMLTextAreaElement;
                 answers.push(input.value);
             }
         }

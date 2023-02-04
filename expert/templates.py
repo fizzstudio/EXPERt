@@ -43,10 +43,10 @@ def set_server_variables(srv):
         'exp_version': e.ver,
         'exp_url_prefix': pfx
     }
-    variables['exp_audio'] = f'/{pfx}/audio'
-    variables['exp_img'] = f'/{pfx}/img'
-    variables['exp_css'] = f'/{pfx}/css'
-    variables['exp_js'] = f'/{pfx}/js'
+    variables['exp_audio'] = f'/expert/audio'
+    variables['exp_img'] = f'/expert/img'
+    variables['exp_css'] = f'/expert/css'
+    variables['exp_js'] = f'/expert/js'
 
 def set_bundle_variables(experclass):
     pfx = e.srv.cfg['url_prefix']
@@ -80,4 +80,5 @@ def render(tplt, other_vars={}):
         raise BadTemplateNameError(tplt)
     all_vars = variables.copy()
     all_vars.update(other_vars)
+    all_vars['exp_vars'] = all_vars.copy()
     return render_template(tplt, **all_vars)

@@ -9,8 +9,10 @@ __pycache__/
 
 # Directories
 ## This is the build process will output code.
+build/
 dist/
 public/script/
+expert/static/js/
 
 ## No external packages
 node_modules/

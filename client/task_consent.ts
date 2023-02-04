@@ -1,6 +1,5 @@
 
-import { elts } from '{{ exp_js }}/util.js';
-import { Task } from '{{ exp_js }}/task.js';
+import { elts, Task } from '@fizz/expert-client';
 
 const dom = elts(
     'exp-consent-agree-box', 'exp-consent-radio1', 'exp-consent-radio2');
@@ -13,11 +12,11 @@ class ConsentTask extends Task {
 
         this.guide(dom['exp-consent-agree-box']);
 
-        dom['exp-consent-radio1'].addEventListener('click', () => {
+        dom['exp-consent-radio1']!.addEventListener('click', () => {
             this.setResponse('consent_given');
             this.enableNext();
         });
-        dom['exp-consent-radio2'].addEventListener('click', () => {
+        dom['exp-consent-radio2']!.addEventListener('click', () => {
             this.setResponse('consent_declined');
             this.enableNext();
         });

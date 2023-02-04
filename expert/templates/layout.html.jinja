@@ -41,6 +41,14 @@
                 </div>
             </div>
         </div>
+        <div id="exp-vars" class="exp-hidden"
+        {% for k, v in exp_vars.items() %}
+            data-{{ k }}="{{ v }}"
+        {% endfor %}
+        {% if task_script is defined %}
+            data-task_script="{{ task_script }}"
+        {% endif %}
+        ></div>
     </body>
 
 </html>

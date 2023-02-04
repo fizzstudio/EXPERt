@@ -1,5 +1,29 @@
 {
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fizzstudio/EXPERt.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fizzstudio/EXPERt/issues"
+  },
+  "homepage": "https://github.com/fizzstudio/EXPERt#readme",
+  "type":"module",
+  "scripts": {
+    "build": "tsc && rm -f expert/static/js/* && rollup -c",
+    "dev": "tsc && rollup -c -w",
+    "test": "ava",
+    "pretest": "npm run build",
+    "doc": "rimraf ./docs/* && jsdoc -c .jsdoc/.jsdoc.html.json && jsdoc -c .jsdoc/.jsdoc.md.json"
+  },
   "dependencies": {
-    "sass": "^1.49.9"
+    "socket.io-client": "^4.5.4",
+    "@fizz/expert-client": "^0.3.3"
+  },
+  "devDependencies": {
+    "typescript":"^4.9.5",
+    "sass": "^1.58.0",
+    "rollup": "3.12.1",
+    "@rollup/plugin-node-resolve": "15.0.1",
+    "@rollup/plugin-eslint": "9.0.3"
   }
 }
