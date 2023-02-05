@@ -474,10 +474,13 @@ class BaseExper:
             return []
 
     def status(self):
+        elapsed = self._elapsed_time()
+        elapsed_min = int(elapsed//60)
+        elapsed_sec = int(elapsed) % 60
         return {
             'profile': str(self.profile) if self.profile else 'unassigned',
             'task': self.task_cursor,
-            'elapsed': f'{self._elapsed_time()/60:.1f}'
+            'elapsed': f'{elapsed_min:02}:{elapsed_sec:02}'
         }
 
     def assign_profile(self):

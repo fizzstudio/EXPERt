@@ -14,6 +14,8 @@ dist/
 public/script/
 expert/static/js/
 
+*.map
+
 ## No external packages
 node_modules/
 __pypackages__

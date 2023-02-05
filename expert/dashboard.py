@@ -443,7 +443,7 @@ class Dashboard(view.View):
         status = inst.status()
         y, mo, d, h, mi, s = inst.start_timestamp.split('.')
         status.update({
-            'sid': inst.sid, 'ip': inst.clientip,
+            'sid': inst.sid[:8], 'ip': inst.clientip,
             'time': f'{mo}/{d}/{y} {h}:{mi}:{s}',
             'state': inst.state.name
         })

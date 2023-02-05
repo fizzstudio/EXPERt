@@ -106,7 +106,7 @@ body {
 }
 #exp-chin #exp-nav-controls #exp-task-cursor {
   margin: 0 0.5rem;
-  background: #ffff7f;
+  background: rgb(255, 255, 127);
   width: 4rem;
   text-align: center;
 }
@@ -180,15 +180,15 @@ body {
 #exp-soundcheck {
   align-items: center;
 }
-#exp-soundcheck-controls {
+#exp-soundcheck #controls {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-#exp-soundcheck-player {
-  width: 10rem;
+#exp-soundcheck #play-btn {
+  margin: 0.5rem;
 }
-#exp-soundcheck-response-wrapper {
+#exp-soundcheck #response-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -198,27 +198,27 @@ body {
   padding: 0.5rem;
   margin-top: 1rem;
 }
-#exp-soundcheck-input {
+#exp-soundcheck #response-input-wrapper {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
   padding: 0.5rem;
 }
-#exp-soundcheck-prompt {
+#exp-soundcheck #response-prompt {
   flex: auto;
   text-align: center;
   padding: 0 0.5rem;
 }
-#exp-soundcheck-submit-btn-wrapper {
+#exp-soundcheck #submit-btn-wrapper {
   padding: 0.5rem;
 }
-#exp-soundcheck-correct-msg {
+#exp-soundcheck #correct-msg {
   display: none;
   background: #77ff77;
   color: black;
   padding: 0.5rem;
 }
-#exp-soundcheck-format-error {
+#exp-soundcheck #format-error {
   display: none;
   background: red;
   color: white;

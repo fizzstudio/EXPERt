@@ -22,7 +22,7 @@ body {
 }
 #dboard #inst-list-headers {
   display: grid;
-  grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
+  grid-template-columns: 3rem 1fr 2fr 2fr 2fr 4rem 2fr 6rem;
   text-align: center;
   font-weight: bold;
 }
@@ -40,7 +40,7 @@ body {
 #dboard #inst-list #inst-data {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 3rem 2fr 2fr 2fr 2fr 4rem 2fr 6rem;
+  grid-template-columns: 3rem 1fr 2fr 2fr 2fr 4rem 2fr 6rem;
   grid-auto-rows: min-content;
   gap: 0.25rem;
   padding: 0.25rem;

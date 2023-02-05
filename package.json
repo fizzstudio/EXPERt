@@ -10,6 +10,7 @@
   "type":"module",
   "scripts": {
     "build": "tsc && rm -f expert/static/js/* && rollup -c",
+    "sass": "sass sass/main.scss expert/static/css/main.css && sass sass/dboard.scss expert/static/css/dboard.css",
     "dev": "tsc && rollup -c -w",
     "test": "ava",
     "pretest": "npm run build",

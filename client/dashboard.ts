@@ -426,4 +426,6 @@ export class Dashboard extends Controller {
     dboard = await new Dashboard().init('96Q28aD7JgZ2np2-M7tQQQ');
 })();*/
 
-const dboard = await new Dashboard().init('96Q28aD7JgZ2np2-M7tQQQ');
+import cfg from '../expert_cfg.json';
+
+const dboard = await new Dashboard().init(cfg.dashboard_code);
