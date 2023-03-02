@@ -46,10 +46,10 @@ def set_server_variables(srv: server.Server):
         'exp_version': e.ver,
         'exp_url_prefix': pfx
     }
-    variables['exp_audio'] = f'/expert/audio'
-    variables['exp_img'] = f'/expert/img'
-    variables['exp_css'] = f'/expert/css'
-    variables['exp_js'] = f'/expert/js'
+    variables['exp_audio'] = f'/{pfx}/audio'
+    variables['exp_img'] = f'/{pfx}/img'
+    variables['exp_css'] = f'/{pfx}/css'
+    variables['exp_js'] = f'/{pfx}/js'
 
 def set_bundle_variables(experclass: Type[e.Experiment]):
     pfx = e.srv.cfg['url_prefix']

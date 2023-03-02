@@ -164,7 +164,7 @@ class Server:
     def _add_routes(self):
         first_request_setup_complete = False
 
-        @e.app.route(f'/socket.io-client')
+        @e.app.route(f'/{self.cfg["url_prefix"]}/socket.io-client')
         def socketio():
             return send_from_directory(
                 e.expert_path / 'node_modules/socket.io-client/dist', 'socket.io.js')
@@ -174,7 +174,7 @@ class Server:
             return send_from_directory(
                 e.expert_path / 'node_modules/@fizz/expert-client/dist', 'index.js')
 
-        @e.app.route(f'/expert/js/<path:subpath>')
+        @e.app.route(f'/{self.cfg["url_prefix"]}/js/<path:subpath>')
         def js(subpath):
             #if '..' in subpath:
             #    return self.not_found(), 404
@@ -197,21 +197,21 @@ class Server:
                 e.expert_path / 'expert' / 'static' / 'js', subpath)
 
 
-        @e.app.route(f'/expert/audio/<path:subpath>')
+        @e.app.route(f'/{self.cfg["url_prefix"]}/audio/<path:subpath>')
         def global_audio(subpath):
             #if '..' in subpath:
             #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'audio', subpath)
 
-        @e.app.route(f'/expert/css/<path:subpath>')
+        @e.app.route(f'/{self.cfg["url_prefix"]}/css/<path:subpath>')
         def global_css(subpath):
             #if '..' in subpath:
             #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'css', subpath)
 
-        @e.app.route(f'/expert/img/<path:subpath>')
+        @e.app.route(f'/{self.cfg["url_prefix"]}/img/<path:subpath>')
         def global_img(subpath):
             #if '..' in subpath:
             #    return self.not_found(), 404

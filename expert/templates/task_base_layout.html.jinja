@@ -1,8 +1,8 @@
 {% extends "layout.html.jinja" %}
 
 {% block exp_script %}
-    <script src="/socket.io-client"></script>
-    <script src="/expert/js/task_loader.js" type="module"></script>
+    <script src="/{{ exp_url_prefix }}/socket.io-client"></script>
+    <script src="/{{ exp_url_prefix }}/js/task_loader.js" type="module"></script>
 {% endblock %}
 
 {% block exp_page_content %}
