@@ -1,12 +1,15 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Type, TYPE_CHECKING
 
 from flask import render_template
 from jinja2 import BaseLoader
 
 import expert as e
+
+if TYPE_CHECKING:
+    from . import server
 
 
 html_ext = '.html.jinja'
@@ -15,7 +18,7 @@ variables: dict[str, Any]
 
 
 class BadTemplateNameError(Exception):
-    def __init__(self, name):
+    def __init__(self, name: str):
         super().__init__(f'bad template name \'{name}\'')
 
 
@@ -34,7 +37,7 @@ class Loader(BaseLoader):
         return source, path, lambda: mtime == path.stat().st_mtime
 
 
-def set_server_variables(srv):
+def set_server_variables(srv: server.Server):
     global variables
     # All predefined vars are prefixed with 'exp_'
     # to avoid clashing with vars defined by experiments.
@@ -48,13 +51,13 @@ def set_server_variables(srv):
     variables['exp_css'] = f'/expert/css'
     variables['exp_js'] = f'/expert/js'
 
-def set_bundle_variables(experclass):
+def set_bundle_variables(experclass: Type[e.Experiment]):
     pfx = e.srv.cfg['url_prefix']
     variables['exp_tool_mode'] = e.tool_mode
     if experclass:
         variables['exp_app_name'] = e.bundle_name
         variables['exp_app_is_running'] = experclass.running
-        variables['exp_window_title'] = experclass.window_title
+        variables['exp_window_title'] = experclass.cfg['window_title']
         variables['exp_favicon'] = experclass.cfg['favicon']
         variables['exp_progbar_enabled'] = experclass.cfg['progbar_enabled']
         if e.tool_mode:
@@ -75,7 +78,7 @@ def set_bundle_variables(experclass):
     variables['exp_app_js'] = f'{variables["exp_app_static"]}/js'
 
 
-def render(tplt, other_vars={}):
+def render(tplt: str, other_vars: dict[str, Any] = {}):
     if '..' in tplt:
         raise BadTemplateNameError(tplt)
     all_vars = variables.copy()

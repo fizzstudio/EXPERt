@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "socket.io-client": "^4.5.4",
-    "@fizz/expert-client": "^0.3.3"
+    "@fizz/expert-client": "^0.3.4"
   },
   "devDependencies": {
     "typescript":"^4.9.5",

@@ -4,15 +4,17 @@ import logging
 from pathlib import Path
 from typing import Type, Optional, Union
 
-from . import server, exper, tool
+from . import exper, tool
 
+Experiment: Union[Type[exper.Exper], Type[tool.Tool]] = exper.Exper
+
+from . import server
 
 ver: str = ''
 srv: server.Server
 app: server.App
 log: logging.Logger
 
-Experiment: Union[Type[exper.Exper], Type[tool.Tool]] = exper.Exper
 
 tool_mode = False
 soundcheck_word = 'singapore'

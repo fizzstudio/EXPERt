@@ -1,4 +1,6 @@
 
+from __future__ import annotations
+
 import secrets
 import json
 import zipfile
@@ -9,7 +11,7 @@ import traceback
 import weakref
 
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, TypedDict
 
 from flask import send_file, request, make_response
 
@@ -37,7 +39,7 @@ class Event:
         self.time = ts or time.monotonic()
 
     def to_client(self):
-        d = {'tag': self.tag}
+        d: dict[str, Any] = {'tag': self.tag}
         if self.tag == 'inst':
             d['data'] = e.srv.dboard.inst_full_status(self.data()) \
                 if self.data() else {
@@ -48,6 +50,13 @@ class Event:
         else:
             d['data'] = self.data
         return d
+
+
+class RunRec(TypedDict):
+    id: str
+    num_complete: int
+    num_incomplete: int
+    has_pii: bool
 
 
 class APIBadArgumentError(Exception):
@@ -76,7 +85,7 @@ class API:
                       if bundle.is_dir() and bundle.stem[0] != '.')
 
     def get_runs(self):
-        runs = []
+        runs: list[RunRec] = []
         for run in e.experclass.runs_path.iterdir():
             if not run.is_dir() or run.stem[0] == '.':
                 continue
@@ -123,17 +132,17 @@ class API:
     #         app.logger.info(f'deleting results for run {run}')
     #         shutil.rmtree(experclass.runs_path / run)
 
-    def delete_id_mapping(self, run):
+    def delete_id_mapping(self, run: str):
         if '..' in run:
             e.log.error(f'attempt to delete run \'{run}\'')
             raise APIBadArgumentError('delete_id_mapping', run)
         e.log.info(f'deleting id mapping for run \'{run}\'')
         shutil.rmtree(e.experclass.runs_path / run / 'id-mapping')
 
-    def terminate_inst(self, sid):
-        pass
+    #def terminate_inst(self, sid):
+    #    pass
 
-    def load_bundle(self, name, tool_mode):
+    def load_bundle(self, name: str, tool_mode: bool):
         if '..' in name:
             e.log.error(f'attempt to load bundle \'{name}\'')
             raise APIBadArgumentError('load_bundle', name)
@@ -153,7 +162,7 @@ class API:
         self._dboard.update_vars()
         return {'vars': self._dboard.all_vars()}
 
-    def reload_bundle(self, tool_mode):
+    def reload_bundle(self, tool_mode: bool):
         e.log.info('*** reloading bundle ***')
         e.log.info(f'reloading in tool mode: {tool_mode}')
         try:
@@ -204,6 +213,7 @@ class Dashboard(view.View):
     _path: str
     code: str
     _url: str
+    _events: list[Event]
 
     def __init__(self, srv):
         super().__init__(template='dashboard')
@@ -340,7 +350,7 @@ class Dashboard(view.View):
 
     def _add_sio_commands(self, srv):
         @srv.socketio.on('call_api', namespace=f'/{self.code}')
-        def sio_call(cmd, *args):
+        def sio_call(cmd: str, *args):
             try:
                 f = getattr(self._api, cmd)
                 val = f(*args)
@@ -375,7 +385,7 @@ class Dashboard(view.View):
         e.experclass.stop()
         templates.variables['exp_app_is_running'] = False
 
-    def _zip_results(self, run_id, zip_name):
+    def _zip_results(self, run_id: str, zip_name: str):
         e.log.info('building zip file')
         # run_path = expert.experclass.runs_path / run_id
         root = Path(zip_name).stem
@@ -398,7 +408,7 @@ class Dashboard(view.View):
             #             str(respath),
             #             root + '/' + str(respath.relative_to(run_path)))
 
-    def _zip_profiles(self, zip_name):
+    def _zip_profiles(self, zip_name: str):
         e.log.info('building zip file')
         with zipfile.ZipFile(e.experclass.dls_path / f'{zip_name}.zip', 'w',
                              compression=zipfile.ZIP_DEFLATED,
@@ -411,7 +421,7 @@ class Dashboard(view.View):
                         continue
                     zf.write(prof, f'{zip_name}/{cond.name}/{prof.name}')
 
-    def _zip_id_mapping(self, run_id, zip_name):
+    def _zip_id_mapping(self, run_id: str, zip_name: str):
         e.log.info('building zip file')
         id_map_path = e.experclass.runs_path / run_id / 'id-mapping'
         root = Path(zip_name).stem
@@ -423,13 +433,13 @@ class Dashboard(view.View):
                     continue
                 zf.write(str(fpath), root + '/' + fpath.name)
 
-    def _download(self, dl_name):
+    def _download(self, dl_name: str):
         #if not dl_path.is_file():
         return send_file(
             e.experclass.dls_path / dl_name,
             as_attachment=True, download_name=dl_name)
 
-    def _inst_index(self, inst):
+    def _inst_index(self, inst: e.Experiment):
         i = None
         num_other = 0
         for i, ev in enumerate(self._events):
@@ -439,7 +449,7 @@ class Dashboard(view.View):
             elif ev.data() == inst:
                 return i - num_other
 
-    def inst_full_status(self, inst):
+    def inst_full_status(self, inst: e.Experiment):
         status = inst.status()
         y, mo, d, h, mi, s = inst.start_timestamp.split('.')
         status.update({
@@ -449,12 +459,12 @@ class Dashboard(view.View):
         })
         return status
 
-    def inst_created(self, inst):
+    def inst_created(self, inst: e.Experiment):
         self._events.append(Event('inst', weakref.ref(inst), inst.start_time))
         e.srv.socketio.emit('new_instance', self.inst_full_status(inst),
                             namespace=f'/{self.code}')
 
-    def inst_updated(self, inst):
+    def inst_updated(self, inst: e.Experiment):
         i = self._inst_index(inst)
         status = inst.status()
         status['state'] = inst.state.name
@@ -470,17 +480,17 @@ class Dashboard(view.View):
             [[self._inst_index(inst), inst.status()] for inst in insts],
             namespace=f'/{self.code}')
 
-    def run_complete(self, run):
+    def run_complete(self, run: str):
         self._events.append(Event('run_complete', run))
         e.srv.socketio.emit('run_complete',
                             namespace=f'/{self.code}')
 
-    def page_load_error(self, tback):
+    def page_load_error(self, tback: str):
         self._events.append(Event('page_load_error', tback))
         e.srv.socketio.emit('page_load_error', tback,
                             namespace=f'/{self.code}')
 
-    def api_error(self, tback):
+    def api_error(self, tback: str):
         self._events.append(Event('api_error', tback))
         e.srv.socketio.emit('api_error', tback,
                             namespace=f'/{self.code}')

@@ -9,7 +9,7 @@ import datetime
 import traceback
 import gc
 
-from typing import Type, Any, Optional
+from typing import Any, Type, cast
 from pathlib import Path
 
 import tomli
@@ -40,7 +40,7 @@ class App(Flask):
         self.update_jinja_loader(e.experclass)
         return self._jinja_loader
 
-    def update_jinja_loader(self, experclass):
+    def update_jinja_loader(self, experclass: Type[e.Experiment]):
         self._jinja_loader = templates.Loader(
             experclass.templates_path if experclass else None,
             super().jinja_loader)
@@ -56,7 +56,7 @@ class Server:
     socketio: SocketIO
     dboard: dashboard.Dashboard
 
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace):
         self._args = args
 
         e.app = App(__name__)
@@ -133,7 +133,7 @@ class Server:
             self.socketio.run(
                 e.app, host=self.host, port=self.port) # , log_output=True)
 
-    def _load_config(self, user_cfg_path):
+    def _load_config(self, user_cfg_path: str):
         with open(e.expert_path / 'expert_cfg.json') as f:
             cfg = json.load(f)
         if user_cfg_path:
@@ -158,8 +158,8 @@ class Server:
             e.log.info('socket disconnected')
 
         @self.socketio.on_error
-        def sio_error(e):
-            e.log.error(f'socketio error: {e}')
+        def sio_error(err):
+            e.log.error(f'socketio error: {err}')
 
     def _add_routes(self):
         first_request_setup_complete = False
@@ -299,7 +299,7 @@ class Server:
             'msg': '404 Not Found.'
         })
 
-    def load_bundle(self, path, tool_mode=False, is_reloading=False):
+    def load_bundle(self, path: str, tool_mode: bool = False, is_reloading: bool = False):
         bundle_path = Path(path).resolve(True)
 
         bundle_cfg = self._read_bundle_config(bundle_path)
@@ -324,7 +324,7 @@ class Server:
         templates.set_bundle_variables(e.experclass)
         e.app.update_jinja_loader(e.experclass)
 
-    def _bundle_mods(self, path: Path):
+    def _bundle_mods(self, path: Path) -> list[str]:
         srcpath = path / 'src'
         return [p.stem for p in srcpath.iterdir()
                 if p.suffix == '.py'
@@ -350,7 +350,7 @@ class Server:
         e.app.update_jinja_loader(None)
         gc.collect()
 
-    def _read_bundle_config(self, bundle_path):
+    def _read_bundle_config(self, bundle_path: Path) -> dict[str, Any]:
         # read default bundle config
         with open(e.expert_path / 'cfg.json') as f:
             cfg = json.load(f)
@@ -370,7 +370,7 @@ class Server:
         cfg.update(bundle_cfg)
         return cfg
 
-    def _load_bundle_src(self, path, is_reloading=False):
+    def _load_bundle_src(self, path: Path, is_reloading=False):
         """Load the bundle in the directory at 'path'.
 
         NB: The source code for the bundle must be located in
@@ -426,9 +426,9 @@ class Server:
         # NB: The presence of an existing sid with no
         # instance now simply results in a new sid+inst,
         # rather than an error.
-        return e.experclass.instances.get(session['sid'])
+        return e.experclass.instances.get(cast(str, session['sid']))
 
-    def enable_tool_mode(self, enabled):
+    def enable_tool_mode(self, enabled: bool):
         e.tool_mode = enabled
         e.log.info(f'tool mode enabled: {enabled}')
         if e.tool_mode:

@@ -14,9 +14,9 @@ import secrets
 from pathlib import Path
 from enum import Enum
 from functools import reduce
-from typing import ClassVar, Optional, Any, Type
+from typing import ClassVar, Optional, Any, Type, Union, cast
 
-from flask import session, request, make_response, send_from_directory
+from flask import session
 
 import expert as e
 from . import (
@@ -51,8 +51,10 @@ class TaskResponse:
     cond: Optional[str]
     prof: Optional[str]
     extra: dict[str, Any]
-    def __init__(self, response, task_name,
-                 ts=None, sid=None, cond=None, prof=None, **extra):
+    def __init__(self, response: Any, task_name: str,
+                 ts: Optional[str] = None, sid: Optional[str] = None, 
+                 cond: Optional[str] = None, prof: Optional[str] = None, 
+                 **extra: dict[str, Any]):
         self.response = response
         self.task_name = task_name
         self.timestamp = ts or timestamp.make_timestamp()
@@ -66,27 +68,27 @@ class TaskResponse:
 
 
 class NoSuchCondError(Exception):
-    def __init__(self, condname):
+    def __init__(self, condname: str):
         super().__init__(f'no such condition(s) "{condname}"')
 
 
 class BadOutputFormatError(Exception):
-    def __init__(self, fmt):
+    def __init__(self, fmt: str):
         super().__init__(f'unknown output format "{fmt}"')
 
 
 class API:
 
-    def __init__(self, inst):
+    def __init__(self, inst: e.Experiment):
         self._inst = inst
 
-    def soundcheck(self, resp):
+    def soundcheck(self, resp: str) -> bool:
         return resp.strip().lower() == e.soundcheck_word
 
     def init_task(self):
         return self._inst.all_vars()
 
-    def next_page(self, resp):
+    def next_page(self, resp: Any):
         if self._inst.task.next_tasks or \
            isinstance(self._inst.task, tasks.Consent):
             # if we're not here, the user was somehow able
@@ -99,13 +101,14 @@ class API:
     def get_feedback(self, resp):
         return self._inst.task.get_feedback(resp)
 
-    def load_template(self, tplt, tplt_vars={}):
+    def load_template(self, tplt: str, tplt_vars: dict[str, Any] = {}):
         return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
 
 
 class BaseExper:
 
-    cfg: ClassVar[dict]
+    cfg: ClassVar[dict[str, Any]]
+    conds: ClassVar[Optional[list[str]]]
     dir_path: ClassVar[Path]
     static_path: ClassVar[Path]
     profiles_path: ClassVar[Path]
@@ -133,10 +136,13 @@ class BaseExper:
     start_timestamp: str
     end_time: float
     task: tasks.Task
-    last_task: tasks.Task
+    last_task: Optional[tasks.Task]
     tasks_by_id: dict[int, tasks.Task]
+    state: State
+    responses: dict[int, TaskResponse]
+    variables: dict[str, Any]
 
-    def __init__(self, clientip, urlargs):
+    def __init__(self, clientip: str, urlargs):
         self.sid = secrets.token_hex(16)
         self.urlargs = urlargs
 
@@ -180,7 +186,7 @@ class BaseExper:
         self._api = self.api_class(self)
 
         @e.srv.socketio.on('call_api', namespace=f'/{self.sid}')
-        def sio_call(cmd, *args):
+        def sio_call(cmd: str, *args):
             try:
                 f = getattr(self._api, cmd)
                 val = f(*args)
@@ -196,7 +202,7 @@ class BaseExper:
             e.log.error(f'socketio error:\n{traceback.format_exc()}')
 
     @classmethod
-    def init(cls, path, is_reloading):
+    def init(cls, path: Path, is_reloading: bool):
         cls.name = cls.__qualname__.lower()
         e.log.info(f'initializing class {cls.__qualname__}')
         cls.dir_path = path
@@ -225,7 +231,7 @@ class BaseExper:
         cls._setup(is_reloading)
 
     @classmethod
-    def start(cls, mode, obj=None, conds=None):
+    def start(cls, mode: str, obj: Optional[str] = None, conds: Optional[list[str]] = None):
         if conds:
             unknown_conds = [c for c in conds
                              if c not in cls.cond_mod().conds]
@@ -271,7 +277,7 @@ class BaseExper:
         cls.running = False
 
     @classmethod
-    def _setup(cls, is_reloading):
+    def _setup(cls, is_reloading: bool):
         """Overridden by bundle class"""
         pass
 
@@ -298,6 +304,7 @@ class BaseExper:
 
         e.log.info('loading profiles')
         cls.profiles.clear()
+        assert cls.record is not None
         for cond_path in cls._cond_paths:
             condname = cond_path.name
             if cls.conds and condname not in cls.conds:
@@ -357,7 +364,7 @@ class BaseExper:
                 if inst.state == State.ACTIVE]
 
     @classmethod
-    def new_inst(cls, ip, args):
+    def new_inst(cls, ip: str, args):
         inst = cls(ip, args)
         inst._will_start()
         session['sid'] = inst.sid
@@ -367,9 +374,9 @@ class BaseExper:
         return inst
 
     @classmethod
-    def collect_responses(cls, run):
+    def collect_responses(cls, run: str):
         run_path = cls.runs_path / run
-        by_cond = {}
+        by_cond: dict[str, dict[str, list[TaskResponse]]] = {}
         for cond in run_path.iterdir():
             if cond.name == 'id-mapping' or not cond.is_dir():
                 continue
@@ -415,9 +422,9 @@ class BaseExper:
                     for s in sorted(by_cond[c].keys())], [])
 
     @classmethod
-    def write_responses(cls, resps, dest_path):
+    def write_responses(cls, resps: list[TaskResponse], dest_path: Path):
         if resps[0].sid:
-            all_sids = set(r.sid for r in resps)
+            all_sids = set(cast(str, r.sid) for r in resps)
             min_uniq_len = 0
             while len(set(sid[:(min_uniq_len := min_uniq_len + 1)]
                           for sid in all_sids)) < len(all_sids):
@@ -428,7 +435,7 @@ class BaseExper:
         with open(dest_path, 'w', newline='') as f:
             if cls.cfg['output_format'] == 'csv':
                 writer = csv.writer(f, lineterminator='\n')
-                extras = set()
+                extras: set[str] = set()
                 # collect all extra response field names
                 for r in resps:
                     for k in r.extra:
@@ -445,7 +452,7 @@ class BaseExper:
                         data = [r.sid[:min_uniq_len], r.cond, r.prof] + data
                     writer.writerow(data)
             elif cls.cfg['output_format'] == 'json':
-                output = []
+                output: list[dict[str, Any]] = []
                 for r in resps:
                     item = {'time': r.timestamp, 'task': r.task_name}
                     if r.response is not None:
@@ -537,13 +544,13 @@ class BaseExper:
             json.dump(output, f, indent=2)
 
     def _save_responses(self):
-        cond_path = self.record.run_path / str(self.profile.cond)
+        cond_path = cast(Record, self.record).run_path / str(self.profile.cond)
         resp_path = cond_path / (self.profile.subjid +
                                  resp_file_suffixes.get(self.state, ''))
         actual_resps = [self.responses[tid]
                         for tid in sorted(self.responses.keys())]
         all_resps = self.pseudo_responses + actual_resps
-        def splitter(pii_resps, resp):
+        def splitter(pii_resps, resp: TaskResponse):
             if resp.task_name in self.cfg['pii']:
                 pii_resps[0].append(resp)
             else:
@@ -563,7 +570,7 @@ class BaseExper:
         if self.profile:
             self.profiles.insert(0, self.profile)
 
-    def end(self, state):
+    def end(self, state: State):
         # called for normal completion, timeout, nonconsent, or termination
         self.end_time = time.monotonic()
         self.state = state
@@ -574,10 +581,13 @@ class BaseExper:
 
 
 class Record:
+    replicate: Union[str, None]
+    run_path: Path
+    id_mapping_path: Path
 
-    def __init__(self, experclass, fromsaved=None):
+    def __init__(self, experclass: Type[e.Experiment], fromsaved: Optional[str] = None):
         self.experclass = experclass
-        fromsaved = fromsaved or experclass.run
+        fromsaved = cast(str, fromsaved or experclass.run)
         saved_path = experclass.runs_path / fromsaved
         md_path = saved_path / 'metadata'
         if md_path.is_file():
@@ -597,7 +607,7 @@ class Record:
 
     def completed_profiles(self) -> list[str]:
         # list of strings of form 'cond/prof'
-        profiles = []
+        profiles: list[str] = []
         bad_suffixes = resp_file_suffixes.values()
         for cond_path in self.run_path.iterdir():
             if cond_path.is_dir():

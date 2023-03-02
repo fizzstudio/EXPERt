@@ -90,6 +90,7 @@ export class Dashboard extends Controller {
             this.instList.setRow(index, inst);
             if (inst.state === 'COMPLETE') {
                 this.completed++;
+                this.updateRunInfo();
             }
         });
         this._socket.on('update_active_instances', (insts: [number, Inst][]) => {

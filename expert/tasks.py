@@ -8,7 +8,7 @@ from flask import current_app as app
 
 import expert as e
 
-from . import view
+from . import view, experiment
 
 # A Task represents a single page with some activity to be
 # performed. Examples range from reading
@@ -22,8 +22,8 @@ from . import view
 
 @dataclass(frozen=True)
 class TaskDesc:
-    args: list = field(default_factory=list)
-    kwargs: dict = field(default_factory=dict)
+    args: list[Any] = field(default_factory=list)
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 class Task(view.View):
@@ -31,6 +31,7 @@ class Task(view.View):
     template: ClassVar[str] = ''
 
     inst: e.Experiment
+    sid: str
     template_name: str
     variables: dict[str, Any]
     prev_task: Optional[Task]
@@ -40,7 +41,7 @@ class Task(view.View):
     id: int
 
     @classmethod
-    def new(cls, inst, *posargs, **kwargs):
+    def new(cls, inst: e.Experiment, *posargs: Any, **kwargs: Any):
         if isinstance(posargs[0], type) and issubclass(posargs[0], Task):
             cls = posargs[0]
             posargs = posargs[1:]
@@ -49,10 +50,11 @@ class Task(view.View):
         return cls(inst, *posargs, **kwargs)
 
     @classmethod
-    def reify(cls, inst, desc):
+    def reify(cls, inst: e.Experiment, desc: TaskDesc):
         return cls.new(inst, *desc.args, **desc.kwargs)
 
-    def __init__(self, inst, template=None, variables=None, timeout_secs=None):
+    def __init__(self, inst: e.Experiment, template: str | None = None, 
+            variables: dict[str, Any] | None = None, timeout_secs: int | None = None):
         super().__init__(template=template, variables=variables)
         self.inst = inst
         self.sid = inst.sid
@@ -70,7 +72,7 @@ class Task(view.View):
         self.id = self.inst.num_tasks_created
         self.inst.tasks_by_id[self.id] = self
 
-    def get_feedback(self, response):
+    def get_feedback(self, response: Any):
         pass
 
     def template_filename(self):
@@ -81,7 +83,7 @@ class Task(view.View):
         all_vars.update(super().render_vars())
         return all_vars
 
-    def then(self, *posargs, **kwargs):
+    def then(self, *posargs: Any, **kwargs: Any):
         if isinstance(posargs[0], Task):
             task = posargs[0]
         else:
@@ -95,7 +97,7 @@ class Task(view.View):
         task.was_added()
         return task
 
-    def then_all(self, task_descriptors):
+    def then_all(self, task_descriptors: list[Any]):
         cursor = self
         for task in task_descriptors:
             #if isinstance(task, (list, tuple)):
@@ -112,7 +114,7 @@ class Task(view.View):
     def was_added(self):
         pass
 
-    def next_task(self, response=None):
+    def next_task(self, response: Optional[experiment.TaskResponse] = None) -> Optional[Task]:
         if len(self.next_tasks) > 1:
             # response is an instance of experiment.TaskResponse
             # response.response is by default treated as an index
@@ -122,7 +124,7 @@ class Task(view.View):
         else:
             return self.next_tasks[0]
 
-    def replace_next_task(self, task):
+    def replace_next_task(self, task: Task):
         self.next_tasks[:] = [task]
 
     def dummy_resp(self):
