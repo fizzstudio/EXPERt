@@ -43,6 +43,7 @@ export class Dashboard extends Controller {
     downloadProfBtn: HTMLButtonElement;
     downloadIdBtn: HTMLButtonElement;
     deleteIdBtn: HTMLButtonElement;
+    downloadLogBtn: HTMLButtonElement;
     uploader: Uploader;
     bundle: string | null;
     run: string | null;
@@ -70,6 +71,7 @@ export class Dashboard extends Controller {
         //this.deleteBtn = elt('delete-btn');
         this.downloadIdBtn = elt('download-id-btn') as HTMLButtonElement;
         this.deleteIdBtn = elt('delete-id-btn') as HTMLButtonElement;
+        this.downloadLogBtn = elt('download-log-btn') as HTMLButtonElement;
         this.uploader = new Uploader(this);
         this.bundle = null;
         this.run = null;
@@ -204,6 +206,10 @@ export class Dashboard extends Controller {
                 await this.api('delete_id_mapping', this.runsDlg.run);
             }
             this.deleteIdBtn.disabled = false;
+        });
+        this.downloadLogBtn.addEventListener('click', async () => {
+            console.log('will download log');
+            this.download('log');
         });
         this._didInitViews = true;
     }
@@ -427,6 +433,8 @@ export class Dashboard extends Controller {
     dboard = await new Dashboard().init('96Q28aD7JgZ2np2-M7tQQQ');
 })();*/
 
-import cfg from '../expert_cfg.json';
+// This statement gets passed through into the output .js,
+// and expert_cfg.json is symlinked into build/ so Rollup can find it.
+import cfg from './expert_cfg.json';
 
 const dboard = await new Dashboard().init(cfg.dashboard_code);

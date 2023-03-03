@@ -8,6 +8,7 @@ import logging
 import datetime
 import traceback
 import gc
+import tempfile
 
 from typing import Any, Type, cast
 from pathlib import Path
@@ -55,14 +56,17 @@ class Server:
     bundles_path: Path
     socketio: SocketIO
     dboard: dashboard.Dashboard
+    logfile: str
 
     def __init__(self, args: argparse.Namespace):
         self._args = args
 
+        self.initLogger()
         e.app = App(__name__)
         e.log = e.app.logger
         e.log.setLevel(logging.INFO)
         e.log.info('=== starting EXPERt server ===')
+        e.log.info(f'logs saved to {self.logfile}')
 
         with open(e.expert_path / 'pyproject.toml', 'rb') as f:
             pyproj = tomli.load(f)
@@ -122,6 +126,25 @@ class Server:
         if args.exper_path:
             self.load_bundle(args.exper_path, args.tool)
             e.experclass.start(mode, obj, conds)
+    
+    def initLogger(self):
+        self.logfile = f'{tempfile.gettempdir()}/expert.log'
+        logging.basicConfig(level=logging.DEBUG,
+            #format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
+            format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+            datefmt='%m-%d %H:%M',
+            filename=self.logfile,
+            filemode='w')
+        # define a Handler which writes INFO messages or higher to the sys.stderr
+        console = logging.StreamHandler()
+        console.setLevel(logging.INFO)
+        # set a format which is simpler for console use
+        #formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
+        formatter = logging.Formatter('%(levelname)s in %(module)s: %(message)s')
+        # tell the handler to use this format
+        console.setFormatter(formatter)
+        # add the handler to the root logger
+        logging.getLogger('').addHandler(console)
 
     def start(self):
         if self._args.dummy:

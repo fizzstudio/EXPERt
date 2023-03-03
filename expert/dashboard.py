@@ -308,6 +308,12 @@ class Dashboard(view.View):
             self._zip_id_mapping(subpath, dl_name)
             return self._download(dl_name + '.zip')
 
+        @e.app.route(f'{self._path}/download/log')
+        def dashboard_dl_log():
+            e.log.info('download request for logfile')
+            return send_file(e.srv.logfile, 
+                as_attachment=True, download_name='expert.log')
+
         @e.app.route(f'{self._path}/upload_bundle', methods=['POST'])
         def dashboard_ul_bundle():
             bundles_path = e.expert_path / 'bundles'
