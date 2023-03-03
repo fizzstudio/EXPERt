@@ -1,5 +1,5 @@
 import resolve from '@rollup/plugin-node-resolve';
-import eslint from '@rollup/plugin-eslint'; 
+//import eslint from '@rollup/plugin-eslint'; 
 import json from '@rollup/plugin-json';
 
 export default [
@@ -15,7 +15,8 @@ export default [
     output: {
       format: 'es',
       //file: 'expert/static/js/dashboard.js'
-      dir: 'expert/static/js'
+      dir: 'expert/static/js',
+      chunkFileNames: '[name].js' // don't put hashes in names
     },
     plugins: [
       resolve(), // so Rollup can find external modules

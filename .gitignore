@@ -8,11 +8,10 @@ _ignore/
 __pycache__/
 
 # Directories
-## This is the build process will output code.
+## This is where the build process will output code.
 build/
 dist/
 public/script/
-expert/static/js/
 
 *.map
 
