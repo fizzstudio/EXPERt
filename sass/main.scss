@@ -29,7 +29,7 @@ body {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    background: globals.$light-gray;
+    background: globals.$content-bg;
     border-radius: 0.5rem;
     padding: 1rem;
     margin: 1rem;
@@ -79,7 +79,7 @@ body {
         //margin-left: 0.5rem;
         //margin-right: 0.5rem;
         background: globals.$med-gray;
-        border: solid 1px black;
+        border: solid 1px globals.$task-border;
         div {
             height: 0.5rem;
             width: 0%;
@@ -96,7 +96,7 @@ body {
         .exp-nav-btn {
             font-size: 1.5rem;
             border-radius: 1rem;
-            border: solid black 1px;
+            border: solid globals.$task-border 1px;
             background: globals.$very-light-gray;
             padding: 0.25rem 1rem;
             img {
@@ -126,9 +126,9 @@ body {
         align-self: start;
         #exp-return-btn {
             font-size: 0.75rem;
-            background: lightskyblue;
+            background: #ffc2c2;
             border-radius: 1rem;
-            border: solid black 1px;
+            border: solid globals.$task-border 1px;
             padding: 0 0.25rem;
         }
     }
@@ -144,16 +144,22 @@ body {
     flex-direction: column;
     align-items: stretch;
     //flex: 1 1 0;
-    background: globals.$light-gray;
+    background: globals.$content-bg;
     border-radius: 0.5rem;
     padding: 1rem;
     margin: 0;
-    #exp-sidebar-content {
+    #exp-sidebar-wrapper {
         flex: auto;
         background: globals.$very-light-gray;
-        padding: 0.5rem;
+        //padding: 0.5rem;
         overflow: scroll;
-        border: solid 1px black;
+        display: flex;
+        flex-direction: column;
+        #exp-sidebar-content {
+            border: solid 1px globals.$task-border;
+            padding: 0.5rem;
+            flex: 1 1 auto;
+        }
     }
 }
 
@@ -161,7 +167,7 @@ body {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    border: solid 1px black;
+    border: solid 1px globals.$task-border;
     padding: 1rem;
 
     h1 { text-align: center; }

@@ -65,6 +65,7 @@ class Server:
         e.app = App(__name__)
         e.log = e.app.logger
         e.log.setLevel(logging.INFO)
+        e.log.info(f'sys.path: {sys.path}')
         e.log.info('=== starting EXPERt server ===')
         e.log.info(f'logs saved to {self.logfile}')
 

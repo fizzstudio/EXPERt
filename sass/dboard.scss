@@ -22,6 +22,18 @@ body {
     #conn-status {
         color: globals.$dark-gray;
     }
+    #status {
+        margin-bottom: 0.25rem;
+        #bundle-name, #run-info {
+            font-weight: bold;
+        }
+    }
+    #controls {
+        margin-bottom: 0.25rem;
+    }
+    #inst-list-header-bar {
+        margin-bottom: 0.25rem;
+    }
     #inst-list-headers {
         display: grid;
         grid-template-columns: 3rem 1fr 2fr 2fr 2fr 4rem 2fr 6rem;
@@ -36,7 +48,7 @@ body {
         display: flex;
         flex-direction: column;
         background: globals.$very-light-gray;
-        margin: 0.5rem 0;
+        margin-bottom: 0.5rem;
         overflow: scroll;
         #inst-data {
             flex: 1 1 auto;
@@ -45,7 +57,7 @@ body {
             grid-auto-rows: min-content;
             gap: 0.25rem;
             padding: 0.25rem;
-            border: solid 1px black;
+            border: solid 1px globals.$task-border;
             div {
                 //margin: 0 0.25rem;
             }
@@ -73,7 +85,7 @@ body {
             }
             .dboard-info-sep {
                 @extend .dboard-sep;
-                background: lightblue;
+                background: globals.$light-gray;
                 color: black;
             }
             .dboard-warn-sep {

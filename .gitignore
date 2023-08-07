@@ -38,5 +38,5 @@ __pypackages__
 profiles
 runs
 bundles
-.pdm.toml
+.pdm-python
 notes.org

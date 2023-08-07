@@ -26,7 +26,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  background: #d1d1d1;
+  background: #bee3f4;
   border-radius: 0.5rem;
   padding: 1rem;
   margin: 1rem;
@@ -69,7 +69,7 @@ body {
   align-self: stretch;
   margin-top: 0.5rem;
   background: #a1a1a1;
-  border: solid 1px black;
+  border: solid 1px #2947a2;
 }
 #exp-chin #exp-progbar div {
   height: 0.5rem;
@@ -93,7 +93,7 @@ body {
 #exp-chin #exp-nav-controls .exp-nav-btn {
   font-size: 1.5rem;
   border-radius: 1rem;
-  border: solid black 1px;
+  border: solid #2947a2 1px;
   background: #F1F1F1;
   padding: 0.25rem 1rem;
 }
@@ -115,9 +115,9 @@ body {
 }
 #exp-chin #exp-return-wrapper #exp-return-btn {
   font-size: 0.75rem;
-  background: lightskyblue;
+  background: #ffc2c2;
   border-radius: 1rem;
-  border: solid black 1px;
+  border: solid #2947a2 1px;
   padding: 0 0.25rem;
 }
 
@@ -130,24 +130,29 @@ body {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  background: #d1d1d1;
+  background: #bee3f4;
   border-radius: 0.5rem;
   padding: 1rem;
   margin: 0;
 }
-#exp-sidebar #exp-sidebar-content {
+#exp-sidebar #exp-sidebar-wrapper {
   flex: auto;
   background: #F1F1F1;
-  padding: 0.5rem;
   overflow: scroll;
-  border: solid 1px black;
+  display: flex;
+  flex-direction: column;
+}
+#exp-sidebar #exp-sidebar-wrapper #exp-sidebar-content {
+  border: solid 1px #2947a2;
+  padding: 0.5rem;
+  flex: 1 1 auto;
 }
 
 #exp-task, #exp-consent, #exp-qnaire, #exp-soundcheck {
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  border: solid 1px black;
+  border: solid 1px #2947a2;
   padding: 1rem;
 }
 #exp-task h1, #exp-consent h1, #exp-qnaire h1, #exp-soundcheck h1 {
