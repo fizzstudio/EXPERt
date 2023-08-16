@@ -79,6 +79,7 @@ class Uploader {
         }, false);
         xhr.addEventListener('readystatechange', e => {
             if (xhr.readyState === 4) {
+                console.log('response:', xhr.response);
                 resolve(xhr.response);
                 this.ctrlr.uploadBtn.disabled = false;
                 this.ctrlr.uploadingOverlay.close();
@@ -446,6 +447,7 @@ class Dashboard extends Controller {
         this.instList = new InstList(this);
         this.uploadBtn.addEventListener('click', async () => {
             const resp = await this.uploader.upload();
+            console.log('uploader response:', resp);
             if (!resp.ok) {
                 await this.msgDlg.show(`Error uploading bundle: ${resp.err}`);
             }
@@ -696,3 +698,4 @@ class Dashboard extends Controller {
 await new Dashboard().init(cfg.dashboard_code);
 
 export { Dashboard };
+//# sourceMappingURL=dashboard.js.map

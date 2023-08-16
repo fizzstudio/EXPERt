@@ -106,6 +106,7 @@ export class Uploader {
         }, false);
         xhr.addEventListener('readystatechange', e => {
             if (xhr.readyState === 4) {
+                console.log('response:', xhr.response);
                 resolve(xhr.response);
                 this.ctrlr.uploadBtn.disabled = false;
                 this.ctrlr.uploadingOverlay.close();

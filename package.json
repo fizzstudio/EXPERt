@@ -7,7 +7,7 @@
     "url": "https://github.com/fizzstudio/EXPERt/issues"
   },
   "homepage": "https://github.com/fizzstudio/EXPERt#readme",
-  "type":"module",
+  "type": "module",
   "scripts": {
     "build": "tsc && rm -f expert/static/js/* && rollup -c",
     "sass": "sass sass/main.scss expert/static/css/main.css && sass sass/dboard.scss expert/static/css/dboard.css",
@@ -20,11 +20,13 @@
     "@fizz/expert-client": "^0.4.2"
   },
   "devDependencies": {
-    "typescript": "^4.9.5",
-    "sass": "^1.58.0",
-    "rollup": "3.12.1",
-    "@rollup/plugin-node-resolve": "15.0.1",
     "@rollup/plugin-eslint": "9.0.3",
-    "@rollup/plugin-json": "6.0.0"
+    "@rollup/plugin-json": "6.0.0",
+    "@rollup/plugin-node-resolve": "15.0.1",
+    "@rollup/plugin-typescript": "^11.1.2",
+    "rollup": "3.12.1",
+    "sass": "^1.58.0",
+    "tslib": "^2.6.1",
+    "typescript": "^5.1.6"
   }
 }

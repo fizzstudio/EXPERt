@@ -129,6 +129,7 @@ export class Dashboard extends Controller {
 
         this.uploadBtn.addEventListener('click', async () => {
             const resp = await this.uploader.upload();
+            console.log('uploader response:', resp);
             if (!resp.ok) {
                 await this.msgDlg.show(
                     `Error uploading bundle: ${resp.err}`);

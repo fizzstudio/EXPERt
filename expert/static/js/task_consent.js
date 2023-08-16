@@ -19,3 +19,4 @@ class ConsentTask extends Task {
 }
 
 export { ConsentTask as taskClass };
+//# sourceMappingURL=task_consent.js.map

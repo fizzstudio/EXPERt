@@ -242,3 +242,4 @@ class TracebackDialog extends MessageDialog {
 }
 
 export { Controller as C, Dialog as D, MessageDialog as M, Overlay as O, TracebackDialog as T, View as V, ConfirmDialog as a, elts as b, elt as e };
+//# sourceMappingURL=dialog.js.map

@@ -15,3 +15,4 @@ class ThankYouTask extends Task {
 }
 
 export { ThankYouTask as taskClass };
+//# sourceMappingURL=task_thankyou.js.map
