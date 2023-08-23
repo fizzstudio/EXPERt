@@ -330,14 +330,16 @@ class Dashboard(view.View):
                 self._stop_run()
 
             bundle_path = bundles_path / bundle_name
-            try:
-                bundle_path.mkdir(exist_ok=True)
-            except FileExistsError:
-                # bundle_path already exists as a non-directory
-                err = 'Unable to create bundle directory'
-                e.log.error(f'error uploading bundle \'{bundle_name}\': {err}')
-                return {'ok': False, 'err': err}
-            count = 0
+            parents = set((bundles_path / relpath).parent 
+                for relpath in request.files.keys())
+            # clear out all existing subdirs within the bundle dir
+            # (if it exists) except for profiles/ and runs/
+            # (the client should never try and upload anything from
+            # profiles/ or runs/)
+            dont_delete = [bundle_path, bundle_path / 'profiles', bundle_path / 'runs']
+            for p in parents:
+                if p not in dont_delete:
+                    shutil.rmtree(p, ignore_errors=True)
             for relpath, f in request.files.items():
                 path = bundles_path / relpath
                 try:
@@ -348,9 +350,8 @@ class Dashboard(view.View):
                         f'error uploading bundle \'{bundle_name}\': {err}')
                     return {'ok': False, 'err': err}
                 f.save(path)
-                count += 1
                 #e.log.info(f'saved {relpath}')
-            e.log.info(f'received {count} files')
+            e.log.info(f'received {len(request.files)} files')
             importlib.invalidate_caches()
             e.log.info(f'installed bundle \'{bundle_name}\'')
             return {'ok':True, 'err': None}
