@@ -190,6 +190,7 @@ class API:
     def rebuild_profiles(self):
         e.log.info('rebuilding profiles')
         try:
+            e.log.info('removing existing profiles')
             shutil.rmtree(e.experclass.profiles_path)
             e.experclass.make_profiles()
         except:

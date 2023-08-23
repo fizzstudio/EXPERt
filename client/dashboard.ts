@@ -128,9 +128,11 @@ export class Dashboard extends Controller {
         this.instList = new InstList(this);
 
         this.uploadBtn.addEventListener('click', async () => {
-            const resp = await this.uploader.upload();
-            console.log('uploader response:', resp);
-            if (!resp.ok) {
+            const {resp, status} = await this.uploader.upload();
+            if (resp === null) {
+                await this.msgDlg.show(
+                    `Bundle upload request failed; response status: ${status}`);
+            } else if (!resp.ok) {
                 await this.msgDlg.show(
                     `Error uploading bundle: ${resp.err}`);
             }
@@ -374,7 +376,8 @@ export class Dashboard extends Controller {
     }
 
     async unloadBundle() {
-        this.vars = await this.api('unload_bundle');
+        // unload_bundle never returns an error
+        this.vars = (await this.api('unload_bundle')).vars;
         this.instList.addSeparator('unload', this.bundle);
         this.bundle = null;
         this._onBundleUpdate();

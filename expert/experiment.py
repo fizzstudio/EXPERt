@@ -215,18 +215,21 @@ class BaseExper:
         cls.dls_path.mkdir(exist_ok=True)
 
         cls._cond_paths = cls._read_cond_paths()
-        num_conds = len(cls.cond_mod().conds)
-        cls.cond_size = round(cls.params_mod().n_profiles/num_conds)
+        conds = cls.cond_mod().conds
+        e.log.info('conditions: ' + ', '.join([f"'{k}'" for k in conds.keys()]))
+        cls.cond_size = round(cls.params_mod().n_profiles/len(conds))
         # We set this early (rather than when they get loaded) so that
         # the dashboard can have this information.
         # NB! This is the total number, not how many get loaded
         # (which may vary due to resumption)
-        cls.num_profiles = num_conds*cls.cond_size
+        cls.num_profiles = len(conds)*cls.cond_size
         e.log.info(f'profiles per condition: {cls.cond_size}')
         e.log.info(f'total profiles: {cls.num_profiles}')
         if not cls._cond_paths:
             cls.make_profiles()
             cls._cond_paths = cls._read_cond_paths()
+        else:
+            e.log.info('found existing profiles; not creating')
         cls.running = False
         cls._setup(is_reloading)
 
@@ -308,6 +311,7 @@ class BaseExper:
         for cond_path in cls._cond_paths:
             condname = cond_path.name
             if cls.conds and condname not in cls.conds:
+                e.log.info(f'skipping unknown cond dir \'{condname}\'')
                 continue
             run_cond_path = cls.record.run_path / condname
             for prof_path in cond_path.iterdir():
@@ -327,19 +331,20 @@ class BaseExper:
                     p = cls.profile_mod().Profile.load(
                         condname, profname)
                     cls.profiles.append(p)
+                else:
+                    e.log.info(f'results file exists for profile \'{condname}/{profname}\'; not loading')
         random.shuffle(cls.profiles)
         # the actual list of profiles will shrink
         # as the experiment progresses
         cls.num_profiles = len(cls.profiles)
-        e.log.info(f'num_profiles: {cls.num_profiles}')
+        e.log.info(f'loaded {cls.num_profiles} profiles')
 
     @classmethod
     def make_profiles(cls):
-        e.log.info('creating profiles')
-        # profiles dir may have been deleted, so we make sure it's here
+        e.log.info('creating all profiles')
         cls.profiles_path.mkdir(exist_ok=True)
         for cname, c in cls.cond_mod().conds.items():
-            e.log.info(f'creating profiles for condition {cname}')
+            e.log.info(f'creating {cls.cond_size} profiles for condition \'{cname}\'')
             (cls.profiles_path / cname).mkdir()
             for i in range(cls.cond_size):
                 p = cls.profile_mod().Profile(c)

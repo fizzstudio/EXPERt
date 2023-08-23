@@ -7,6 +7,11 @@ export interface UploadResp {
     err?: string;
 }
 
+export interface UploadResult {
+    resp: UploadResp | null;
+    status?: string;
+}
+
 export class Uploader {
 
     ctrlr: Dashboard;
@@ -92,7 +97,7 @@ export class Uploader {
         return files;
     }
 
-    _sendRequest(formData: FormData, resolve: (value: UploadResp) => void) {
+    _sendRequest(formData: FormData, resolve: (value: UploadResult) => void) {
         const url = `${this.ctrlr.vars!['exp_dashboard_path']}/upload_bundle`;
         const xhr = new XMLHttpRequest();
         xhr.upload.addEventListener('progress', e => {
@@ -106,8 +111,7 @@ export class Uploader {
         }, false);
         xhr.addEventListener('readystatechange', e => {
             if (xhr.readyState === 4) {
-                console.log('response:', xhr.response);
-                resolve(xhr.response);
+                resolve({resp: xhr.response, status: `${xhr.status} ${xhr.statusText}`});
                 this.ctrlr.uploadBtn.disabled = false;
                 this.ctrlr.uploadingOverlay.close();
             }
@@ -119,7 +123,7 @@ export class Uploader {
         xhr.send(formData);
     }
 
-    upload(): Promise<UploadResp> {
+    upload(): Promise<UploadResult> {
         return new Promise(resolve => {
             const listener = async () => {
                 console.log('upload files selected');
@@ -151,7 +155,7 @@ export class Uploader {
                         }
                     } else {
                         console.log('upload canceled');
-                        resolve({ok: true});
+                        resolve({resp: {ok: true}});
                         this.ctrlr.uploadBtn.disabled = false;
                         return;
                     }

@@ -56,7 +56,7 @@ body {
   grid-auto-rows: min-content;
   gap: 0.25rem;
   padding: 0.25rem;
-  border: solid 1px #2947a2;
+  border: solid 1px midnightblue;
 }
 #dboard #inst-list #inst-data .dboard-header {
   font-weight: bold;

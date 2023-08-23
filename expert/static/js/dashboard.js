@@ -79,8 +79,7 @@ class Uploader {
         }, false);
         xhr.addEventListener('readystatechange', e => {
             if (xhr.readyState === 4) {
-                console.log('response:', xhr.response);
-                resolve(xhr.response);
+                resolve({ resp: xhr.response, status: `${xhr.status} ${xhr.statusText}` });
                 this.ctrlr.uploadBtn.disabled = false;
                 this.ctrlr.uploadingOverlay.close();
             }
@@ -123,7 +122,7 @@ class Uploader {
                     }
                     else {
                         console.log('upload canceled');
-                        resolve({ ok: true });
+                        resolve({ resp: { ok: true } });
                         this.ctrlr.uploadBtn.disabled = false;
                         return;
                     }
@@ -446,9 +445,11 @@ class Dashboard extends Controller {
         this.msgDlg = await new MessageDialog(this).init();
         this.instList = new InstList(this);
         this.uploadBtn.addEventListener('click', async () => {
-            const resp = await this.uploader.upload();
-            console.log('uploader response:', resp);
-            if (!resp.ok) {
+            const { resp, status } = await this.uploader.upload();
+            if (resp === null) {
+                await this.msgDlg.show(`Bundle upload request failed; response status: ${status}`);
+            }
+            else if (!resp.ok) {
                 await this.msgDlg.show(`Error uploading bundle: ${resp.err}`);
             }
         });
@@ -650,7 +651,7 @@ class Dashboard extends Controller {
         }
     }
     async unloadBundle() {
-        this.vars = await this.api('unload_bundle');
+        this.vars = (await this.api('unload_bundle')).vars;
         this.instList.addSeparator('unload', this.bundle);
         this.bundle = null;
         this._onBundleUpdate();
