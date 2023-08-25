@@ -2,7 +2,7 @@
 import hashlib
 import time
 
-from typing import cast, ClassVar, Optional, Type
+from typing import cast, ClassVar, Optional, Type, Any
 
 from flask import request
 
@@ -24,6 +24,7 @@ def _monitor():
             e.srv.dboard.monitor_updated(insts)
         else:
             e.log.info('monitor task shutting down')
+            Exper.monitor_task = None
             break
 
 
@@ -36,6 +37,7 @@ class ExperAPI(API):
 class Exper(BaseExper):
 
     api_class: ClassVar[Type[API]] = ExperAPI
+    monitor_task: ClassVar[Any] = None
 
     # Will be True when all profiles have completed the experiment.
     complete: ClassVar[bool] = False
@@ -74,7 +76,7 @@ class Exper(BaseExper):
     @classmethod
     def _setup(cls, is_reloading):
         super()._setup(is_reloading)
-        if not is_reloading:
+        if cls.monitor_task is None:
             cls.monitor_task = e.srv.socketio.start_background_task(_monitor)
 
     # @classmethod
