@@ -24,7 +24,7 @@ from flask_socketio import SocketIO
 
 import expert as e
 
-from . import experiment, tool, dashboard, templates
+from . import experiment, exper, tool, dashboard, templates
 
 
 class BundleLoadError(Exception):
@@ -456,3 +456,5 @@ class Server:
         e.log.info(f'tool mode enabled: {enabled}')
         if e.tool_mode:
             e.Experiment = tool.Tool
+        else:
+            e.Experiment = exper.Exper
