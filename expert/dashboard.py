@@ -433,7 +433,7 @@ class Dashboard(view.View):
         e.log.info('building zip file')
         id_map_path = e.experclass.runs_path / run_id / 'id-mapping'
         root = Path(zip_name).stem
-        with zipfile.ZipFile(e.experclass.dls_path / zip_name, 'w',
+        with zipfile.ZipFile(e.experclass.dls_path / f'{zip_name}.zip', 'w',
                              compression=zipfile.ZIP_DEFLATED,
                              compresslevel=9) as zf:
             for fpath in id_map_path.iterdir():
