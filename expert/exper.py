@@ -115,6 +115,11 @@ class Exper(BaseExper):
             cls.running = False
             e.srv.dboard.run_complete(cls.run)
 
+    def _will_start(self):
+        super()._will_start()
+        # In case the first task starts a timeout
+        self.update_timeouts()
+
     def check_for_complete(self):
         if not self.task.next_tasks and self.profile:
             # (The Consent task initially has no next_tasks,
