@@ -3,6 +3,7 @@ from typing import ClassVar, Type
 
 import expert as e
 from .experiment import BaseExper, API
+from .tasks import Task
 
 class ToolAPI(API):
 
@@ -43,8 +44,8 @@ class Tool(BaseExper):
     #         self.go_to_id(task_id, resp)
     #         return self.all_vars()
 
-    def assign_profile(self):
-        super().assign_profile()
+    def _will_start(self):
+        super()._will_start()
         self.variables['exp_nav_items'] = [
             label for label, task in self.nav_items()]
 
@@ -52,13 +53,13 @@ class Tool(BaseExper):
         super()._store_resp(resp)
         self.task.variables['exp_resp'] = resp
 
-    def _nav(self, resp, dest_task):
+    def _nav(self, resp, dest_task: Task):
         self._store_resp(resp)
         self.task = dest_task
         self.task_cursor = dest_task.id
         self._update_vars()
-        if self.profile:
-            self._save_responses()
+        #if self.profile:
+        self._save_responses()
         e.srv.dboard.inst_updated(self)
 
     def prev_task(self, resp):

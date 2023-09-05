@@ -7,6 +7,7 @@ import expert as e
 
 
 class Profile:
+    subjid: str
 
     def __init__(self, condition):
         self.cond = condition
@@ -22,7 +23,7 @@ class Profile:
     # abstract; subclass customizes inst with data
     # loaded from file
     @classmethod
-    def load(cls, cond_str, subjid):
+    def load(cls, cond_str: str, subjid: str):
         inst = super().__new__(cls)
         inst.subjid = subjid
         inst.cond = e.experclass.cond_mod().conds[cond_str]
@@ -31,7 +32,7 @@ class Profile:
     def save(self):
         pass
 
-    def make_subjid(self):
+    def make_subjid(self) -> str:
         while True:
             subjid = ''
             for _ in range(e.experclass.cfg['subjid_length']):

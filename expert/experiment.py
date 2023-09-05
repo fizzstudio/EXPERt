@@ -98,7 +98,7 @@ class API:
             self._inst.next_task(resp)
         return self._inst.all_vars()
 
-    def get_feedback(self, resp):
+    def get_feedback(self, resp: Any):
         return self._inst.task.get_feedback(resp)
 
     def load_template(self, tplt: str, tplt_vars: dict[str, Any] = {}):
@@ -186,7 +186,7 @@ class BaseExper:
         self._api = self.api_class(self)
 
         @e.srv.socketio.on('call_api', namespace=f'/{self.sid}')
-        def sio_call(cmd: str, *args):
+        def sio_call(cmd: str, *args:list[Any]):
             try:
                 f = getattr(self._api, cmd)
                 val = f(*args)
@@ -234,7 +234,8 @@ class BaseExper:
         cls._setup(is_reloading)
 
     @classmethod
-    def start(cls, mode: str, obj: Optional[str] = None, conds: Optional[list[str]] = None):
+    def start(cls, mode: str, obj: Optional[str] = None, 
+        conds: Optional[list[str]] = None):
         if conds:
             unknown_conds = [c for c in conds
                              if c not in cls.cond_mod().conds]
@@ -478,7 +479,7 @@ class BaseExper:
         """Overridden by the bundle class to create post-consent tasks."""
         pass
 
-    def nav_items(self):
+    def nav_items(self) -> list[tuple[str, tasks.Task]]:
         """May be overridden by the bundle class to add nav menu items."""
         if self.last_task:
             return [('First', self.first_task), ('Last', self.last_task)]
@@ -509,7 +510,7 @@ class BaseExper:
         self.variables['exp_num_tasks'] = self.num_tasks_created
         self._update_vars()
 
-    def next_task(self, resp):
+    def next_task(self, resp: Any):
         pass
 
     def present(self, tplt_vars={}):
@@ -548,10 +549,18 @@ class BaseExper:
         with open(pii_path, 'w') as f:
             json.dump(output, f, indent=2)
 
+    def _response_save_path(self):
+        if self.profile:
+            cond_path = cast(Record, self.record).run_path / str(self.profile.cond)
+            return cond_path / (self.profile.subjid 
+                + resp_file_suffixes.get(self.state, ''))
+        else:
+            # XXX this relies on cfg['output_format'] being set to a valid value
+            return cast(Record, self.record).run_path.with_suffix(
+                '.' + self.cfg['output_format'])
+
     def _save_responses(self):
-        cond_path = cast(Record, self.record).run_path / str(self.profile.cond)
-        resp_path = cond_path / (self.profile.subjid +
-                                 resp_file_suffixes.get(self.state, ''))
+        resp_path = self._response_save_path()
         actual_resps = [self.responses[tid]
                         for tid in sorted(self.responses.keys())]
         all_resps = self.pseudo_responses + actual_resps
