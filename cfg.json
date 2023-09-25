@@ -21,5 +21,7 @@
     "prolific_pid_param": "PROLIFIC_PID",
     "pii": ["PROLIFIC_PID"],
     "progbar_enabled": false,
-    "tool_display_total_tasks": true
+    "tool_display_total_tasks": true,
+    "require_login": false,
+    "session_lifetime_hours": 24
 }

@@ -84,4 +84,4 @@ def render(tplt: str, other_vars: dict[str, Any] = {}):
     all_vars = variables.copy()
     all_vars.update(other_vars)
     all_vars['exp_vars'] = all_vars.copy()
-    return render_template(tplt, **all_vars)
+    return render_template(tplt + html_ext, **all_vars)

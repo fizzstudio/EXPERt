@@ -6,7 +6,7 @@ from typing import Type, Optional, Union
 
 from . import exper, tool
 
-Experiment: Union[Type[exper.Exper], Type[tool.Tool]] = exper.Exper
+Experiment: type[exper.Exper] | type[tool.Tool] = exper.Exper
 
 from . import server
 
@@ -19,7 +19,7 @@ log: logging.Logger
 tool_mode = False
 soundcheck_word = 'singapore'
 
-experclass: Optional[Type[Experiment]] = None
+experclass: Optional[type[exper.Exper] | type[tool.Tool]] = None
 
 # path to the EXPERt directory (remove 'expert/')
 expert_path = Path(__file__).parent.parent.absolute()

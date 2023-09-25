@@ -25,7 +25,7 @@ export class Uploader {
         // The manifest can list extra items to be uploaded in addition
         // to what is allowed. Denied items are removed
         // from the manifest before it is added to the allow list.
-        this.allow = ['cfg.json', 'src/', 'static/', 'templates/'];
+        this.allow = ['cfg.json', 'user_info.json', 'src/', 'static/', 'templates/'];
         this.deny = ['profiles/', 'runs/'];
     }
 
