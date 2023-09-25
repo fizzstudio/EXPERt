@@ -14,9 +14,10 @@ import secrets
 from pathlib import Path
 from enum import Enum
 from functools import reduce
-from typing import ClassVar, Optional, Any, Type, Union, cast
+from typing import ClassVar, Optional, Any, Type, Union, cast, Literal
 
 from flask import session
+from werkzeug.datastructures import MultiDict
 
 import expert as e
 from . import (
@@ -25,6 +26,7 @@ from . import (
 
 import strictyaml
 
+ExperMode = Literal['new', 'res', 'rep']
 
 class State(Enum):
     ACTIVE = 0
@@ -102,7 +104,7 @@ class API:
         return self._inst.task.get_feedback(resp)
 
     def load_template(self, tplt: str, tplt_vars: dict[str, Any] = {}):
-        return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
+        return templates.render(tplt, tplt_vars)
 
 
 class BaseExper:
@@ -116,7 +118,7 @@ class BaseExper:
     templates_path: ClassVar[Path]
     dls_path: ClassVar[Path]
     _cond_paths: ClassVar[list[Path]]
-    mode: ClassVar[Optional[str]] = None        # set on subclass
+    mode: ClassVar[Optional[ExperMode]] = None  # set on subclass
     target: ClassVar[Optional[str]] = None      # set on subclass
     run: ClassVar[Optional[str]] = None         # set on subclass
     record: ClassVar[Optional[Record]] = None   # set on subclass
@@ -131,6 +133,7 @@ class BaseExper:
 
     ## instance vars
     sid: str
+    urlargs: MultiDict[str, str]
     profile: Optional[profile.Profile]
     start_time: float
     start_timestamp: str
@@ -142,8 +145,8 @@ class BaseExper:
     responses: dict[int, TaskResponse]
     variables: dict[str, Any]
 
-    def __init__(self, clientip: str, urlargs):
-        self.sid = secrets.token_hex(16)
+    def __init__(self, clientip: str, urlargs: MultiDict[str, str], sid: str):
+        self.sid = sid # secrets.token_hex(16)
         self.urlargs = urlargs
 
         self.profile = None
@@ -234,8 +237,9 @@ class BaseExper:
         cls._setup(is_reloading)
 
     @classmethod
-    def start(cls, mode: str, obj: Optional[str] = None, 
-        conds: Optional[list[str]] = None):
+    def start(cls, mode: ExperMode, obj: Optional[str] = None, 
+              conds: Optional[list[str]] = None):
+        cls.instances.clear()
         if conds:
             unknown_conds = [c for c in conds
                              if c not in cls.cond_mod().conds]
@@ -370,10 +374,10 @@ class BaseExper:
                 if inst.state == State.ACTIVE]
 
     @classmethod
-    def new_inst(cls, ip: str, args):
-        inst = cls(ip, args)
+    def new_inst(cls, ip: str, args: MultiDict[str, str], sid: str):
+        inst = cls(ip, args, sid)
         inst._will_start()
-        session['sid'] = inst.sid
+        #session['sid'] = inst.sid
         cls.instances[inst.sid] = inst
         e.log.info(f'new instance for sid {inst.sid[:4]}')
         e.srv.dboard.inst_created(inst)

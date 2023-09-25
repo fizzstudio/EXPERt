@@ -10,7 +10,7 @@ import traceback
 import gc
 import tempfile
 
-from typing import Any, Type, cast
+from typing import Any, Type, cast, Optional
 from pathlib import Path
 
 import tomli
@@ -24,7 +24,7 @@ from flask_socketio import SocketIO
 
 import expert as e
 
-from . import experiment, exper, tool, dashboard, templates
+from . import experiment, exper, tool, dashboard, templates, user
 
 
 class BundleLoadError(Exception):
@@ -57,6 +57,7 @@ class Server:
     socketio: SocketIO
     dboard: dashboard.Dashboard
     logfile: str
+    session_manager: Optional[user.SessionManager] = None
 
     def __init__(self, args: argparse.Namespace):
         self._args = args
@@ -151,6 +152,7 @@ class Server:
         if self._args.dummy:
             if not e.experclass:
                 sys.exit('exper_path must be provided if --dummy is given')
+            assert issubclass(e.experclass, exper.Exper)
             e.log.info('performing dummy run')
             e.experclass.dummy_run(self._args.dummy)
         else:
@@ -241,6 +243,23 @@ class Server:
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'images', subpath)
 
+        @e.app.route(f'/{self.cfg["url_prefix"]}/login')
+        def login():
+            return templates.render('login')
+        
+        @e.app.route(f'/{self.cfg["url_prefix"]}/login_creds', methods=['POST'])
+        def login_creds():
+            assert self.session_manager
+            creds = request.json
+            if not creds.get('userid') or not creds.get('password'):
+                return {'err': 'login data not provided'}
+            try:
+                sid = self.session_manager.login(creds['userid'], creds['password'])
+                session['sid'] = sid
+                return {}
+            except user.UserError as exc:
+                return {'err': exc.msg}
+
         @e.app.route('/' + self.cfg['url_prefix'])
         def index():
             nonlocal first_request_setup_complete
@@ -252,35 +271,54 @@ class Server:
                     first_request_setup_complete = True
                 # Even if we aren't running, there may still be completed
                 # instances in memory that can serve up completion codes
-                inst = e.experclass.instances.get(session.get('sid'))
+                sid = session.get('sid')
+                if not (isinstance(sid, str) or sid is None):
+                    e.log.warn('found SID with invalid type')
+                    sid = None
+                inst = e.experclass.instances.get(sid)
                 if not inst:
                     if e.experclass.running:
-                        if e.experclass.profiles:
+                        # XXX But the sid doesn't get stored in the cookie session
+                        # until the inst is created, so when we come back here after
+                        # a successful login, we just get the form again
+                        if self.session_manager and \
+                            not (sid and self.session_manager.sessionIsActive(sid)):
+                            e.log.info('login required')
+                            # Either there is no sid, or it is invalid
+                            content = templates.render('login')
+                        elif e.experclass.profiles:
                             try:
+                                if not self.session_manager:
+                                    # Logins are disabled, and any existing sid
+                                    # is from a previous run, or a different exper entirely
+                                    sid = user.create_sid()
+                                    session['sid'] = sid
+                                assert sid
+                                e.log.info(f'assigning sid {sid}')
                                 inst = e.experclass.new_inst(
-                                    self._get_ip(), request.args)
+                                    self._get_ip(), request.args, sid)
                             except:
                                 content = self._page_load_error(
                                     traceback.format_exc())
                         else:
-                            content = templates.render(
-                                'full' + templates.html_ext)
+                            e.log.info('no profiles available')
+                            content = templates.render('full')
                     else:
                         e.log.info('no inst, not running')
-                        content = templates.render('norun' + templates.html_ext)
+                        content = templates.render('norun')
                 if not content:
                     try:
                         content = inst.present()
                     except:
                         content = self._page_load_error(traceback.format_exc())
             else:
-                e.log.info('no experclass')
-                content = templates.render('norun' + templates.html_ext)
+                e.log.info('no bundle is loaded')
+                content = templates.render('norun')
 
             resp = make_response(content)
             # Caching is disabled entirely to ensure that
             # users always get fresh content
-            resp.cache_control.no_store = True
+            #resp.cache_control.no_store = True
 
             return resp
 
@@ -302,8 +340,9 @@ class Server:
         return ip
 
     def _first_request_setup(self):
-        # session will expire after 24 hours
-        e.app.permanent_session_lifetime = datetime.timedelta(hours=24)
+        assert e.experclass
+        e.app.permanent_session_lifetime = datetime.timedelta(
+            hours=e.experclass.cfg['session_lifetime_hours'])
         # session cookie will expire after app.permanent_session_lifetime
         session.permanent = True
         if request.url.startswith('https'):
@@ -311,14 +350,14 @@ class Server:
         else:
             e.app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
-    def _page_load_error(self, tback):
+    def _page_load_error(self, tback: str):
         e.srv.dboard.page_load_error(tback)
-        return templates.render('error' + templates.html_ext, {
+        return templates.render('error', {
             'msg': 'System error. Please contact the administrator.'
         })
 
     def not_found(self):
-        return templates.render('error' + templates.html_ext, {
+        return templates.render('error', {
             'msg': '404 Not Found.'
         })
 
@@ -346,6 +385,10 @@ class Server:
 
         templates.set_bundle_variables(e.experclass)
         e.app.update_jinja_loader(e.experclass)
+        if bundle_cfg.get('require_login'):
+            self.session_manager = user.SessionManager()
+        else:
+            self.session_manager = None
 
     def _bundle_mods(self, path: Path) -> list[str]:
         srcpath = path / 'src'
@@ -440,16 +483,16 @@ class Server:
         raise BundleLoadError(
             f'no Experiment subclass found in bundle \'{path.name}\'')
 
-    def get_inst(self):
-        # NB: session.new seems to be False here even if we do
-        # in fact have a new, empty session
-        if 'sid' not in session or not e.experclass:
-            # New participant
-            return None
-        # NB: The presence of an existing sid with no
-        # instance now simply results in a new sid+inst,
-        # rather than an error.
-        return e.experclass.instances.get(cast(str, session['sid']))
+    # def get_inst(self):
+    #     # NB: session.new seems to be False here even if we do
+    #     # in fact have a new, empty session
+    #     if 'sid' not in session or not e.experclass:
+    #         # New participant
+    #         return None
+    #     # NB: The presence of an existing sid with no
+    #     # instance now simply results in a new sid+inst,
+    #     # rather than an error.
+    #     return e.experclass.instances.get(cast(str, session['sid']))
 
     def enable_tool_mode(self, enabled: bool):
         e.tool_mode = enabled

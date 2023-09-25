@@ -23,7 +23,7 @@ class View:
         # self.variables['debug'] = expert.debug
 
     def template_filename(self):
-        return f'{self.template_name}{templates.html_ext}'
+        return self.template_name
 
     def render_vars(self):
         return self.variables.copy()

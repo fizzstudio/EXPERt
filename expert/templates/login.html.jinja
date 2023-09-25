@@ -1,0 +1,25 @@
+{% extends "layout.html.jinja" %}
+
+{% block exp_script %}
+    <script src="/{{ exp_url_prefix }}/js/login.js" type="module"></script>
+{% endblock %}
+
+{% block exp_page_content %}
+<div id="exp-task-wrapper">
+    <div id="exp-task">
+        <div id="login-wrapper">
+            <div id="login-form">
+                <div class="login-row">
+                    <label for="login-userid">User ID</label>
+                    <input type="text" name="userid" required autofocus autocomplete="username" id="login-userid">
+                </div>
+                <div class="login-row">
+                    <label for="login-password">Password</label>
+                    <input type="password" name="password" required autocomplete="current-password" id="login-password">
+                </div>
+                <button disabled id="login-btn">Log In</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

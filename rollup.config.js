@@ -7,6 +7,7 @@ export default [
   {
     input: [
       'client/dashboard.ts',
+      'client/login.ts',
       'client/task_loader.ts',
       'client/task_consent.ts',
       'client/task_incomplete.ts',

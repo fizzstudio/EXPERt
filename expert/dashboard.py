@@ -112,6 +112,7 @@ class API:
         return sorted(runs, key=lambda r: r['id'], reverse=True)
 
     def start_new_run(self):
+        assert e.experclass
         try:
             e.experclass.start('new')
         except:
@@ -205,8 +206,8 @@ class API:
         self._dboard._events.append(Event('profiles_rebuild'))
         return {'vars': self._dboard.all_vars()}
 
-    def load_template(self, tplt, tplt_vars={}):
-        return templates.render(f'{tplt}{templates.html_ext}', tplt_vars)
+    def load_template(self, tplt: str, tplt_vars={}):
+        return templates.render(tplt, tplt_vars)
 
 
 class Dashboard(view.View):
@@ -240,7 +241,7 @@ class Dashboard(view.View):
         self._js_path = f'{self._path}/js'
         self.variables['exp_js'] = self._js_path
 
-        self._url = f'http://{srv.cfg["host"]}:{srv.cfg["port"]}' + self._path
+        self._url = f'http://{srv.host}:{srv.port}' + self._path
         e.log.info('dashboard URL: ' + self._url)
         self._add_routes()
         self._add_sio_commands(srv)

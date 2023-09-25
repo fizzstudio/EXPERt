@@ -100,7 +100,7 @@ class Exper(BaseExper):
     #     cls.running = True
 
     @classmethod
-    def dummy_run(cls, inst_count):
+    def dummy_run(cls, inst_count: int):
         ip = '127.0.0.1'
         for i in range(inst_count):
             inst = cls(
