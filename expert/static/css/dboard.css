@@ -136,4 +136,10 @@ body {
   padding: 0.5rem;
 }
 
+.exp-dlg-upload-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 /*# sourceMappingURL=dboard.css.map */

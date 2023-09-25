@@ -1,6 +1,43 @@
 
 import { type Controller, Dialog } from '@fizz/expert-client';
 import { type Dashboard } from './dashboard';
+import { type Uploader } from './uploader';
+
+
+export class UploadDialog extends Dialog {
+    declare ctrlr: Uploader;
+    private inputNode: HTMLInputElement;
+    private uploadBtn: HTMLButtonElement;
+
+    constructor(ctrlr: Uploader, template = 'upload', id = 'exp-dlg-upload') {
+        super(ctrlr, template, id);
+    }
+
+    async init() {
+        await super.init();
+        this.titlebar = 'Upload Bundle';
+        this.inputNode = this.node.querySelector('.exp-dlg-upload-input')!;
+        this.uploadBtn = this.node.querySelector('.exp-dlg-upload-btn')!;
+        this.inputNode.addEventListener('change', 
+            () => this.ctrlr.didSelectFiles(this.inputNode.files!));
+        this.uploadBtn.addEventListener('click', 
+            async () => await this.ctrlr.upload());
+        return this;
+    }
+
+    async show() {
+        this.setButtons([{tag: 'cancel', text: 'Close'}]);
+        return await super.makeVisible();
+    }
+
+    enableButton() {
+        this.uploadBtn.disabled = false;
+    }
+
+    disableButton() {
+        this.uploadBtn.disabled = true;
+    }
+}
 
 export class SingleSelectorDialog extends Dialog {
     selectNode: HTMLSelectElement;
