@@ -10,6 +10,7 @@
     "profiles_dir": "profiles",
     "runs_dir": "runs",
     "dls_dir": "dls",
+    "temp_dir": "temp",
 
     "subjid_length": 6,
     "subjid_symbols": "ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklmnopqrstuvwxyz",

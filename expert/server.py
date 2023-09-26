@@ -127,6 +127,7 @@ class Server:
 
         if args.exper_path:
             self.load_bundle(args.exper_path, args.tool)
+            assert e.experclass
             e.experclass.start(mode, obj, conds)
     
     def initLogger(self):
@@ -191,11 +192,11 @@ class Server:
         first_request_setup_complete = False
 
         @e.app.route('/client/<path:subpath>')
-        def expert_ts(subpath):
+        def expert_ts(subpath: str):
             return send_from_directory(e.expert_path / 'client', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/js/<path:subpath>')
-        def js(subpath):
+        def js(subpath: str):
             #if '..' in subpath:
             #    return self.not_found(), 404
             # NB:
@@ -217,21 +218,21 @@ class Server:
                 e.expert_path / 'expert' / 'static' / 'js', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/audio/<path:subpath>')
-        def global_audio(subpath):
+        def global_audio(subpath: str):
             #if '..' in subpath:
             #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'audio', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/css/<path:subpath>')
-        def global_css(subpath):
+        def global_css(subpath: str):
             #if '..' in subpath:
             #    return self.not_found(), 404
             return send_from_directory(
                 e.expert_path / 'expert' / 'static' / 'css', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/img/<path:subpath>')
-        def global_img(subpath):
+        def global_img(subpath: str):
             #if '..' in subpath:
             #    return self.not_found(), 404
             return send_from_directory(
@@ -245,11 +246,12 @@ class Server:
         def login_creds():
             assert self.session_manager
             creds = request.json
-            if not creds.get('userid') or not creds.get('password'):
+            if not creds or not creds.get('userid') or not creds.get('password'):
                 return {'err': 'login data not provided'}
             try:
                 sid = self.session_manager.login(creds['userid'], creds['password'])
                 session['sid'] = sid
+                session['userid'] = creds['userid']
                 return {}
             except user.UserError as exc:
                 return {'err': exc.msg}
@@ -265,16 +267,13 @@ class Server:
                     first_request_setup_complete = True
                 # Even if we aren't running, there may still be completed
                 # instances in memory that can serve up completion codes
-                sid = session.get('sid')
+                sid = cast(Optional[str], session.get('sid'))
                 if not (isinstance(sid, str) or sid is None):
                     e.log.warn('found SID with invalid type')
                     sid = None
                 inst = e.experclass.instances.get(sid)
                 if not inst:
                     if e.experclass.running:
-                        # XXX But the sid doesn't get stored in the cookie session
-                        # until the inst is created, so when we come back here after
-                        # a successful login, we just get the form again
                         if self.session_manager and \
                             not (sid and self.session_manager.sessionIsActive(sid)):
                             e.log.info('login required')
@@ -290,7 +289,7 @@ class Server:
                                 assert sid
                                 e.log.info(f'assigning sid {sid}')
                                 inst = e.experclass.new_inst(
-                                    self._get_ip(), request.args, sid)
+                                    self._get_ip(), request.args, sid, session.get('userid'))
                             except:
                                 content = self._page_load_error(
                                     traceback.format_exc())
@@ -317,7 +316,8 @@ class Server:
             return resp
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/app/<path:subpath>')
-        def exper_static(subpath):
+        def exper_static(subpath: str):
+            assert e.experclass
             #if '..' in subpath:
             #    return self.not_found(), 404
             return send_from_directory(e.experclass.static_path, subpath)
@@ -430,7 +430,7 @@ class Server:
         cfg.update(bundle_cfg)
         return cfg
 
-    def _load_bundle_src(self, path: Path, is_reloading=False):
+    def _load_bundle_src(self, path: Path, is_reloading: bool = False):
         """Load the bundle in the directory at 'path'.
 
         NB: The source code for the bundle must be located in

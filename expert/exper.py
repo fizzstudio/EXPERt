@@ -16,7 +16,7 @@ def _monitor():
     while True:
         e.srv.socketio.sleep(e.srv.cfg['monitor_check_interval'])
         if e.experclass:
-            insts = []
+            insts: list[BaseExper] = []
             for inst in e.experclass.all_active():
                 if not (isinstance(inst, Exper) and inst.check_for_timeout()):
                     insts.append(inst)
@@ -74,7 +74,7 @@ class Exper(BaseExper):
         self.global_timeout_time = None
 
     @classmethod
-    def _setup(cls, is_reloading):
+    def _setup(cls, is_reloading: bool):
         super()._setup(is_reloading)
         if cls.monitor_task is None:
             cls.monitor_task = e.srv.socketio.start_background_task(_monitor)
@@ -115,10 +115,10 @@ class Exper(BaseExper):
             cls.running = False
             e.srv.dboard.run_complete(cls.run)
 
-    def _will_start(self):
-        super()._will_start()
-        # In case the first task starts a timeout
-        self.update_timeouts()
+    #def _will_start(self):
+    #    super()._will_start()
+    #    # In case the first task starts a timeout
+    #    self.update_timeouts()
 
     def check_for_complete(self):
         if not self.task.next_tasks and self.profile:
@@ -176,22 +176,33 @@ class Exper(BaseExper):
         if self.state == State.ACTIVE:
             super().assign_profile()
 
-    def next_task(self, resp):
-        self._store_resp(resp)
-        e.log.info(
-            f'sid {self.sid[:4]} completed "{self.task.template_name}"' +
-            f' ({self.task.id})')
-        self.task = self.task.next_task(resp)
-        self.task_cursor = self.task.id
+    def _update_vars(self):
         if isinstance(self.task, tasks.NonConsent):
             self.end(State.CONSENT_DECLINED)
         if self.state == State.ACTIVE:
             self.update_timeouts()
             # may change self.state
             self.check_for_complete()
-        self._update_vars()
-        if self.state == State.ACTIVE:
-            e.srv.dboard.inst_updated(self)
+        super()._update_vars()
+
+    def next_task(self, resp: Any):
+        e.log.info(
+            f'sid {self.sid[:4]} completed \'{self.task.template_name}\'' +
+            f' ({self.task.id})')
+        super().next_task(resp)
+        #self._store_resp(resp)
+        #self.task = self.task.next_task(resp)
+        #self.task_cursor = self.task.id
+        #if isinstance(self.task, tasks.NonConsent):
+        #    self.end(State.CONSENT_DECLINED)
+        #if self.state == State.ACTIVE:
+        #    self.update_timeouts()
+        #    # may change self.state
+        #    self.check_for_complete()
+        #self._update_vars()
+        #if self.state == State.ACTIVE:
+        #    e.srv.dboard.inst_updated(self)
+        #super().next_task(resp)
 
     def _dummy_do_tasks(self):
         while self.state != State.COMPLETE:

@@ -9,19 +9,17 @@ import importlib
 import importlib.util
 import csv
 import json
-import secrets
 
 from pathlib import Path
 from enum import Enum
 from functools import reduce
-from typing import ClassVar, Optional, Any, Type, Union, cast, Literal
+from typing import ClassVar, Optional, Any, Type, TypedDict, Union, cast, Literal
 
-from flask import session
 from werkzeug.datastructures import MultiDict
 
 import expert as e
 from . import (
-    tasks, timestamp, profile, templates
+    tasks, profile, templates
 )
 
 import strictyaml
@@ -48,18 +46,18 @@ resp_file_suffixes = {
 class TaskResponse:
     response: Any
     task_name: str
-    timestamp: str
+    timestamp: int
     sid: Optional[str]
     cond: Optional[str]
     prof: Optional[str]
     extra: dict[str, Any]
     def __init__(self, response: Any, task_name: str,
-                 ts: Optional[str] = None, sid: Optional[str] = None, 
+                 ts: Optional[int] = None, sid: Optional[str] = None, 
                  cond: Optional[str] = None, prof: Optional[str] = None, 
                  **extra: dict[str, Any]):
         self.response = response
         self.task_name = task_name
-        self.timestamp = ts or timestamp.make_timestamp()
+        self.timestamp = ts or int(time.time())*1000 # msec since start of epoch
         self.sid = sid
         self.cond = cond
         self.prof = prof
@@ -81,7 +79,7 @@ class BadOutputFormatError(Exception):
 
 class API:
 
-    def __init__(self, inst: e.Experiment):
+    def __init__(self, inst: BaseExper):
         self._inst = inst
 
     def soundcheck(self, resp: str) -> bool:
@@ -109,34 +107,40 @@ class API:
 
 class BaseExper:
 
+    # Initialized immediately after bundle is loaded, so 
+    # not typed as Optional
+    name: ClassVar[str]
     cfg: ClassVar[dict[str, Any]]
-    conds: ClassVar[Optional[list[str]]]
     dir_path: ClassVar[Path]
     static_path: ClassVar[Path]
     profiles_path: ClassVar[Path]
     runs_path: ClassVar[Path]
     templates_path: ClassVar[Path]
     dls_path: ClassVar[Path]
+    temp_path: ClassVar[Path]
+    running: ClassVar[bool]
     _cond_paths: ClassVar[list[Path]]
+
+    conds: ClassVar[Optional[list[str]]] = None
+    temp_run_path: ClassVar[Optional[Path]] = None
     mode: ClassVar[Optional[ExperMode]] = None  # set on subclass
     target: ClassVar[Optional[str]] = None      # set on subclass
     run: ClassVar[Optional[str]] = None         # set on subclass
     record: ClassVar[Optional[Record]] = None   # set on subclass
-    replicate: ClassVar[Optional[Record]]
-    name: ClassVar[str]
+    replicate: ClassVar[Optional[Record]] = None
     profiles: ClassVar[list[profile.Profile]] = [] # mutated by subclass
     num_profiles: ClassVar[int]                 # set on subclass
     # sid: <Experiment subclass inst>
     instances: ClassVar[dict[str, BaseExper]] = {} # mutated by subclass
-    running: ClassVar[bool]
     api_class: ClassVar[Type[API]] = API
 
     ## instance vars
     sid: str
+    temp_work_path: Path
     urlargs: MultiDict[str, str]
     profile: Optional[profile.Profile]
     start_time: float
-    start_timestamp: str
+    start_timestamp: int
     end_time: float
     task: tasks.Task
     last_task: Optional[tasks.Task]
@@ -146,13 +150,16 @@ class BaseExper:
     variables: dict[str, Any]
 
     def __init__(self, clientip: str, urlargs: MultiDict[str, str], sid: str):
-        self.sid = sid # secrets.token_hex(16)
+        assert self.temp_run_path is not None
+        self.sid = sid 
+        self.temp_work_path = self.temp_run_path / self.sid
+        self.temp_work_path.mkdir(exist_ok=self.mode == 'res')
         self.urlargs = urlargs
 
         self.profile = None
 
         self.start_time = time.monotonic()
-        self.start_timestamp = timestamp.make_timestamp()
+        self.start_timestamp = int(time.time())*1000
 
         # tasks are stored in a linked tree structure
         #self.task = None
@@ -188,6 +195,15 @@ class BaseExper:
 
         self._api = self.api_class(self)
 
+        @e.srv.socketio.on('connect', namespace=f'/{self.sid}')
+        def sio_connect():
+            e.log.info(f'sid {self.sid[:4]} socket connected')
+        @e.srv.socketio.on('disconnect', namespace=f'/{self.sid}')
+        def sio_disconnect():
+            e.log.info(f'sid {self.sid[:4]} socket disconnected')
+        @e.srv.socketio.on_error(namespace=f'/{self.sid}')
+        def sio_error(err):
+            e.log.error(f'sid {self.sid[:4]} socket error: {err}\n{traceback.format_exc()}')
         @e.srv.socketio.on('call_api', namespace=f'/{self.sid}')
         def sio_call(cmd: str, *args:list[Any]):
             try:
@@ -200,9 +216,19 @@ class BaseExper:
                 return {'err': tback}
             return {'val': val}
 
-        @e.srv.socketio.on_error(f'/{self.sid}')
-        def sio_inst_error(err):
-            e.log.error(f'socketio error:\n{traceback.format_exc()}')
+    @classmethod
+    def make_run_timestamp(cls):
+        # Pad numbers with leading zeros to a fixed width
+        def pad(n: int, width: int):
+            return format(n, f'0{width}')
+        precise_time = time.time()
+        seconds = int(precise_time)
+        ltime = time.localtime(seconds)
+        ymd = '.'.join([str(ltime.tm_year), pad(ltime.tm_mon, 2), pad(ltime.tm_mday, 2)])
+        same_day_runs = [r for r in cls.runs_path.iterdir() if r.name.startswith(ymd)]
+        if len(same_day_runs):
+            ymd += f'{len(same_day_runs) + 1}'
+        return ymd
 
     @classmethod
     def init(cls, path: Path, is_reloading: bool):
@@ -216,6 +242,7 @@ class BaseExper:
         cls.runs_path.mkdir(exist_ok=True)
         cls.profiles_path.mkdir(exist_ok=True)
         cls.dls_path.mkdir(exist_ok=True)
+        cls.temp_path.mkdir(exist_ok=True)
 
         cls._cond_paths = cls._read_cond_paths()
         conds = cls.cond_mod().conds
@@ -253,21 +280,24 @@ class BaseExper:
             cls.run = obj
         elif mode == 'rep':
             cls.target = obj
-            cls.run = timestamp.make_timestamp()
+            cls.run = cls.make_run_timestamp()
         else:
-            cls.run = timestamp.make_timestamp()
+            cls.run = cls.make_run_timestamp()
 
         cls.replicate = None
         cls.record = Record(cls)
         if cls.mode == 'rep':
             cls.record.replicate = cls.target
-            cls.record.save()
+            #cls.record.save()
             cls.replicate = Record(cls, cls.target)
         elif cls.mode == 'res':
             if cls.record.replicate:
                 cls.replicate = Record(cls, cls.record.replicate)
-        else:
-            cls.record.save()
+        #else:
+            #cls.record.save()
+
+        cls.temp_run_path = cls.temp_path / cast(str, cls.run)
+        cls.temp_run_path.mkdir(exist_ok=True)
 
         cls._load_profiles()
 
@@ -297,6 +327,7 @@ class BaseExper:
         cls.runs_path = cls.dir_path / cls.cfg['runs_dir']
         cls.templates_path = cls.dir_path / cls.cfg['templates_dir']
         cls.dls_path = cls.dir_path / cls.cfg['dls_dir']
+        cls.temp_path = cls.dir_path / cls.cfg['temp_dir']
 
     @classmethod
     def _read_cond_paths(cls):
@@ -312,7 +343,7 @@ class BaseExper:
 
         e.log.info('loading profiles')
         cls.profiles.clear()
-        assert cls.record is not None
+        assert cls.record
         for cond_path in cls._cond_paths:
             condname = cond_path.name
             if cls.conds and condname not in cls.conds:
@@ -374,13 +405,15 @@ class BaseExper:
                 if inst.state == State.ACTIVE]
 
     @classmethod
-    def new_inst(cls, ip: str, args: MultiDict[str, str], sid: str):
+    def new_inst(cls, ip: str, args: MultiDict[str, str], sid: str, userid: Optional[str] = None):
+        assert cls.record
         inst = cls(ip, args, sid)
         inst._will_start()
-        #session['sid'] = inst.sid
         cls.instances[inst.sid] = inst
         e.log.info(f'new instance for sid {inst.sid[:4]}')
         e.srv.dboard.inst_created(inst)
+        if cls.mode != 'res':
+            cls.record.init_inst(inst, userid)
         return inst
 
     @classmethod
@@ -430,6 +463,15 @@ class BaseExper:
         return sum([by_cond[c][s]
                     for c in sorted(by_cond.keys())
                     for s in sorted(by_cond[c].keys())], [])
+
+    def _write_response(self, resp: TaskResponse, task_id: int):
+        dest_path = self.temp_work_path / f'{task_id}.json'
+        with open(dest_path, 'w') as f:
+            item = {'time': resp.timestamp, 'task': resp.task_name}
+            if resp.response is not None:
+                item['resp'] = resp.response
+            item.update(resp.extra)
+            json.dump(item, f, indent=2)
 
     @classmethod
     def write_responses(cls, resps: list[TaskResponse], dest_path: Path):
@@ -512,10 +554,25 @@ class BaseExper:
         if not self.has_consent_task:
             self.assign_profile()
         self.variables['exp_num_tasks'] = self.num_tasks_created
+        # If we are resuming and this inst has partial results,
+        # ...
+        # - Which task do we start from? If we were in TM, it may not be
+        #   the latest task with results.
         self._update_vars()
 
+    def _nav(self, resp: Any, dest_task: tasks.Task):
+        assert self.record
+        self._store_resp(resp)
+        self.task = dest_task
+        self.task_cursor = dest_task.id
+        self._update_vars()
+        #self._save_responses()
+        if self.state == State.ACTIVE:
+            e.srv.dboard.inst_updated(self)
+        self.record.update_inst(self)
+
     def next_task(self, resp: Any):
-        pass
+        self._nav(resp, self.task.next_task(resp))
 
     def present(self, tplt_vars={}):
         return self.task.present(tplt_vars)
@@ -530,10 +587,11 @@ class BaseExper:
         self.variables['exp_task_cursor'] = self.task_cursor
         self.variables['exp_state'] = self.state.name
 
-    def _store_resp(self, resp):
+    def _store_resp(self, resp: Any):
         task_resp = TaskResponse(
             resp, self.task.template_name, **self.task.resp_extra)
         self.responses[self.task.id] = task_resp
+        self._write_response(task_resp, self.task.id)
         #self.task.did_store_resp(resp)
 
     def _elapsed_time(self):
@@ -598,30 +656,38 @@ class BaseExper:
             self._save_responses()
 
 
+class InstData(TypedDict):
+    state: str
+    curr_task_id: int
+    userid: Optional[str]
+
+
 class Record:
-    replicate: Union[str, None]
+    # folder name of exper run we are replicating
+    replicate: Optional[str]
     run_path: Path
     id_mapping_path: Path
+    _experclass: BaseExper
+    _run: str
+    _md_path: Path
+    _inst_data: dict[str, InstData]
 
-    def __init__(self, experclass: Type[e.Experiment], fromsaved: Optional[str] = None):
-        self.experclass = experclass
-        fromsaved = cast(str, fromsaved or experclass.run)
-        saved_path = experclass.runs_path / fromsaved
-        md_path = saved_path / 'metadata'
-        if md_path.is_file():
-            schema = strictyaml.Map({
-                'replicate': strictyaml.EmptyNone() | strictyaml.Str(),
-            })
-            with open(saved_path / 'metadata') as f:
-                metadata = strictyaml.load(f.read(), schema).data
-                self.start_time = fromsaved
-                # folder name of exper run we are replicating
-                self.replicate = metadata.get('replicate')
+    def __init__(self, experclass: BaseExper, fromsaved: Optional[str] = None):
+        assert experclass.run
+        self._experclass = experclass
+        self._run = fromsaved or experclass.run
+        self.run_path = experclass.runs_path / self._run
+        # create run directory (it will already exist if resuming)
+        self.run_path.mkdir(exist_ok=True)
+        for cname, c in self._experclass.cond_mod().conds.items():
+            (self.run_path / cname).mkdir(exist_ok=True)
+        self._md_path = self.run_path / 'metadata.json'
+        if self._md_path.is_file():
+            self.load()
         else:
-            self.start_time = fromsaved
             self.replicate = None
-        self.run_path = experclass.runs_path / self.start_time
         self.id_mapping_path = self.run_path / 'id-mapping'
+        self._inst_data = {}
 
     def completed_profiles(self) -> list[str]:
         # list of strings of form 'cond/prof'
@@ -636,20 +702,38 @@ class Record:
                         profiles.append(f'{cond_path.name}/{prof}')
         return profiles
 
+    def init_inst(self, inst: BaseExper, userid: Optional[str] = None):
+        inst_data: InstData = {
+            'state': inst.state.name,
+            'curr_task_id': inst.task.id, 
+            'userid': userid
+        }
+        self._inst_data[inst.sid] = inst_data
+        self.save()
+
+    def update_inst(self, inst: BaseExper):
+        self._inst_data[inst.sid]['state'] = inst.state.name
+        self._inst_data[inst.sid]['curr_task_id'] = inst.task.id
+        self.save()
+
+    def lookup_user_sid(self, userid: str) -> str | None:
+        for sid, inst_data in self._inst_data.items():
+            if inst_data['userid'] == userid:
+                return sid
+            
+    def load(self):
+        with open(self._md_path) as f:
+            fields = json.load(f)
+            self.replicate = fields['replicate']
+            self._inst_data = fields['participants']
+
     def save(self):
         # Only the metadata is saved here; the data for each
-        # individual subject is saved by the experiment class
-
-        # create run directory (it will already exist if resuming)
-        self.run_path.mkdir(exist_ok=True)
-        for cname, c in self.experclass.cond_mod().conds.items():
-            (self.run_path / cname).mkdir(exist_ok=True)
-
-        md_path = self.run_path / 'metadata'
-        with open(md_path, 'w') as f:
+        # individual participant is saved by the experiment class
+        with open(self._md_path, 'w') as f:
             fields = {}
-            # if self.time_end:
-            #     fields['time_end'] = self.time_end
-            fields['replicate'] = self.replicate or ''
-            print(strictyaml.as_document(fields).as_yaml(), file=f)
+            fields['replicate'] = self.replicate
+            fields['participants'] = self._inst_data
+            json.dump(fields, f, indent=2)
+            #print(strictyaml.as_document(fields).as_yaml(), file=f)
 

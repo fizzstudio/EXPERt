@@ -58,14 +58,14 @@ class User:
     password: str
     lock_time: float
     login_failures: list[float]
-    sid: Optional[str]
+    #sid: Optional[str]
 
     def __init__(self, userid: str, info: UserInfo):
         self.userid = userid
         self.password = info['password']
         self.lock_time = info['lock_time']
         self.login_failures = info['login_failures']
-        self.sid = info['sid']
+        #self.sid = info['sid']
         
     def save_info(self):
         all_user_info = load_all_user_info()
@@ -74,7 +74,7 @@ class User:
         all_user_info[self.userid]['password'] = self.password
         all_user_info[self.userid]['lock_time'] = self.lock_time
         all_user_info[self.userid]['login_failures'] = self.login_failures
-        all_user_info[self.userid]['sid'] = self.sid
+        #all_user_info[self.userid]['sid'] = self.sid
         save_all_user_info(all_user_info)
 
     @property
@@ -148,11 +148,14 @@ class SessionManager:
             if ph.check_needs_rehash(user.password):
                 update_user_info(userid, password=ph.hash(password))
             user.clear_login_failures()
-            if not user.sid:
-                user.sid = create_sid()
-                user.save_info()
-            self.sessions[user.sid] = user
-            return user.sid
+            assert e.experclass and e.experclass.record
+            sid = e.experclass.record.lookup_user_sid(userid)
+            #if not user.sid:
+            if not sid:
+                sid = create_sid()
+                #user.save_info()
+            self.sessions[sid] = user
+            return sid
         except argon2.exceptions.VerificationError:
             e.log.info('login failed')
             prev_failures = user.prune_login_failures(now)
@@ -162,7 +165,6 @@ class SessionManager:
                         f' {LOCK_CRITERIA["within"]} seconds;' +
                         f' locking account \'{userid}\'')
                 user.lock(now)
-                # redir_error LoginError::Locked
                 raise UserError('too many login failures')
             else:
                 e.log.info(

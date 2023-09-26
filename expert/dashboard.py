@@ -9,6 +9,7 @@ import importlib
 import time
 import traceback
 import weakref
+import os
 
 from pathlib import Path
 from typing import Any, Optional, TypedDict, cast
@@ -16,7 +17,7 @@ from typing import Any, Optional, TypedDict, cast
 from flask import send_file, request, make_response
 
 import expert as e
-from . import templates, experiment, view
+from . import templates, experiment, view, server
 
 
 # def authn_check(fn):
@@ -245,7 +246,7 @@ class Dashboard(view.View):
     _events: list[Event]
     _bundle_file_chunks: dict[str, list[Optional[BundleFileChunk]]]
 
-    def __init__(self, srv):
+    def __init__(self, srv: server.Server):
         super().__init__(template='dashboard')
 
         cfg_code = srv.cfg.get('dashboard_code')
@@ -307,7 +308,7 @@ class Dashboard(view.View):
             return self.present()
 
         @e.app.route(f'{self._js_path}/<path:subpath>')
-        def dashboard_js(subpath):
+        def dashboard_js(subpath: str):
             #if '..' in subpath:
             #    return e.srv.not_found(), 404
             body = self.render(f'js/{subpath}.jinja')
@@ -316,13 +317,13 @@ class Dashboard(view.View):
             resp.content_type = 'application/javascript'
             return resp
 
-        @e.app.route(f'{self._path}/download/results/<path:subpath>')
-        def dashboard_dl_results(subpath):
+        @e.app.route(f'{self._path}/download/results/<run>')
+        def dashboard_dl_results(run: str):
             #if '..' in subpath:
             #    return e.srv.not_found(), 404
-            dl_name = f'exp_{e.bundle_name}_{subpath}_results'
+            dl_name = f'exp_{e.bundle_name}_{run}_results'
             e.log.info(f'download request for {dl_name}.zip')
-            self._zip_results(subpath, dl_name)
+            self._zip_results(run, dl_name)
             return self._download(dl_name + '.zip')
 
         @e.app.route(f'{self._path}/download/profiles')
@@ -332,13 +333,13 @@ class Dashboard(view.View):
             self._zip_profiles(dl_name)
             return self._download(dl_name + '.zip')
 
-        @e.app.route(f'{self._path}/download/id_mapping/<path:subpath>')
-        def dashboard_dl_id_map(subpath):
+        @e.app.route(f'{self._path}/download/id_mapping/<run>')
+        def dashboard_dl_id_map(run: str):
             #if '..' in subpath:
             #    return e.srv.not_found(), 404
-            dl_name = f'exp_{e.bundle_name}_{subpath}_id_map'
+            dl_name = f'exp_{e.bundle_name}_{run}_id_map'
             e.log.info(f'download request for {dl_name}.zip')
-            self._zip_id_mapping(subpath, dl_name)
+            self._zip_id_mapping(run, dl_name)
             return self._download(dl_name + '.zip')
 
         @e.app.route(f'{self._path}/download/log')
@@ -347,7 +348,16 @@ class Dashboard(view.View):
             return send_file(e.srv.logfile, 
                 as_attachment=True, download_name='expert.log')
 
-    def _add_sio_commands(self, srv):
+    def _add_sio_commands(self, srv: server.Server):
+        @srv.socketio.on('connect', namespace=f'/{self.code}')
+        def sio_connect():
+            e.log.info('dashboard socket connected')
+        @srv.socketio.on('disconnect', namespace=f'/{self.code}')
+        def sio_disconnect():
+            e.log.info('dashboard socket disconnected')
+        @srv.socketio.on_error(namespace=f'/{self.code}')
+        def sio_error(err):
+            e.log.error(f'dashboard socket error: {err}')
         @srv.socketio.on('call_api', namespace=f'/{self.code}')
         def sio_call(cmd: str, *args):
             try:
@@ -422,6 +432,8 @@ class Dashboard(view.View):
             with open(bundles_path / relpath, 'wb') as f:
                 for c in chunks:
                     f.write(c['data'])
+            lastmod_ns = chunks[0]['lastMod']*10**6
+            os.utime(bundles_path / relpath, ns=(lastmod_ns, lastmod_ns))
         data_size = sum(len(c['data']) for fname in all_chunks for c in all_chunks[fname])
         e.log.info(f'received {len(all_chunks)} files, {data_size} bytes')
         importlib.invalidate_caches()
@@ -429,6 +441,7 @@ class Dashboard(view.View):
         self._bundle_file_chunks.clear()
 
     def stop_run(self):
+        assert e.experclass
         if not e.experclass.running:
             return
         e.log.info('--- stopping current run ---')
@@ -440,6 +453,7 @@ class Dashboard(view.View):
         templates.variables['exp_app_is_running'] = False
 
     def _zip_results(self, run_id: str, zip_name: str):
+        assert e.experclass
         e.log.info('building zip file')
         # run_path = expert.experclass.runs_path / run_id
         root = Path(zip_name).stem
@@ -463,6 +477,7 @@ class Dashboard(view.View):
             #             root + '/' + str(respath.relative_to(run_path)))
 
     def _zip_profiles(self, zip_name: str):
+        assert e.experclass
         e.log.info('building zip file')
         with zipfile.ZipFile(e.experclass.dls_path / f'{zip_name}.zip', 'w',
                              compression=zipfile.ZIP_DEFLATED,
@@ -476,6 +491,7 @@ class Dashboard(view.View):
                     zf.write(prof, f'{zip_name}/{cond.name}/{prof.name}')
 
     def _zip_id_mapping(self, run_id: str, zip_name: str):
+        assert e.experclass
         e.log.info('building zip file')
         id_map_path = e.experclass.runs_path / run_id / 'id-mapping'
         root = Path(zip_name).stem
@@ -488,12 +504,13 @@ class Dashboard(view.View):
                 zf.write(str(fpath), root + '/' + fpath.name)
 
     def _download(self, dl_name: str):
+        assert e.experclass
         #if not dl_path.is_file():
         return send_file(
             e.experclass.dls_path / dl_name,
             as_attachment=True, download_name=dl_name)
 
-    def _inst_index(self, inst: e.Experiment):
+    def _inst_index(self, inst: experiment.BaseExper):
         i = None
         num_other = 0
         for i, ev in enumerate(self._events):
@@ -503,9 +520,17 @@ class Dashboard(view.View):
             elif ev.data() == inst:
                 return i - num_other
 
-    def inst_full_status(self, inst: e.Experiment):
+    def inst_full_status(self, inst: experiment.BaseExper):
         status = inst.status()
-        y, mo, d, h, mi, s = inst.start_timestamp.split('.')
+        # Pad numbers with leading zeros to a fixed width
+        def pad(n: int, width: int):
+            return format(n, f'0{width}')
+        seconds = inst.start_timestamp//1000
+        ltime = time.localtime(seconds)
+        y, mo, d, h, mi, s = [
+            str(ltime.tm_year), pad(ltime.tm_mon, 2), pad(ltime.tm_mday, 2),
+            pad(ltime.tm_hour, 2), pad(ltime.tm_min, 2), pad(ltime.tm_sec, 2),
+        ]
         status.update({
             'sid': inst.sid[:8], 'ip': inst.clientip,
             'time': f'{mo}/{d}/{y} {h}:{mi}:{s}',
@@ -513,12 +538,12 @@ class Dashboard(view.View):
         })
         return status
 
-    def inst_created(self, inst: e.Experiment):
+    def inst_created(self, inst: experiment.BaseExper):
         self._events.append(Event('inst', weakref.ref(inst), inst.start_time))
         e.srv.socketio.emit('new_instance', self.inst_full_status(inst),
                             namespace=f'/{self.code}')
 
-    def inst_updated(self, inst: e.Experiment):
+    def inst_updated(self, inst: experiment.BaseExper):
         i = self._inst_index(inst)
         status = inst.status()
         status['state'] = inst.state.name
@@ -528,7 +553,7 @@ class Dashboard(view.View):
         e.srv.socketio.emit(
             'update_instance', (i, status), namespace=f'/{self.code}')
 
-    def monitor_updated(self, insts):
+    def monitor_updated(self, insts: list[experiment.BaseExper]):
         e.srv.socketio.emit(
             'update_active_instances',
             [[self._inst_index(inst), inst.status()] for inst in insts],

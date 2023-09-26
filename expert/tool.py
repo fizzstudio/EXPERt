@@ -1,5 +1,5 @@
 
-from typing import ClassVar, Type
+from typing import ClassVar, Type, Any
 
 import expert as e
 from .experiment import BaseExper, API
@@ -7,16 +7,16 @@ from .tasks import Task
 
 class ToolAPI(API):
 
-    def prev_page(self, resp):
+    def prev_page(self, resp: Any):
         if self._inst.task.prev_task:
             self._inst.prev_task(resp)
         return self._inst.all_vars()
 
-    def goto(self, task_label, resp):
+    def goto(self, task_label: str, resp: Any):
         self._inst.go_to(task_label, resp)
         return self._inst.all_vars()
 
-    def goto_id(self, task_id, resp):
+    def goto_id(self, task_id: int, resp: Any):
         self._inst.go_to_id(task_id, resp)
         return self._inst.all_vars()
 
@@ -49,26 +49,26 @@ class Tool(BaseExper):
         self.variables['exp_nav_items'] = [
             label for label, task in self.nav_items()]
 
-    def _store_resp(self, resp):
+    def _store_resp(self, resp: Any):
         super()._store_resp(resp)
         self.task.variables['exp_resp'] = resp
 
-    def _nav(self, resp, dest_task: Task):
-        self._store_resp(resp)
-        self.task = dest_task
-        self.task_cursor = dest_task.id
-        self._update_vars()
-        #if self.profile:
-        self._save_responses()
-        e.srv.dboard.inst_updated(self)
+    #def _nav(self, resp: Any, dest_task: Task):
+    #    self._store_resp(resp)
+    #    self.task = dest_task
+    #    self.task_cursor = dest_task.id
+    #    self._update_vars()
+    #    #self._save_responses()
+    #    e.srv.dboard.inst_updated(self)
 
-    def prev_task(self, resp):
+    def prev_task(self, resp: Any):
         self._nav(resp, self.task.prev_task)
 
-    def next_task(self, resp):
-        self._nav(resp, self.task.next_task(resp))
+    #def next_task(self, resp: Any):
+    #    self._nav(resp, self.task.next_task(resp))
+    #    super().next_task(resp)
 
-    def go_to(self, task_label, resp):
+    def go_to(self, task_label: str, resp: Any):
         dest_task = None
         for label, task in self.nav_items():
             if label == task_label:
@@ -76,6 +76,6 @@ class Tool(BaseExper):
                 break
         self._nav(resp, dest_task)
 
-    def go_to_id(self, task_id, resp):
+    def go_to_id(self, task_id: int, resp: Any):
         dest_task = self.tasks_by_id[task_id]
         self._nav(resp, dest_task)
