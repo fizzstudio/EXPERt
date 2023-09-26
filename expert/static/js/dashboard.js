@@ -8,7 +8,7 @@ class Uploader {
     constructor(ctrlr) {
         this.ctrlr = ctrlr;
         this.input = elt('file-input');
-        this.allow = ['cfg.json', 'src/', 'static/', 'templates/'];
+        this.allow = ['cfg.json', 'user_info.json', 'src/', 'static/', 'templates/'];
         this.deny = ['profiles/', 'runs/'];
     }
     _aread(f) {
@@ -504,7 +504,7 @@ class Dashboard extends Controller {
             if (ok &&
                 await this.confirmDlg.show(`Really delete ID mapping for run
                     ${this.runsDlg.run}?`, 'Cancel', 'Delete')) {
-                await this.api('delete_id_mapping', this.runsDlg.run);
+                await this.api('delete_id_mapping', [this.runsDlg.run]);
             }
             this.deleteIdBtn.disabled = false;
         });
@@ -546,16 +546,15 @@ class Dashboard extends Controller {
         this.loadBtn.disabled = true;
         this._onBundleUpdate();
     }
-    async api(cmd, ...params) {
-        const { val, err } = await super.api(cmd, ...params);
-        if (err) {
+    async api(cmd, params = []) {
+        try {
+            return await super.api(cmd, params);
+        }
+        catch (err) {
             if (this.tracebackDlg) {
                 await this.tracebackDlg.show(err);
             }
             throw new APIError(`Error in API call '${params[0]}': ${err}`);
-        }
-        else {
-            return val;
         }
     }
     _onBundleUpdate() {
@@ -592,7 +591,8 @@ class Dashboard extends Controller {
                 if (this.run) {
                     await this.stopRun();
                 }
-                const { vars, tback } = await this.api('load_bundle', this.bundlesDlg.bundle, this.bundlesDlg.toolMode);
+                const { vars, tback } = await this.api('load_bundle', [this.bundlesDlg.bundle,
+                    this.bundlesDlg.toolMode]);
                 if (tback) {
                     await this.tracebackDlg.show(tback);
                     if (this.bundle) {
@@ -637,7 +637,7 @@ class Dashboard extends Controller {
             if (this.run) {
                 await this.stopRun();
             }
-            const { vars, err } = await this.api('reload_bundle', toolMode);
+            const { vars, err } = await this.api('reload_bundle', [toolMode]);
             if (!err) {
                 this.instList.addSeparator('reload', this.bundle);
             }

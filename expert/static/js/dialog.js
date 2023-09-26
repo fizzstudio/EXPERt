@@ -8,10 +8,15 @@ function elts(...ids) {
     }
     return dom;
 }
-async function callApi(socket, ...params) {
-    const p = new Promise(resolve => {
-        socket.emit('call_api', ...params, (resp) => {
-            resolve(resp);
+async function callApi(socket, cmd, params = []) {
+    const p = new Promise((resolve, reject) => {
+        socket.emit('call_api', cmd, ...params, (resp) => {
+            if (Object.hasOwn(resp, 'val')) {
+                resolve(resp.val);
+            }
+            else {
+                reject(resp.err);
+            }
         });
     });
     return p;
@@ -38,8 +43,8 @@ class Controller {
     async _onSocketConnectError() {
         console.log("socket connection error");
     }
-    async api(cmd, ...params) {
-        return await callApi(this._socket, cmd, ...params);
+    async api(cmd, params = []) {
+        return await callApi(this._socket, cmd, params);
     }
 }
 
@@ -68,7 +73,7 @@ class Overlay extends View {
         this.visible = false;
     }
     async init() {
-        const content = await this.ctrlr.api('load_template', this.template);
+        const content = await this.ctrlr.api('load_template', [this.template]);
         this.node.innerHTML = content;
         this.contentNode = this.node.querySelector('.exp-overlay-content');
         return this;

@@ -206,7 +206,7 @@ export class Dashboard extends Controller {
                     `Really delete ID mapping for run
                     ${this.runsDlg.run}?`,
                     'Cancel', 'Delete')) {
-                await this.api('delete_id_mapping', this.runsDlg.run);
+                await this.api('delete_id_mapping', [this.runsDlg.run]);
             }
             this.deleteIdBtn.disabled = false;
         });
@@ -256,20 +256,19 @@ export class Dashboard extends Controller {
         this._onBundleUpdate();
     }
 
-    async api(cmd: string, ...params: any) {
-        const {val, err} = await super.api(cmd, ...params);
-        if (err) {
+    async api(cmd: string, params: any[] = []) {
+        try {
+            return await super.api(cmd, params);
+        } catch (err) {
             // If an error occurs during the API call that happens
             // when the traceback dialog is created, obviously
             // it won't exist yet!
             if (this.tracebackDlg) {
-                await this.tracebackDlg.show(err);
+                await this.tracebackDlg.show(err as string);
             }
             throw new APIError(
                 `Error in API call '${params[0]}': ${err}`);
-        } else {
-            return val;
-        }
+        } 
     }
 
     /**
@@ -310,8 +309,8 @@ export class Dashboard extends Controller {
                     await this.stopRun();
                 }
                 const {vars, tback} = await this.api(
-                    'load_bundle', this.bundlesDlg.bundle,
-                    this.bundlesDlg.toolMode);
+                    'load_bundle', [this.bundlesDlg.bundle,
+                    this.bundlesDlg.toolMode]);
                 if (tback) {
                     await this.tracebackDlg.show(tback);
                     if (this.bundle) {
@@ -362,7 +361,7 @@ export class Dashboard extends Controller {
                 // NB: this adds a stop separator, not a reload separator
                 await this.stopRun();
             }
-            const {vars, err} = await this.api('reload_bundle', toolMode);
+            const {vars, err} = await this.api('reload_bundle', [toolMode]);
             if (!err) {
                 this.instList.addSeparator('reload', this.bundle);
             } else {

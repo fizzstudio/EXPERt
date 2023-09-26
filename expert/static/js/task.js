@@ -48,7 +48,7 @@ class Task extends Controller {
                 await this._nextHook();
             }
             this.disableNext();
-            await this._nav('next_page', this.response);
+            await this._nav('next_page', [this.response]);
         });
         if (this.returnBtn) {
             this.returnBtn.addEventListener('click', async () => {
@@ -62,13 +62,13 @@ class Task extends Controller {
         if (this.domVars.exp_tool_mode === 'True') {
             this.prevBtn.addEventListener('click', async () => {
                 this.prevBtn.disabled = true;
-                await this._nav('prev_page', this.response);
+                await this._nav('prev_page', [this.response]);
                 this.prevBtn.disabled = false;
             });
             this.navSelect.addEventListener('change', async () => {
                 const idx = this.navSelect.selectedIndex;
                 if (idx) {
-                    await this._nav('goto', this.vars['exp_nav_items'][idx - 1], this.response);
+                    await this._nav('goto', [this.vars['exp_nav_items'][idx - 1], this.response]);
                 }
             });
         }
@@ -79,8 +79,8 @@ class Task extends Controller {
     set nextHook(h) {
         this._nextHook = h;
     }
-    async api(cmd, ...params) {
-        const { val, err } = await super.api(cmd, ...params);
+    async api(cmd, params = []) {
+        const { val, err } = await super.api(cmd, params);
         if (err) {
             if (this.errorOverlay) {
                 this.errorOverlay.makeVisible();
@@ -107,8 +107,8 @@ class Task extends Controller {
             this.nextBtn.disabled = cursor === num_tasks;
         }
     }
-    async _nav(cmd, ...params) {
-        let vars = await this.api(cmd, ...params);
+    async _nav(cmd, params = []) {
+        let vars = await this.api(cmd, params);
         if (vars['task_type'] === this.vars['task_type'] &&
             vars['task_script'] === this.vars['task_script']) {
             this.vars = vars;
