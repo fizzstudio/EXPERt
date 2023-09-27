@@ -3,9 +3,9 @@ import {
     Controller, Overlay, MessageDialog, ConfirmDialog, TracebackDialog,
     elt
 } from '@fizz/expert-client';
-import { Uploader } from './uploader';
 import { InstList } from './instlist';
 import { BundlesDialog, RunsDialog } from './dialogs';
+import { Uploader } from './uploader';
 
 
 export interface Inst {
@@ -44,7 +44,6 @@ export class Dashboard extends Controller {
     downloadIdBtn: HTMLButtonElement;
     deleteIdBtn: HTMLButtonElement;
     downloadLogBtn: HTMLButtonElement;
-    uploader: Uploader;
     bundle: string | null;
     run: string | null;
     completed: number;
@@ -58,6 +57,7 @@ export class Dashboard extends Controller {
     msgDlg: MessageDialog;
     vars: {[name: string]: any} | null;
     instList: InstList;
+    private uploader = new Uploader(this);
 
     constructor() {
         super();
@@ -72,7 +72,6 @@ export class Dashboard extends Controller {
         this.downloadIdBtn = elt('download-id-btn') as HTMLButtonElement;
         this.deleteIdBtn = elt('delete-id-btn') as HTMLButtonElement;
         this.downloadLogBtn = elt('download-log-btn') as HTMLButtonElement;
-        this.uploader = new Uploader(this);
         this.bundle = null;
         this.run = null;
         this.completed = 0;
@@ -80,6 +79,7 @@ export class Dashboard extends Controller {
     }
     
     async init(ns: string) {
+        await this.uploader.init(ns);
         return await super.init(ns);
     }
 
@@ -128,14 +128,9 @@ export class Dashboard extends Controller {
         this.instList = new InstList(this);
 
         this.uploadBtn.addEventListener('click', async () => {
-            const {resp, status} = await this.uploader.upload();
-            if (resp === null) {
-                await this.msgDlg.show(
-                    `Bundle upload request failed; response status: ${status}`);
-            } else if (!resp.ok) {
-                await this.msgDlg.show(
-                    `Error uploading bundle: ${resp.err}`);
-            }
+            this.uploadBtn.disabled = true;
+            await this.uploader.show();
+            this.uploadBtn.disabled = false;
         });
         this.loadBtn.addEventListener('click', async () => {
             this.loadBtn.disabled = true;
@@ -206,7 +201,7 @@ export class Dashboard extends Controller {
                     `Really delete ID mapping for run
                     ${this.runsDlg.run}?`,
                     'Cancel', 'Delete')) {
-                await this.api('delete_id_mapping', this.runsDlg.run);
+                await this.api('delete_id_mapping', [this.runsDlg.run]);
             }
             this.deleteIdBtn.disabled = false;
         });
@@ -256,20 +251,18 @@ export class Dashboard extends Controller {
         this._onBundleUpdate();
     }
 
-    async api(cmd: string, ...params: any) {
-        const {val, err} = await super.api(cmd, ...params);
-        if (err) {
+    async api(cmd: string, params: any[] = [], showTraceback=true) {
+        try {
+            return await super.api(cmd, params);
+        } catch (err) {
             // If an error occurs during the API call that happens
             // when the traceback dialog is created, obviously
             // it won't exist yet!
-            if (this.tracebackDlg) {
-                await this.tracebackDlg.show(err);
+            if (showTraceback && this.tracebackDlg) {
+                await this.tracebackDlg.show(err as string);
             }
-            throw new APIError(
-                `Error in API call '${params[0]}': ${err}`);
-        } else {
-            return val;
-        }
+            throw new APIError(`Error in API call '${params[0]}': ${err}`);
+        } 
     }
 
     /**
@@ -310,8 +303,7 @@ export class Dashboard extends Controller {
                     await this.stopRun();
                 }
                 const {vars, tback} = await this.api(
-                    'load_bundle', this.bundlesDlg.bundle,
-                    this.bundlesDlg.toolMode);
+                    'load_bundle', [this.bundlesDlg.bundle, this.bundlesDlg.toolMode]);
                 if (tback) {
                     await this.tracebackDlg.show(tback);
                     if (this.bundle) {
@@ -362,7 +354,7 @@ export class Dashboard extends Controller {
                 // NB: this adds a stop separator, not a reload separator
                 await this.stopRun();
             }
-            const {vars, err} = await this.api('reload_bundle', toolMode);
+            const {vars, err} = await this.api('reload_bundle', [toolMode]);
             if (!err) {
                 this.instList.addSeparator('reload', this.bundle);
             } else {

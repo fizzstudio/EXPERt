@@ -11,7 +11,7 @@ import traceback
 import weakref
 
 from pathlib import Path
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional, TypedDict, cast
 
 from flask import send_file, request, make_response
 
@@ -59,9 +59,27 @@ class RunRec(TypedDict):
     has_pii: bool
 
 
+class BundleFileChunk(TypedDict):
+    name: str
+    idx: int
+    nChunks: int
+    lastMod: int
+    data: bytes
+
+
 class APIBadArgumentError(Exception):
     def __init__(self, cmd: str, value: Any):
         super().__init__(f'{cmd}: bad argument value \'{value}\'')
+
+
+class APIError(Exception):
+    def __init__(self, cmd: str, msg: str):
+        super().__init__(f'{cmd}: {msg}')
+
+
+class DashboardError(Exception):
+    def __init__(self, msg: str):
+        super().__init__(msg)
 
 
 class API:
@@ -125,7 +143,7 @@ class API:
 
     def stop_run(self):
         self._dboard._events.append(Event('run_stop', e.experclass.run))
-        self._dboard._stop_run()
+        self._dboard.stop_run()
 
     # @socketio.on('delete_results')
     # def sio_delete_results(runs):
@@ -208,6 +226,15 @@ class API:
 
     def load_template(self, tplt: str, tplt_vars={}):
         return templates.render(tplt, tplt_vars)
+    
+    def upload_bundle_chunk(self, chunk: BundleFileChunk):
+        if '..' in chunk['name']:
+            raise APIError('upload_bundle_chunk', 'filenames cannot contain ".."')
+        self._dboard.store_bundle_file_chunk(chunk)
+        #e.log.info(f'got chunk \'{chunk["name"]}-{chunk["idx"]}\'')
+
+    def save_bundle_chunks(self):
+        self._dboard.save_bundle_chunks()
 
 
 class Dashboard(view.View):
@@ -216,6 +243,7 @@ class Dashboard(view.View):
     code: str
     _url: str
     _events: list[Event]
+    _bundle_file_chunks: dict[str, list[Optional[BundleFileChunk]]]
 
     def __init__(self, srv):
         super().__init__(template='dashboard')
@@ -254,11 +282,14 @@ class Dashboard(view.View):
         self.variables['exp_authn_code'] = self.code
         self.variables['exp_window_title'] = 'EXPERt Dashboard'
         self.variables['exp_favicon'] = srv.cfg['dashboard_favicon']
+        self.variables['exp_upload_chunk_size_kib'] = srv.cfg['upload_chunk_size_kib']
+        self.variables['exp_simultaneous_chunk_uploads'] = srv.cfg['simultaneous_chunk_uploads']
         # XXX what about resuming?
         self.variables['exp_completed_profiles'] = 0
         self.update_vars()
 
         self._events = []
+        self._bundle_file_chunks = {}
 
     def update_vars(self):
         # NB: This is the total number, not affected by resuming
@@ -316,47 +347,6 @@ class Dashboard(view.View):
             return send_file(e.srv.logfile, 
                 as_attachment=True, download_name='expert.log')
 
-        @e.app.route(f'{self._path}/upload_bundle', methods=['POST'])
-        def dashboard_ul_bundle():
-            bundles_path = e.expert_path / 'bundles'
-            bundle_name = next(iter(request.files)).split('/')[0]
-
-            if '..' in bundle_name:
-                return {'ok': False, 'err': 'Bundle name cannot contain ".."'}
-            for relpath, f in request.files.items():
-                if '..' in relpath:
-                    return {'ok': False, 'err': 'Filenames cannot contain ".."'}
-
-            if e.experclass and bundle_name == e.bundle_name:
-                self._stop_run()
-
-            bundle_path = bundles_path / bundle_name
-            parents = set((bundles_path / relpath).parent 
-                for relpath in request.files.keys())
-            # clear out all existing subdirs within the bundle dir
-            # (if it exists) except for profiles/ and runs/
-            # (the client should never try and upload anything from
-            # profiles/ or runs/)
-            dont_delete = [bundle_path, bundle_path / 'profiles', bundle_path / 'runs']
-            for p in parents:
-                if p not in dont_delete:
-                    shutil.rmtree(p, ignore_errors=True)
-            for relpath, f in request.files.items():
-                path = bundles_path / relpath
-                try:
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                except FileExistsError:
-                    err = f'Unable to write file \'{relpath}\''
-                    e.log.error(
-                        f'error uploading bundle \'{bundle_name}\': {err}')
-                    return {'ok': False, 'err': err}
-                f.save(path)
-                #e.log.info(f'saved {relpath}')
-            e.log.info(f'received {len(request.files)} files')
-            importlib.invalidate_caches()
-            e.log.info(f'installed bundle \'{bundle_name}\'')
-            return {'ok':True, 'err': None}
-
     def _add_sio_commands(self, srv):
         @srv.socketio.on('call_api', namespace=f'/{self.code}')
         def sio_call(cmd: str, *args):
@@ -383,7 +373,62 @@ class Dashboard(view.View):
                 'target': None
             }
 
-    def _stop_run(self):
+    def store_bundle_file_chunk(self, chunk: BundleFileChunk):
+        chunks = self._bundle_file_chunks.setdefault(
+            chunk['name'], [None]*chunk['nChunks'])
+        if chunks[chunk['idx']] is None:
+            chunks[chunk['idx']] = chunk
+        else:
+            raise DashboardError(
+                f'upload file \'{chunk["name"]}\': collision at index {chunk["idx"]}')
+
+    def save_bundle_chunks(self):
+        bundles_path = e.expert_path / 'bundles'
+        for file_path, chunks in self._bundle_file_chunks.items():
+            if not all(chunks):
+                raise DashboardError(f'file \'{file_path}\' has missing chunk')
+        all_chunks = cast(dict[str, list[BundleFileChunk]], self._bundle_file_chunks)
+        bundle_name = next(iter(all_chunks.keys())).split('/')[0]
+
+        if e.experclass and bundle_name == e.bundle_name:
+            self.stop_run()
+
+        bundle_path = bundles_path / bundle_name
+        # clear out all existing subdirs within the bundle dir
+        # (if it exists) except for profiles/ and runs/
+        # (the client should never try and upload anything from
+        # profiles/ or runs/)
+        dont_delete = [bundle_path, bundle_path / 'profiles', bundle_path / 'runs']
+        try:
+            for p in bundle_path.iterdir():
+                if p.is_dir() and p not in dont_delete:
+                    e.log.info(f'removing {p}')
+                    shutil.rmtree(p, ignore_errors=True)
+        except:
+            # bundle_path doesn't exist yet
+            pass
+        for relpath, chunks in all_chunks.items():
+            if relpath.startswith(f'{bundle_name}/profiles/') or \
+               relpath.startswith(f'{bundle_name}/runs/'):
+                e.log.warn(f'skipping {relpath}')
+                continue
+            path = bundles_path / relpath
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            except FileExistsError:
+                err = f'unable to write file \'{relpath}\''
+                e.log.error(f'error uploading bundle \'{bundle_name}\': {err}')
+                raise DashboardError(err)
+            with open(bundles_path / relpath, 'wb') as f:
+                for c in chunks:
+                    f.write(c['data'])
+        data_size = sum(len(c['data']) for fname in all_chunks for c in all_chunks[fname])
+        e.log.info(f'received {len(all_chunks)} files, {data_size} bytes')
+        importlib.invalidate_caches()
+        e.log.info(f'installed bundle \'{bundle_name}\'')
+        self._bundle_file_chunks.clear()
+
+    def stop_run(self):
         if not e.experclass.running:
             return
         e.log.info('--- stopping current run ---')

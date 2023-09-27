@@ -1,146 +1,4 @@
-import { e as elt, V as View, D as Dialog, C as Controller, T as TracebackDialog, O as Overlay, a as ConfirmDialog, M as MessageDialog } from './dialog.js';
-
-class Uploader {
-    ctrlr;
-    input;
-    allow;
-    deny;
-    constructor(ctrlr) {
-        this.ctrlr = ctrlr;
-        this.input = elt('file-input');
-        this.allow = ['cfg.json', 'src/', 'static/', 'templates/'];
-        this.deny = ['profiles/', 'runs/'];
-    }
-    _aread(f) {
-        return new Promise(resolve => {
-            const reader = new FileReader();
-            const listener = () => {
-                reader.removeEventListener('load', listener);
-                resolve(reader.result);
-            };
-            reader.addEventListener('load', listener);
-            reader.readAsText(f);
-        });
-    }
-    async _loadManifest(f) {
-        const manifest = await this._aread(f);
-        return manifest
-            .split('\n')
-            .map(x => x.trim())
-            .filter(x => x.length &&
-            !this.deny.find(y => x.toLowerCase() === y) &&
-            !this.allow.find(y => x.toLowerCase() === y));
-    }
-    async _getFiles(bundleName) {
-        let manifestF = null;
-        const fileList = this.input.files;
-        for (const file of fileList) {
-            const parts = file.webkitRelativePath.split('/');
-            if (parts[1] === 'exp_manifest.txt') {
-                manifestF = file;
-                break;
-            }
-        }
-        let allow = this.allow;
-        if (manifestF) {
-            allow = allow.concat(await this._loadManifest(manifestF));
-        }
-        const files = [];
-        for (const item of allow) {
-            const itemPath = `${bundleName}/${item}`;
-            for (const file of fileList) {
-                if (item[item.length - 1] === '/') {
-                    if (file.webkitRelativePath.startsWith(itemPath)) {
-                        files.push(file);
-                    }
-                }
-                else {
-                    if (file.webkitRelativePath === itemPath) {
-                        files.push(file);
-                        break;
-                    }
-                }
-            }
-        }
-        console.log(`will upload ${files.length} files`);
-        return files;
-    }
-    _sendRequest(formData, resolve) {
-        const url = `${this.ctrlr.vars['exp_dashboard_path']}/upload_bundle`;
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener('progress', e => {
-            if (e.lengthComputable) {
-                const pct = Math.round((e.loaded * 100) / e.total);
-                console.log('pct', pct);
-            }
-        }, false);
-        xhr.upload.addEventListener('load', e => {
-            console.log('upload complete');
-        }, false);
-        xhr.addEventListener('readystatechange', e => {
-            if (xhr.readyState === 4) {
-                resolve({ resp: xhr.response, status: `${xhr.status} ${xhr.statusText}` });
-                this.ctrlr.uploadBtn.disabled = false;
-                this.ctrlr.uploadingOverlay.close();
-            }
-        }, false);
-        xhr.open('POST', url);
-        xhr.responseType = 'json';
-        xhr.overrideMimeType('multipart/form-data');
-        console.log('sending upload request');
-        xhr.send(formData);
-    }
-    upload() {
-        return new Promise(resolve => {
-            const listener = async () => {
-                console.log('upload files selected');
-                this.ctrlr.uploadBtn.disabled = true;
-                this.input.removeEventListener('change', listener, false);
-                const bundleName = this.input.files[0]
-                    .webkitRelativePath.split('/')[0];
-                console.log('upload bundle name', bundleName);
-                const bundles = await this.ctrlr.api('get_bundles');
-                if (bundles.includes(bundleName)) {
-                    console.log('bundle already exists');
-                    let msg = `Really overwrite bundle '${bundleName}'?`;
-                    let unload = false;
-                    let stopRun = false;
-                    if (bundleName === this.ctrlr.bundle) {
-                        unload = true;
-                        if (this.ctrlr.run) {
-                            msg += ' Current run will end.';
-                            stopRun = true;
-                        }
-                    }
-                    if (await this.ctrlr.confirmDlg.show(msg, 'Cancel', 'Overwrite')) {
-                        if (stopRun) {
-                            await this.ctrlr.stopRun();
-                        }
-                        if (unload) {
-                            await this.ctrlr.unloadBundle();
-                        }
-                    }
-                    else {
-                        console.log('upload canceled');
-                        resolve({ resp: { ok: true } });
-                        this.ctrlr.uploadBtn.disabled = false;
-                        return;
-                    }
-                }
-                const formData = new FormData();
-                this.ctrlr.uploadingOverlay.makeVisible();
-                const files = await this._getFiles(bundleName);
-                console.log('got upload files');
-                for (const file of files) {
-                    formData.set(file.webkitRelativePath, file);
-                }
-                this._sendRequest(formData, resolve);
-            };
-            this.input.addEventListener('change', listener, false);
-            this.input.click();
-        });
-    }
-}
+import { V as View, e as elt, D as Dialog, C as Controller, a as ConfirmDialog, M as MessageDialog, T as TracebackDialog, O as Overlay } from './dialog.js';
 
 class InstList extends View {
     cols;
@@ -250,6 +108,32 @@ class InstList extends View {
     }
 }
 
+class UploadDialog extends Dialog {
+    inputNode;
+    uploadBtn;
+    constructor(ctrlr, template = 'upload', id = 'exp-dlg-upload') {
+        super(ctrlr, template, id);
+    }
+    async init() {
+        await super.init();
+        this.titlebar = 'Upload Bundle';
+        this.inputNode = this.node.querySelector('.exp-dlg-upload-input');
+        this.uploadBtn = this.node.querySelector('.exp-dlg-upload-btn');
+        this.inputNode.addEventListener('change', () => this.ctrlr.didSelectFiles(this.inputNode.files));
+        this.uploadBtn.addEventListener('click', async () => await this.ctrlr.upload());
+        return this;
+    }
+    async show() {
+        this.setButtons([{ tag: 'cancel', text: 'Close' }]);
+        return await super.makeVisible();
+    }
+    enableButton() {
+        this.uploadBtn.disabled = false;
+    }
+    disableButton() {
+        this.uploadBtn.disabled = true;
+    }
+}
 class SingleSelectorDialog extends Dialog {
     selectNode;
     constructor(ctrlr, template = 'download', id = 'exp-dlg-download') {
@@ -339,6 +223,158 @@ class BundlesDialog extends SingleSelectorDialog {
     }
 }
 
+class Uploader extends Controller {
+    dboard;
+    uploadDlg = new UploadDialog(this);
+    confirmDlg = new ConfirmDialog(this);
+    messageDlg = new MessageDialog(this);
+    include = ['cfg.json', 'user_info.json', 'src/', 'static/', 'templates/'];
+    deny = ['profiles/', 'runs/'];
+    files = null;
+    constructor(dboard) {
+        super();
+        this.dboard = dboard;
+    }
+    async show() {
+        await this.uploadDlg.init();
+        await this.confirmDlg.init();
+        await this.messageDlg.init();
+        this.dboard.uploadBtn.disabled = true;
+        await this.uploadDlg.show();
+        this.dboard.uploadBtn.disabled = false;
+    }
+    didSelectFiles(files) {
+        console.log(`selected ${files.length} files`);
+        this.files = files;
+        this.uploadDlg.enableButton();
+    }
+    async upload() {
+        this.uploadDlg.disableButton();
+        const bundleName = this.files[0].webkitRelativePath.split('/')[0];
+        console.log('upload bundle name:', bundleName);
+        const bundles = await this.dboard.api('get_bundles');
+        if (bundles.includes(bundleName)) {
+            console.log('bundle already exists');
+            let msg = `Really overwrite bundle '${bundleName}'?`;
+            let unload = false;
+            let stopRun = false;
+            if (bundleName === this.dboard.bundle) {
+                unload = true;
+                if (this.dboard.run) {
+                    msg += ' Current run will end.';
+                    stopRun = true;
+                }
+            }
+            if (await this.confirmDlg.show(msg, 'Cancel', 'Overwrite')) {
+                if (stopRun) {
+                    await this.dboard.stopRun();
+                }
+                if (unload) {
+                    await this.dboard.unloadBundle();
+                }
+            }
+            else {
+                console.log('upload canceled');
+                this.uploadDlg.enableButton();
+                return;
+            }
+        }
+        this.dboard.uploadingOverlay.makeVisible();
+        const fileChunks = await this.getFileChunks(bundleName);
+        if (fileChunks.length === 0) {
+            this.dboard.uploadingOverlay.close();
+            await this.messageDlg.show('Error: no valid files selected');
+            return;
+        }
+        const chunkUploads = this.dboard.vars['exp_simultaneous_chunk_uploads'];
+        for (let i = 0; i < Math.ceil(fileChunks.length / chunkUploads); i++) {
+            const chunkSet = fileChunks.slice(i * chunkUploads, (i + 1) * chunkUploads);
+            await Promise.all(chunkSet.map(c => this.dboard.api('upload_bundle_chunk', [c], false)));
+        }
+        await this.dboard.api('save_bundle_chunks');
+        this.files = null;
+        this.dboard.uploadingOverlay.close();
+    }
+    aread(f) {
+        return new Promise(resolve => {
+            const reader = new FileReader();
+            const listener = () => {
+                reader.removeEventListener('load', listener);
+                resolve(reader.result);
+            };
+            reader.addEventListener('load', listener);
+            reader.readAsText(f);
+        });
+    }
+    async loadManifest(f) {
+        const manifest = await this.aread(f);
+        return manifest
+            .split('\n')
+            .map(x => x.trim())
+            .filter(x => x.length &&
+            !this.deny.find(y => x.toLowerCase() === y) &&
+            !this.include.find(y => x.toLowerCase() === y));
+    }
+    async getFileChunks(bundleName) {
+        let manifestF = null;
+        for (const file of this.files) {
+            const parts = file.webkitRelativePath.split('/');
+            if (parts[1] === 'exp_manifest.txt') {
+                manifestF = file;
+                break;
+            }
+        }
+        let include = this.include;
+        if (manifestF) {
+            include = include.concat(await this.loadManifest(manifestF));
+        }
+        const blockDirs = ['__pycache__'];
+        const blockFiles = ['.DS_Store'];
+        const files = [];
+        let skipped = 0;
+        for (const file of this.files) {
+            if (blockFiles.some(name => file.webkitRelativePath.endsWith(name)) ||
+                blockDirs.some(name => file.webkitRelativePath.match(`/${name}/`))) {
+                skipped++;
+                continue;
+            }
+            for (const item of include) {
+                const itemPath = `${bundleName}/${item}`;
+                if (item[item.length - 1] === '/') {
+                    if (file.webkitRelativePath.startsWith(itemPath)) {
+                        files.push(file);
+                    }
+                }
+                else {
+                    if (file.webkitRelativePath === itemPath) {
+                        files.push(file);
+                        break;
+                    }
+                }
+            }
+        }
+        console.log(`will upload ${files.length} files; skipping ${skipped}`);
+        const chunks = [];
+        const chunkSize = 1024 * this.dboard.vars['exp_upload_chunk_size_kib'];
+        for (const file of files) {
+            const nChunks = Math.ceil(file.size / chunkSize);
+            for (let i = 0; i < nChunks; i++) {
+                const start = i * chunkSize;
+                const end = i === nChunks - 1 ? file.size : start + chunkSize;
+                chunks.push({
+                    name: file.webkitRelativePath,
+                    idx: i,
+                    nChunks,
+                    lastMod: file.lastModified,
+                    data: file.slice(i * chunkSize, end)
+                });
+            }
+        }
+        console.log(`${chunks.length} chunks, ${chunks.reduce((total, c) => total + c.data.size, 0)} bytes`);
+        return chunks;
+    }
+}
+
 var host = "127.0.0.1";
 var port = 5000;
 var url_prefix = "survey";
@@ -346,6 +382,8 @@ var bundles_dir = "bundles";
 var monitor_check_interval = 10;
 var dashboard_code = "96Q28aD7JgZ2np2-M7tQQQ";
 var dashboard_favicon = "data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22green%22/><text y=%22.9em%22 font-size=%2290%22>🧪</text></svg>";
+var upload_chunk_size_kib = 128;
+var simultaneous_chunk_uploads = 50;
 var cfg = {
 	host: host,
 	port: port,
@@ -353,7 +391,9 @@ var cfg = {
 	bundles_dir: bundles_dir,
 	monitor_check_interval: monitor_check_interval,
 	dashboard_code: dashboard_code,
-	dashboard_favicon: dashboard_favicon
+	dashboard_favicon: dashboard_favicon,
+	upload_chunk_size_kib: upload_chunk_size_kib,
+	simultaneous_chunk_uploads: simultaneous_chunk_uploads
 };
 
 class APIError extends Error {
@@ -369,7 +409,6 @@ class Dashboard extends Controller {
     downloadIdBtn;
     deleteIdBtn;
     downloadLogBtn;
-    uploader;
     bundle;
     run;
     completed;
@@ -383,6 +422,7 @@ class Dashboard extends Controller {
     msgDlg;
     vars;
     instList;
+    uploader = new Uploader(this);
     constructor() {
         super();
         this.uploadBtn = elt('upload-btn');
@@ -395,13 +435,13 @@ class Dashboard extends Controller {
         this.downloadIdBtn = elt('download-id-btn');
         this.deleteIdBtn = elt('delete-id-btn');
         this.downloadLogBtn = elt('download-log-btn');
-        this.uploader = new Uploader(this);
         this.bundle = null;
         this.run = null;
         this.completed = 0;
         this._didInitViews = false;
     }
     async init(ns) {
+        await this.uploader.init(ns);
         return await super.init(ns);
     }
     _initSocket(ns) {
@@ -445,13 +485,9 @@ class Dashboard extends Controller {
         this.msgDlg = await new MessageDialog(this).init();
         this.instList = new InstList(this);
         this.uploadBtn.addEventListener('click', async () => {
-            const { resp, status } = await this.uploader.upload();
-            if (resp === null) {
-                await this.msgDlg.show(`Bundle upload request failed; response status: ${status}`);
-            }
-            else if (!resp.ok) {
-                await this.msgDlg.show(`Error uploading bundle: ${resp.err}`);
-            }
+            this.uploadBtn.disabled = true;
+            await this.uploader.show();
+            this.uploadBtn.disabled = false;
         });
         this.loadBtn.addEventListener('click', async () => {
             this.loadBtn.disabled = true;
@@ -504,7 +540,7 @@ class Dashboard extends Controller {
             if (ok &&
                 await this.confirmDlg.show(`Really delete ID mapping for run
                     ${this.runsDlg.run}?`, 'Cancel', 'Delete')) {
-                await this.api('delete_id_mapping', this.runsDlg.run);
+                await this.api('delete_id_mapping', [this.runsDlg.run]);
             }
             this.deleteIdBtn.disabled = false;
         });
@@ -546,16 +582,15 @@ class Dashboard extends Controller {
         this.loadBtn.disabled = true;
         this._onBundleUpdate();
     }
-    async api(cmd, ...params) {
-        const { val, err } = await super.api(cmd, ...params);
-        if (err) {
-            if (this.tracebackDlg) {
+    async api(cmd, params = [], showTraceback = true) {
+        try {
+            return await super.api(cmd, params);
+        }
+        catch (err) {
+            if (showTraceback && this.tracebackDlg) {
                 await this.tracebackDlg.show(err);
             }
             throw new APIError(`Error in API call '${params[0]}': ${err}`);
-        }
-        else {
-            return val;
         }
     }
     _onBundleUpdate() {
@@ -592,7 +627,7 @@ class Dashboard extends Controller {
                 if (this.run) {
                     await this.stopRun();
                 }
-                const { vars, tback } = await this.api('load_bundle', this.bundlesDlg.bundle, this.bundlesDlg.toolMode);
+                const { vars, tback } = await this.api('load_bundle', [this.bundlesDlg.bundle, this.bundlesDlg.toolMode]);
                 if (tback) {
                     await this.tracebackDlg.show(tback);
                     if (this.bundle) {
@@ -637,7 +672,7 @@ class Dashboard extends Controller {
             if (this.run) {
                 await this.stopRun();
             }
-            const { vars, err } = await this.api('reload_bundle', toolMode);
+            const { vars, err } = await this.api('reload_bundle', [toolMode]);
             if (!err) {
                 this.instList.addSeparator('reload', this.bundle);
             }

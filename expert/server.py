@@ -190,15 +190,9 @@ class Server:
     def _add_routes(self):
         first_request_setup_complete = False
 
-        # @e.app.route(f'/{self.cfg["url_prefix"]}/socket.io-client')
-        # def socketio():
-        #     return send_from_directory(
-        #         e.expert_path / 'node_modules/socket.io-client/dist', 'socket.io.js')
-
-        # @e.app.route(f'/expert-client')
-        # def expert_client():
-        #     return send_from_directory(
-        #         e.expert_path / 'node_modules/@fizz/expert-client/dist', 'index.js')
+        @e.app.route('/client/<path:subpath>')
+        def expert_ts(subpath):
+            return send_from_directory(e.expert_path / 'client', subpath)
 
         @e.app.route(f'/{self.cfg["url_prefix"]}/js/<path:subpath>')
         def js(subpath):

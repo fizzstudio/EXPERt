@@ -1,6 +1,10 @@
 
+import { Controller, Overlay, ConfirmDialog, MessageDialog,
+    elt
+} from '@fizz/expert-client';
+import { UploadDialog } from './dialogs';
+
 import { type Dashboard } from './dashboard';
-import { elt } from '@fizz/expert-client';
 
 export interface UploadResp {
     ok: boolean;
@@ -12,24 +16,96 @@ export interface UploadResult {
     status?: string;
 }
 
-export class Uploader {
+interface FileChunk {
+    name: string;
+    idx: number;
+    nChunks: number;
+    lastMod: number;
+    data: Blob;
+}
 
-    ctrlr: Dashboard;
-    input: HTMLInputElement;
-    allow: string[];
-    deny: string[];
+export class Uploader extends Controller {
+    private uploadDlg = new UploadDialog(this);
+    private confirmDlg = new ConfirmDialog(this);
+    private messageDlg = new MessageDialog(this);
 
-    constructor(ctrlr: Dashboard) {
-        this.ctrlr = ctrlr;
-        this.input = elt('file-input') as HTMLInputElement;
-        // The manifest can list extra items to be uploaded in addition
-        // to what is allowed. Denied items are removed
-        // from the manifest before it is added to the allow list.
-        this.allow = ['cfg.json', 'user_info.json', 'src/', 'static/', 'templates/'];
-        this.deny = ['profiles/', 'runs/'];
+    // The manifest can list extra items to be uploaded in addition
+    // to what is included by default. Denied items are removed
+    // from the manifest before it is added to the include list.
+    private include = ['cfg.json', 'user_info.json', 'src/', 'static/', 'templates/'];
+    private deny = ['profiles/', 'runs/'];
+    private files: FileList | null = null;
+
+    constructor(private dboard: Dashboard) {
+        super();
     }
 
-    _aread(f: File): Promise<string> {
+    async show() {
+        await this.uploadDlg.init();
+        await this.confirmDlg.init();
+        await this.messageDlg.init();
+        this.dboard.uploadBtn.disabled = true;
+        await this.uploadDlg.show();
+        this.dboard.uploadBtn.disabled = false;
+    }
+
+    didSelectFiles(files: FileList) {
+        console.log(`selected ${files.length} files`);
+        this.files = files;
+        this.uploadDlg.enableButton();
+    }
+
+    async upload() {
+        // NB: Doesn't get re-enabled after successful upload
+        this.uploadDlg.disableButton();
+        const bundleName = this.files![0].webkitRelativePath.split('/')[0];
+        console.log('upload bundle name:', bundleName);
+        const bundles = await this.dboard.api('get_bundles');
+        if (bundles.includes(bundleName)) {
+            console.log('bundle already exists');
+            let msg = `Really overwrite bundle '${bundleName}'?`;
+            let unload = false;
+            let stopRun = false;
+            if (bundleName === this.dboard.bundle) {
+                unload = true;
+                if (this.dboard.run) {
+                    msg += ' Current run will end.';
+                    stopRun = true;
+                }
+            }
+            if (await this.confirmDlg.show(msg, 'Cancel', 'Overwrite')) {
+                if (stopRun) {
+                    await this.dboard.stopRun();
+                }
+                if (unload) {
+                    await this.dboard.unloadBundle();
+                }
+            } else {
+                console.log('upload canceled');
+                this.uploadDlg.enableButton();
+                return;
+            }
+        }
+
+        this.dboard.uploadingOverlay.makeVisible();
+        const fileChunks = await this.getFileChunks(bundleName);
+        if (fileChunks.length === 0) {
+            this.dboard.uploadingOverlay.close();    
+            await this.messageDlg.show('Error: no valid files selected');
+            return;
+        }
+        const chunkUploads = this.dboard.vars!['exp_simultaneous_chunk_uploads'] as number;
+        for (let i = 0; i < Math.ceil(fileChunks.length/chunkUploads); i++) {
+            const chunkSet = fileChunks.slice(i*chunkUploads, (i + 1)*chunkUploads);
+            await Promise.all(chunkSet.map(
+                c => this.dboard.api('upload_bundle_chunk', [c], false)));
+        } 
+        await this.dboard.api('save_bundle_chunks');
+        this.files = null;
+        this.dboard.uploadingOverlay.close();
+    }
+
+    private aread(f: File): Promise<string> {
         return new Promise(resolve => {
             const reader = new FileReader();
             const listener = () => {
@@ -41,138 +117,75 @@ export class Uploader {
         });
     }
 
-    async _loadManifest(f: File) {
-        const manifest = await this._aread(f);
+    private async loadManifest(f: File) {
+        const manifest = await this.aread(f);
         return manifest
             .split('\n')
             .map(x => x.trim())
             .filter(
                 x => x.length &&
-                   !this.deny.find(
-                       y => x.toLowerCase() === y) &&
-                   // Skip anything already on the allow list
-                   !this.allow.find(
-                       y => x.toLowerCase() === y));
+                   !this.deny.find(y => x.toLowerCase() === y) &&
+                   // Skip anything already on the include list
+                   !this.include.find(y => x.toLowerCase() === y));
     }
 
-    async _getFiles(bundleName: string) {
+    private async getFileChunks(bundleName: string) {
         let manifestF: File | null = null;
-        // Guaranteed to be a FileList since the input element is of type "file"
-        const fileList = this.input.files as FileList;
-        for (const file of fileList) {
+        for (const file of this.files!) {
             const parts = file.webkitRelativePath.split('/');
             if (parts[1] === 'exp_manifest.txt') {
                 manifestF = file;
                 break;
             }
         }
-        let allow = this.allow;
+        let include = this.include;
         if (manifestF) {
-            allow = allow.concat(await this._loadManifest(manifestF));
+            include = include.concat(await this.loadManifest(manifestF));
         }
+        const blockDirs = ['__pycache__'];
+        // Can be used to match dotfiles or file types by extension
+        const blockFiles = ['.DS_Store'];
         const files: File[] = [];
-        for (const item of allow) {
-            const itemPath = `${bundleName}/${item}`;
-            for (const file of fileList) {
-                // XXX should exclude files in __pycache__ directories,
-                // .DS_Store, etc.
+        let skipped = 0;
+        for (const file of this.files!) {
+            if (blockFiles.some(name => file.webkitRelativePath.endsWith(name)) ||
+                blockDirs.some(name => file.webkitRelativePath.match(`/${name}/`))) {
+                skipped++;
+                continue;
+            }
+            for (const item of include) {
+                const itemPath = `${bundleName}/${item}`;
                 if (item[item.length - 1] === '/') {
-                    if (file.webkitRelativePath.startsWith(
-                        itemPath)) {
-                        //console.log(
-                        //'will upload', file.webkitRelativePath);
+                    if (file.webkitRelativePath.startsWith(itemPath)) {
                         files.push(file);
                     }
                 } else {
                     if (file.webkitRelativePath === itemPath) {
-                        //console.log(
-                        //'will upload', file.webkitRelativePath);
                         files.push(file);
                         break;
                     }
                 }
             }
         }
-        console.log(`will upload ${files.length} files`);
-        return files;
-    }
-
-    _sendRequest(formData: FormData, resolve: (value: UploadResult) => void) {
-        const url = `${this.ctrlr.vars!['exp_dashboard_path']}/upload_bundle`;
-        const xhr = new XMLHttpRequest();
-        xhr.upload.addEventListener('progress', e => {
-            if (e.lengthComputable) {
-                const pct = Math.round((e.loaded*100)/e.total);
-                console.log('pct', pct);
+        console.log(`will upload ${files.length} files; skipping ${skipped}`);
+        const chunks: FileChunk[] = [];
+        const chunkSize = 1024*this.dboard.vars!['exp_upload_chunk_size_kib'] as number;
+        for (const file of files) {
+            const nChunks = Math.ceil(file.size/chunkSize);
+            for (let i = 0; i < nChunks; i++) {
+                const start = i*chunkSize;
+                const end = i === nChunks - 1 ? file.size : start + chunkSize;
+                chunks.push({
+                    name: file.webkitRelativePath,
+                    idx: i,
+                    nChunks,
+                    lastMod: file.lastModified,
+                    data: file.slice(i*chunkSize, end)
+                });
             }
-        }, false);
-        xhr.upload.addEventListener('load', e => {
-            console.log('upload complete');
-        }, false);
-        xhr.addEventListener('readystatechange', e => {
-            if (xhr.readyState === 4) {
-                resolve({resp: xhr.response, status: `${xhr.status} ${xhr.statusText}`});
-                this.ctrlr.uploadBtn.disabled = false;
-                this.ctrlr.uploadingOverlay.close();
-            }
-        }, false);
-        xhr.open('POST', url);
-        xhr.responseType = 'json';
-        xhr.overrideMimeType('multipart/form-data');
-        console.log('sending upload request');
-        xhr.send(formData);
-    }
-
-    upload(): Promise<UploadResult> {
-        return new Promise(resolve => {
-            const listener = async () => {
-                console.log('upload files selected');
-                this.ctrlr.uploadBtn.disabled = true;
-                this.input.removeEventListener('change', listener, false);
-                const bundleName = this.input.files![0]
-                                       .webkitRelativePath.split('/')[0];
-                console.log('upload bundle name', bundleName);
-                const bundles = await this.ctrlr.api('get_bundles');
-                if (bundles.includes(bundleName)) {
-                    console.log('bundle already exists');
-                    let msg = `Really overwrite bundle '${bundleName}'?`;
-                    let unload = false;
-                    let stopRun = false;
-                    if (bundleName === this.ctrlr.bundle) {
-                        unload = true;
-                        if (this.ctrlr.run) {
-                            msg += ' Current run will end.';
-                            stopRun = true;
-                        }
-                    }
-                    if (await this.ctrlr.confirmDlg.show(
-                        msg, 'Cancel', 'Overwrite')) {
-                        if (stopRun) {
-                            await this.ctrlr.stopRun();
-                        }
-                        if (unload) {
-                            await this.ctrlr.unloadBundle();
-                        }
-                    } else {
-                        console.log('upload canceled');
-                        resolve({resp: {ok: true}});
-                        this.ctrlr.uploadBtn.disabled = false;
-                        return;
-                    }
-                }
-
-                const formData = new FormData();
-                this.ctrlr.uploadingOverlay.makeVisible();
-                const files = await this._getFiles(bundleName);
-                console.log('got upload files');
-                for (const file of files) {
-                    formData.set(file.webkitRelativePath, file);
-                }
-                this._sendRequest(formData, resolve);
-            };
-            this.input.addEventListener('change', listener, false);
-            this.input.click();
-        });
+        }
+        console.log(`${chunks.length} chunks, ${chunks.reduce((total, c) => total + c.data.size, 0)} bytes`);
+        return chunks;
     }
 
 }
