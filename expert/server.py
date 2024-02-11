@@ -282,9 +282,11 @@ class Server:
                         elif e.experclass.profiles:
                             try:
                                 if not self.session_manager:
-                                    # Logins are disabled, and any existing sid
-                                    # is from a previous run, or a different exper entirely
-                                    sid = user.create_sid()
+                                    if e.experclass.mode != 'res' or not sid:
+                                        # Logins are disabled, and any existing sid
+                                        # is from a previous run, or a different exper entirely;
+                                        # for resuming, we can reuse a sid in the session
+                                        sid = user.create_sid()
                                     session['sid'] = sid
                                 assert sid
                                 e.log.info(f'assigning sid {sid}')

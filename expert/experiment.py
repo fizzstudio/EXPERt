@@ -227,7 +227,7 @@ class BaseExper:
         ymd = '.'.join([str(ltime.tm_year), pad(ltime.tm_mon, 2), pad(ltime.tm_mday, 2)])
         same_day_runs = [r for r in cls.runs_path.iterdir() if r.name.startswith(ymd)]
         if len(same_day_runs):
-            ymd += f'{len(same_day_runs) + 1}'
+            ymd += f'-{len(same_day_runs) + 1}'
         return ymd
 
     @classmethod
@@ -291,6 +291,7 @@ class BaseExper:
             #cls.record.save()
             cls.replicate = Record(cls, cls.target)
         elif cls.mode == 'res':
+            cls.record.set_resumed()
             if cls.record.replicate:
                 cls.replicate = Record(cls, cls.record.replicate)
         #else:
@@ -473,6 +474,18 @@ class BaseExper:
             item.update(resp.extra)
             json.dump(item, f, indent=2)
 
+    def _load_response(self, task_id: int):
+        load_path = self.temp_work_path / f'{task_id}.json'
+        # 'time', 'task', 'resp', + extra fields
+        with open(load_path) as f:
+            item = json.load(f)
+        extras = item.copy()
+        extras.pop('time')
+        extras.pop('task')
+        extras.pop('resp', None)
+        return TaskResponse(
+            item.get('resp'), item['task'], item['time'], **extras)
+
     @classmethod
     def write_responses(cls, resps: list[TaskResponse], dest_path: Path):
         if resps[0].sid:
@@ -550,14 +563,25 @@ class BaseExper:
         self.variables['exp_num_tasks'] = self.num_tasks_created
 
     def _will_start(self):
+        assert self.record
         self.first_task = self.task
         if not self.has_consent_task:
             self.assign_profile()
         self.variables['exp_num_tasks'] = self.num_tasks_created
-        # If we are resuming and this inst has partial results,
-        # ...
-        # - Which task do we start from? If we were in TM, it may not be
-        #   the latest task with results.
+        if self.mode == 'res':
+            # The sid was either retrieved from the record by logging in,
+            # or was retained in a session cookie (or may be new, in which
+            # case there won't be any inst_data)
+            inst_data = self.record.get_inst_data(self.sid)
+            if inst_data:
+                for fname in self.temp_work_path.iterdir():
+                    task_id = int(fname.stem)
+                    self.responses[task_id] = self._load_response(task_id)
+                self.state = State[inst_data['state']]
+                self.task = self.tasks_by_id[inst_data['curr_task_id']]
+                self.task_cursor = self.task.id
+                if self.state == State.ACTIVE:
+                    e.srv.dboard.inst_updated(self)
         self._update_vars()
 
     def _nav(self, resp: Any, dest_task: tasks.Task):
@@ -671,6 +695,7 @@ class Record:
     _run: str
     _md_path: Path
     _inst_data: dict[str, InstData]
+    _resume_times: list[int]
 
     def __init__(self, experclass: BaseExper, fromsaved: Optional[str] = None):
         assert experclass.run
@@ -679,6 +704,7 @@ class Record:
         self.run_path = experclass.runs_path / self._run
         # create run directory (it will already exist if resuming)
         self.run_path.mkdir(exist_ok=True)
+        self.id_mapping_path = self.run_path / 'id-mapping'
         for cname, c in self._experclass.cond_mod().conds.items():
             (self.run_path / cname).mkdir(exist_ok=True)
         self._md_path = self.run_path / 'metadata.json'
@@ -686,8 +712,11 @@ class Record:
             self.load()
         else:
             self.replicate = None
-        self.id_mapping_path = self.run_path / 'id-mapping'
-        self._inst_data = {}
+            self._inst_data = {}
+            self._resume_times = []
+
+    def set_resumed(self):
+        self._resume_times.append(int(time.time())*1000)
 
     def completed_profiles(self) -> list[str]:
         # list of strings of form 'cond/prof'
@@ -721,11 +750,15 @@ class Record:
             if inst_data['userid'] == userid:
                 return sid
             
+    def get_inst_data(self, sid: str) -> InstData | None:
+        return self._inst_data.get(sid)
+            
     def load(self):
         with open(self._md_path) as f:
             fields = json.load(f)
             self.replicate = fields['replicate']
             self._inst_data = fields['participants']
+            self._resume_times = fields['resume_times']
 
     def save(self):
         # Only the metadata is saved here; the data for each
@@ -734,6 +767,7 @@ class Record:
             fields = {}
             fields['replicate'] = self.replicate
             fields['participants'] = self._inst_data
+            fields['resume_times'] = self._resume_times
             json.dump(fields, f, indent=2)
             #print(strictyaml.as_document(fields).as_yaml(), file=f)
 

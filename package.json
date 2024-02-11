@@ -17,7 +17,7 @@
     "doc": "rimraf ./docs/* && jsdoc -c .jsdoc/.jsdoc.html.json && jsdoc -c .jsdoc/.jsdoc.md.json"
   },
   "dependencies": {
-    "@fizz/expert-client": "^0.6.0"
+    "@fizz/expert-client": "^0.6.1"
   },
   "devDependencies": {
     "@rollup/plugin-eslint": "9.0.3",
