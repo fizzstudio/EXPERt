@@ -80,15 +80,14 @@ class Task extends Controller {
         this._nextHook = h;
     }
     async api(cmd, params = []) {
-        const { val, err } = await super.api(cmd, params);
-        if (err) {
+        try {
+            return await super.api(cmd, params);
+        }
+        catch (err) {
             if (this.errorOverlay) {
                 this.errorOverlay.makeVisible();
             }
             throw new APIError(`Error in API call '${params[0]}': ${err}`);
-        }
-        else {
-            return val;
         }
     }
     _updateProgress() {
