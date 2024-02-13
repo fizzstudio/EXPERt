@@ -32,18 +32,14 @@ interface RunInfo {
 class APIError extends Error {
 }
 
+interface ButtonInfo {
+    element: HTMLButtonElement;
+    listener: () => Promise<void | boolean>;
+}
+
 export class Dashboard extends Controller {
 
-    uploadBtn: HTMLButtonElement;
-    loadBtn: HTMLButtonElement;
-    newRunBtn: HTMLButtonElement;
-    reloadBtn: HTMLButtonElement;
-    profilesBtn: HTMLButtonElement;
-    downloadBtn: HTMLButtonElement;
-    downloadProfBtn: HTMLButtonElement;
-    downloadIdBtn: HTMLButtonElement;
-    deleteIdBtn: HTMLButtonElement;
-    downloadLogBtn: HTMLButtonElement;
+    toolbarBtns: {[key: string]: ButtonInfo} = {};
     bundle: string | null;
     run: string | null;
     completed: number;
@@ -61,17 +57,46 @@ export class Dashboard extends Controller {
 
     constructor() {
         super();
-        this.uploadBtn = elt('upload-btn') as HTMLButtonElement;
-        this.loadBtn = elt('load-btn') as HTMLButtonElement;
-        this.newRunBtn = elt('new-run-btn') as HTMLButtonElement;
-        this.reloadBtn = elt('reload-btn') as HTMLButtonElement;
-        this.profilesBtn = elt('profiles-btn') as HTMLButtonElement;
-        this.downloadBtn = elt('download-btn') as HTMLButtonElement;
-        this.downloadProfBtn = elt('download-prof-btn') as HTMLButtonElement;
-        //this.deleteBtn = elt('delete-btn');
-        this.downloadIdBtn = elt('download-id-btn') as HTMLButtonElement;
-        this.deleteIdBtn = elt('delete-id-btn') as HTMLButtonElement;
-        this.downloadLogBtn = elt('download-log-btn') as HTMLButtonElement;
+        const btns = {
+            'upload': () => this.uploader.show(), 
+            'load': async () => await this.loadBundle(), 
+            'new-run': async () => await this.newRun(), 
+            'reload': async () => await this.reloadBundle(), 
+            'profiles': async () => await this.rebuildProfiles(), 
+            'download': async () => {
+                const ok = await this.runsDlg.show(
+                    'Download Results', 'Download');
+                if (ok) {
+                    this.download('results', this.runsDlg.run);
+                }
+            }, 
+            'download-prof': async () => this.download('profiles'), 
+            'download-id': async () => {
+                const ok = await this.runsDlg.show(
+                    'Download ID Mapping', 'Download', true, true);
+                if (ok) {
+                    this.download('id_mapping', this.runsDlg.run);
+                }
+            }, 
+            'delete-id': async () => {
+                const ok = await this.runsDlg.show(
+                    'Delete ID Mapping', 'Delete', false, true);
+                if (ok &&
+                    await this.confirmDlg.show(
+                        `Really delete ID mapping for run
+                        ${this.runsDlg.run}?`,
+                        'Cancel', 'Delete')) {
+                    await this.api('delete_id_mapping', [this.runsDlg.run]);
+                }
+            }, 
+            'download-log': async () => this.download('log')
+        };
+        for (const [name, listener] of Object.entries(btns)) {
+            this.toolbarBtns[name] = {
+                element: elt(name + '-btn') as HTMLButtonElement,
+                listener
+            };
+        }
         this.bundle = null;
         this.run = null;
         this.completed = 0;
@@ -127,50 +152,18 @@ export class Dashboard extends Controller {
         this.msgDlg = await new MessageDialog(this).init();
         this.instList = new InstList(this);
 
-        this.uploadBtn.addEventListener('click', async () => {
-            this.uploadBtn.disabled = true;
-            await this.uploader.show();
-            this.uploadBtn.disabled = false;
-        });
-        this.loadBtn.addEventListener('click', async () => {
-            this.loadBtn.disabled = true;
-            await this.loadBundle();
-            this.loadBtn.disabled = false;
-        });
-        this.newRunBtn.addEventListener('click', async () => {
-            this.newRunBtn.disabled = true;
-            await this.newRun();
-            this.newRunBtn.disabled = false;
-        });
-        this.reloadBtn.addEventListener('click', async () => {
-            this.reloadBtn.disabled = true;
-            await this.reloadBundle();
-            if (this.bundle) {
-                this.reloadBtn.disabled = false;
-            }
-        });
-        this.profilesBtn.addEventListener('click', async () => {
-            this.profilesBtn.disabled = true;
-            await this.rebuildProfiles();
-            if (this.bundle) {
-                this.profilesBtn.disabled = false;
-            }
-        });
+        for (const [name, info] of Object.entries(this.toolbarBtns)) {
+            info.element.addEventListener('click', async () => {
+                info.element.disabled = true;
+                //console.log('will run listener');
+                if (!await info.listener()) {
+                    //console.log('did run listener');
+                    info.element.disabled = false;
+                }
+                //console.log('done');
+            });
+        }
 
-        this.downloadBtn.addEventListener('click', async () => {
-            this.downloadBtn.disabled = true;
-            const ok = await this.runsDlg.show(
-                'Download Results', 'Download');
-            if (ok) {
-                this.download('results', this.runsDlg.run);
-            }
-            this.downloadBtn.disabled = false;
-        });
-        this.downloadProfBtn.addEventListener('click', async () => {
-            this.downloadProfBtn.disabled = true;
-            this.download('profiles');
-            this.downloadProfBtn.disabled = false;
-        });
         /*this.deleteBtn.addEventListener('click', async () => {
         this.deleteBtn.disabled = true;
         if (await this.runsDlg.show(
@@ -183,40 +176,15 @@ export class Dashboard extends Controller {
         }
         this.deleteBtn.disabled = false;
         });*/
-        this.downloadIdBtn.addEventListener('click', async () => {
-            this.downloadIdBtn.disabled = true;
-            const ok = await this.runsDlg.show(
-                'Download ID Mapping', 'Download', true, true);
-            if (ok) {
-                this.download('id_mapping', this.runsDlg.run);
-            }
-            this.downloadIdBtn.disabled = false;
-        });
-        this.deleteIdBtn.addEventListener('click', async () => {
-            this.deleteIdBtn.disabled = true;
-            const ok = await this.runsDlg.show(
-                'Delete ID Mapping', 'Delete', false, true);
-            if (ok &&
-                await this.confirmDlg.show(
-                    `Really delete ID mapping for run
-                    ${this.runsDlg.run}?`,
-                    'Cancel', 'Delete')) {
-                await this.api('delete_id_mapping', [this.runsDlg.run]);
-            }
-            this.deleteIdBtn.disabled = false;
-        });
-        this.downloadLogBtn.addEventListener('click', async () => {
-            console.log('will download log');
-            this.download('log');
-        });
         this._didInitViews = true;
     }
 
     async _onSocketConnected() {
         await super._onSocketConnected();
         elt('conn-status')!.textContent = '';
-        this.uploadBtn.disabled = false;
-        this.loadBtn.disabled = false;
+        this.toolbarBtns['upload'].element.disabled = false;
+        this.toolbarBtns['load'].element.disabled = false;
+        this.toolbarBtns['download-log'].element.disabled = false;
         if (!this._didInitViews) {
             await this._initViews();
         }
@@ -246,8 +214,9 @@ export class Dashboard extends Controller {
         await super._onSocketDisconnected();
         elt('conn-status')!.textContent = 'NOT CONNECTED';
         this.bundle = null;
-        this.uploadBtn.disabled = true;
-        this.loadBtn.disabled = true;
+        this.toolbarBtns['upload'].element.disabled = true;
+        this.toolbarBtns['load'].element.disabled = true;
+        this.toolbarBtns['download-log'].element.disabled = true;
         this._onBundleUpdate();
     }
 
@@ -269,26 +238,22 @@ export class Dashboard extends Controller {
     Called when a bundle has been loaded or unloaded.
     */
     _onBundleUpdate() {
+        const btns = [
+            'new-run', 'reload', 'profiles', 'download',
+            'download-prof', 'download-id', 'delete-id'
+        ];
         if (this.bundle) {
             elt('bundle-name')!.textContent =
                 `${this.bundle}
                 (${this.vars!['exp_total_profiles']} profiles)`;
-            this.newRunBtn.disabled = false;
-            this.reloadBtn.disabled = false;
-            this.profilesBtn.disabled = false;
-            this.downloadBtn.disabled = false;
-            this.downloadProfBtn.disabled = false;
-            this.downloadIdBtn.disabled = false;
-            this.deleteIdBtn.disabled = false;
+            btns.forEach(name => {
+                this.toolbarBtns[name].element.disabled = false;
+            });
         } else {
             elt('bundle-name')!.textContent = '<None>';
-            this.newRunBtn.disabled = true;
-            this.reloadBtn.disabled = true;
-            this.profilesBtn.disabled = true;
-            this.downloadBtn.disabled = true;
-            this.downloadProfBtn.disabled = true;
-            this.downloadIdBtn.disabled = true;
-            this.deleteIdBtn.disabled = true;
+            btns.forEach(name => {
+                this.toolbarBtns[name].element.disabled = true;
+            });
         }
     }
 
@@ -365,6 +330,9 @@ export class Dashboard extends Controller {
             }
             this.vars = vars;
         }
+        if (!this.bundle) {
+            return true;
+        }
     }
 
     async unloadBundle() {
@@ -392,6 +360,9 @@ export class Dashboard extends Controller {
                 this._onBundleUpdate();
             }
             this.vars = vars;
+        }
+        if (!this.bundle) {
+            return true;
         }
     }
 

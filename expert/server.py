@@ -5,6 +5,8 @@ import importlib.util
 import json
 import sys
 import logging
+import logging.handlers
+import logging.config
 import datetime
 import traceback
 import gc
@@ -61,12 +63,11 @@ class Server:
 
     def __init__(self, args: argparse.Namespace):
         self._args = args
+        self.cfg = self._load_config(args.config)
 
         self.initLogger()
         e.app = App(__name__)
         e.log = e.app.logger
-        e.log.setLevel(logging.INFO)
-        e.log.info(f'sys.path: {sys.path}')
         e.log.info('=== starting EXPERt server ===')
         e.log.info(f'logs saved to {self.logfile}')
 
@@ -81,8 +82,6 @@ class Server:
         # doesn't make use of the session
         e.app.secret_key = b'\xe4\xfb\xfd\xff\x80uZL]\xe8B\xcb\x1c\xb3)g'
         e.app.templates_auto_reload = True
-
-        self.cfg = self._load_config(args.config)
 
         self.host = self.cfg.get('host', '127.0.0.1')
         self.port = self.cfg.get('port', 5000)
@@ -130,23 +129,41 @@ class Server:
             e.experclass.start(mode, obj, conds)
     
     def initLogger(self):
-        self.logfile = f'{tempfile.gettempdir()}/expert.log'
-        logging.basicConfig(level=logging.DEBUG,
-            #format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s',
-            format='[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
-            datefmt='%m-%d %H:%M',
-            filename=self.logfile,
-            filemode='w')
-        # define a Handler which writes INFO messages or higher to the sys.stderr
-        console = logging.StreamHandler()
-        console.setLevel(logging.INFO)
-        # set a format which is simpler for console use
-        #formatter = logging.Formatter('%(name)-12s: %(levelname)-8s %(message)s')
-        formatter = logging.Formatter('%(levelname)s in %(module)s: %(message)s')
-        # tell the handler to use this format
-        console.setFormatter(formatter)
-        # add the handler to the root logger
-        logging.getLogger('').addHandler(console)
+        self.logfile = self.cfg['logfile'] \
+            if self.cfg['logfile'].startswith('/') else e.expert_path / self.cfg['logfile']
+        Path(self.logfile).parent.mkdir(parents=True, exist_ok=True)
+        config = {
+            'version': 1,
+            'formatters': {
+                'basic': {
+                    'format': '%(message)s'
+                },
+                'extended': {
+                    'format': '[%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+                } 
+            },
+            'handlers': {
+                'wsgi': {
+                    'class': 'logging.StreamHandler',
+                    'stream': 'ext://flask.logging.wsgi_errors_stream',
+                    'formatter': 'basic',
+                    'level': 'INFO'
+                },
+                'file': {
+                    'class': 'logging.handlers.RotatingFileHandler',
+                    'filename': self.logfile,
+                    'maxBytes': int(self.cfg['logfile_max_size_kib'])*1024,
+                    'backupCount': int(self.cfg['logfile_num_backups']),
+                    'formatter': 'extended',
+                    'level': 'DEBUG'
+                },
+            },
+            'root': {
+                'level': 'DEBUG',
+                'handlers': ['wsgi', 'file']
+            }
+        }
+        logging.config.dictConfig(config)
 
     def start(self):
         if self._args.dummy:
