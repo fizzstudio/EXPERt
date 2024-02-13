@@ -1,6 +1,9 @@
 {
     "host": "127.0.0.1",
     "port": 5000,
+    "logfile": "/var/log/expert/debug.log",
+    "logfile_max_size_kib": 1024,
+    "logfile_num_backups": 10,
     "url_prefix": "survey",
     "bundles_dir": "bundles",
     "monitor_check_interval": 10,

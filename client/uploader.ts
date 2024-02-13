@@ -44,9 +44,7 @@ export class Uploader extends Controller {
         await this.uploadDlg.init();
         await this.confirmDlg.init();
         await this.messageDlg.init();
-        this.dboard.uploadBtn.disabled = true;
         await this.uploadDlg.show();
-        this.dboard.uploadBtn.disabled = false;
     }
 
     didSelectFiles(files: FileList) {
